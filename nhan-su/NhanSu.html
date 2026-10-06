@@ -323,8 +323,12 @@ const DEFAULT_SETTINGS = {
   flatTaxRate: 10, flatTaxMin: 5000000,
   brackets: [[10000000, 5], [30000000, 10], [60000000, 20], [100000000, 30], [null, 35]],
   stdDays: 26, monthDays: 31,
-  paySchemeFrom: '2026-09',     // Từ tháng này dùng cơ cấu lương mới (file "AT_BL_T9_2026"): lương theo ngày/giờ, OT, ca đêm, lễ, hỗ trợ cơm
-  unionRate: 2, minDaysBhxh: 14,
+  /** Hai cơ cấu lương lưu riêng: v1 = đến T8/2026 (P1/P2/P3), v2 = từ T9/2026 (ngày công/giờ) */
+  structures: {
+    v1: { name: 'Cơ cấu lương T8/2026 – P1/P2/P3 theo lương thoả thuận', source: 'Lương T8 mới.xlsx / Lương T8 MOIII.xlsx' },
+    v2: { name: 'Cơ cấu lương T9/2026 – ngày công, giờ, OT, ca đêm, lễ', source: 'AT_BL_T9_2026_TongHopCong_ChinhThuc.xlsx', from: '2026-09',
+      params: { std: 26, hours: 8, holidayRate: 4, otNormal: 1.5, otOff: 2, otHoliday: 3, night: 0.3, nightHoliday: 0.9, minDaysBhxh: 14, unionRate: 2, taxMin: 5000000 } }
+  },
   alertContract: 45, alertProbation: 7,
   depts: [
     { name: 'Kebab', calc: 'sx' }, { name: 'Tacos', calc: 'sx' }, { name: 'Quản lý/Giám sát/QC SX', calc: 'sx' },
@@ -480,12 +484,13 @@ const DB = {
     if (IS_GAS) raw = JSON.parse(await gs('getAll'));
     else { try { raw = JSON.parse(localStorage.getItem(LS_KEY) || '{}'); } catch (e) { raw = {}; } }
     COLLECTIONS.forEach(c => this.data[c] = Array.isArray(raw[c]) ? raw[c] : []);
+    this.data.payrolls.forEach(d => Pay.attach(d));
     await this.seed();
   },
   all(c){ return this.data[c] || (this.data[c] = []); },
   get(c, id){ return this.all(c).find(x => x.id === id); },
   _local(){ try { localStorage.setItem(LS_KEY, JSON.stringify(this.data)); } catch (e) { UI.toast('Bộ nhớ trình duyệt đầy – hãy sao lưu và dùng bản Google Apps Script'); } },
-  _put(c, doc){ const a = this.all(c), i = a.findIndex(x => x.id === doc.id); if (i >= 0) a[i] = doc; else a.push(doc); },
+  _put(c, doc){ const a = this.all(c), i = a.findIndex(x => x.id === doc.id); if (i >= 0) a[i] = doc; else a.push(doc); if (c === 'payrolls' && typeof Pay !== 'undefined') Pay.attach(doc); },
   /** Lưu 1 bản ghi (cập nhật giao diện ngay, ghi xuống Sheet ở nền) */
   /** Bảng lương đã khoá: không cho sửa / xoá (máy chủ Apps Script cũng chặn) */
   lockedPayroll(c, id){ if (c !== 'payrolls') return false; const d = this.get(c, id); return !!(d && d.locked); },
@@ -655,7 +660,7 @@ const Pages = {};
 const NAV = [
   ['', [['dashboard', 'Tổng quan']]],
   ['Tuyển dụng', [['reqs', 'Yêu cầu tuyển dụng'], ['screen', 'Lọc CV theo MTCV'], ['cands', 'Ứng viên & giai đoạn'], ['interviews', 'Lịch PV & phiếu đánh giá'], ['probation', 'Theo dõi thử việc'], ['cvstore', 'Kho CV']]],
-  ['Nhân sự', [['emps', 'Hồ sơ nhân sự'], ['contracts', 'Hợp đồng & thời hạn'], ['legal', 'Tuân thủ pháp luật'], ['payroll', 'Chấm công & bảng lương'], ['structure', 'Cơ cấu nhân sự & lương']]],
+  ['Nhân sự', [['emps', 'Hồ sơ nhân sự'], ['contracts', 'Hợp đồng & thời hạn'], ['legal', 'Tuân thủ pháp luật'], ['payroll', 'Chấm công & bảng lương'], ['paystruct', 'Cơ cấu tính lương'], ['structure', 'Cơ cấu nhân sự & lương']]],
   ['Báo cáo', [['report', 'Báo cáo Giám đốc']]],
   ['Hệ thống', [['settings', 'Cài đặt & dữ liệu']]]
 ];
@@ -1711,7 +1716,12 @@ const Pay = {
    *  Khối sản xuất: trong chuẩn = Lương TT × MIN(công, công chuẩn)/(công chuẩn/26×31); P1 = MIN((LCB+PC)×công tính/công chuẩn, trong chuẩn); P2 = trong chuẩn − P1; P3 = Lương TT × (MIN(công,31) − công chuẩn)/31
    *  Khối văn phòng: P1 = (LCB+PC)×công tính/công chuẩn; P2 = Lương TT×công tính/công chuẩn − P1 */
   /** Cơ cấu áp dụng cho tháng: 'v1' = P1/P2/P3 (đến T8/2026), 'v2' = theo ngày công/giờ (từ T9/2026) */
-  schemeFor(ym){ return ym >= (DB.settings().paySchemeFrom || '2026-09') ? 'v2' : 'v1'; },
+  V2_DEFAULT: { std: 26, hours: 8, holidayRate: 4, otNormal: 1.5, otOff: 2, otHoliday: 3, night: 0.3, nightHoliday: 0.9, minDaysBhxh: 14, unionRate: 2, taxMin: 5000000 },
+  structures(){ const st = DB.settings().structures || {}; return { v1: Object.assign({}, DEFAULT_SETTINGS.structures.v1, st.v1), v2: Object.assign({}, DEFAULT_SETTINGS.structures.v2, st.v2, { params: Object.assign({}, this.V2_DEFAULT, (st.v2 || {}).params) }) }; },
+  v2Params(){ return JSON.parse(JSON.stringify(this.structures().v2.params)); },
+  schemeFor(ym){ return ym >= (this.structures().v2.from || '2026-09') ? 'v2' : 'v1'; },
+  /** Gắn tham số cơ cấu (đã lưu cùng bảng lương) vào từng dòng – thuộc tính ẩn, không ghi xuống Sheet */
+  attach(doc){ if (!doc || doc.scheme !== 'v2' || !Array.isArray(doc.rows)) return doc; const P = Object.assign({}, this.V2_DEFAULT, doc.params); doc.rows.forEach(r => Object.defineProperty(r, '_p', { value: P, configurable: true, enumerable: false, writable: true })); return doc; },
   deptMax(dept){ const d = DB.settings().depts.find(x => x.name === dept); return d && +d.maxWork ? +d.maxWork : ''; },
   /** Cơ cấu lương từ T9/2026 – đúng công thức file "AT_BL_T9_2026_TongHopCong":
    *  đơn giá ngày = (LCB + PC chức vụ)/công chuẩn; đơn giá giờ = đơn giá ngày/giờ chuẩn
@@ -1719,31 +1729,32 @@ const Pay = {
    *  ca đêm +30%, đêm lễ +90%; hỗ trợ cơm & hỗ trợ khác (= thoả thuận − LCB − PC − cơm) chia theo công (+1 ngày nếu làm lễ); trừ đi trễ theo giờ
    *  BHXH: chỉ HĐ chính thức (CT) có công thường + giờ làm lễ ≥ 14, đóng trên LCB + PC; KPCĐ 2% công ty
    *  Thuế: CT luỹ tiến trên (gross − OT − cơm − ca đêm − đêm lễ − BHXH − giảm trừ); thử việc (TV) 10% gross; dưới 5 triệu không khấu trừ */
-  calc2(r, s){
+  calc2(r, s, P){
+    P = P || r._p || this.v2Params();
     const rd = Math.round, mv = r.manual || {};
-    const N = +r.std || 26, O = +r.hours || 8, H = +r.agreed || 0, I = +r.base || 0, J = +r.allowance || 0, K = +r.meal || 0;
+    const N = +r.std || P.std, O = +r.hours || P.hours, H = +r.agreed || 0, I = +r.base || 0, J = +r.allowance || 0, K = +r.meal || 0;
     const L = r.other !== undefined && r.other !== '' && r.other !== null ? +r.other : H - I - J - K;
-    let P = +r.work || 0; if (+r.maxWork) P = Math.min(+r.maxWork, P);
+    let Pw = +r.work || 0; if (+r.maxWork) Pw = Math.min(+r.maxWork, Pw);
     const Q = +r.leave || 0, R = +r.holiday || 0, Sh = +r.holidayHours || 0, V = +r.nightNormal || 0, W = +r.nightOff || 0, X = +r.nightHoliday || 0;
     const Z = +r.late || 0, AA = +r.otNormal || 0, AB = +r.otOff || 0, AC = +r.otHoliday || 0;
     const day = (I + J) / N, hr = day / O, plus = Sh > 0 ? 1 : 0;
-    const parts = { AD: rd(day * P), AE: rd(day * Q), AF: rd(day * R), AG: rd(hr * Sh * 4), AH: rd(hr * AA * 1.5 + hr * AB * 2 + hr * AC * 3),
-      AI: rd(K / N * (P + plus)), AJ: rd(hr * (V + W) * 0.3), AK: rd(hr * X * 0.9), AL: rd(L / N * (P + plus)), AM: rd((I + J + L) / N / O * Z) };
+    const parts = { AD: rd(day * Pw), AE: rd(day * Q), AF: rd(day * R), AG: rd(hr * Sh * P.holidayRate), AH: rd(hr * AA * P.otNormal + hr * AB * P.otOff + hr * AC * P.otHoliday),
+      AI: rd(K / N * (Pw + plus)), AJ: rd(hr * (V + W) * P.night), AK: rd(hr * X * P.nightHoliday), AL: rd(L / N * (Pw + plus)), AM: rd((I + J + L) / N / O * Z) };
     const bonus = +r.bonus || 0;
     const gross = parts.AD + parts.AE + parts.AF + parts.AG + parts.AH + parts.AI + parts.AJ + parts.AK + parts.AL - parts.AM + bonus + (+mv.grossAdj || 0);
     const CT = r.contract === 'CT';
-    const ins = mv.insured != null ? mv.insured : (CT && (P + Sh) >= (s.minDaysBhxh || 14) ? I + J : 0);
-    const bhEmp = mv.bhEmp != null ? mv.bhEmp : ins * s.rateEmp / 100, bhCo = ins * s.rateCo / 100, union = ins * (s.unionRate == null ? 2 : s.unionRate) / 100;
+    const ins = mv.insured != null ? mv.insured : (CT && (Pw + Sh) >= P.minDaysBhxh ? I + J : 0);
+    const bhEmp = mv.bhEmp != null ? mv.bhEmp : ins * s.rateEmp / 100, bhCo = ins * s.rateCo / 100, union = ins * P.unionRate / 100;
     const deduct = CT ? s.selfDeduct + (+r.deps || 0) * s.depDeduct : 0;
     const AX = rd(CT ? gross - parts.AH - parts.AI - parts.AJ - parts.AK : gross);
-    const AY = rd(AX < s.flatTaxMin ? 0 : CT ? Math.max(0, AX - bhEmp - deduct) : AX);
+    const AY = rd(AX < P.taxMin ? 0 : CT ? Math.max(0, AX - bhEmp - deduct) : AX);
     let tax = rd(CT ? this.progressive(AY, s.brackets) : AY * s.flatTaxRate / 100);
     if (mv.tax != null) tax = mv.tax;
     const net = gross - bhEmp - (+r.unionFee || 0) - tax - (+r.advance || 0) - (+r.otherDeduct || 0);
-    return { v2: true, F: N, H: P, workUsed: P, other: L, parts, P1: 0, P2: 0, P3: 0, extra: 0, bonus, gross, ins, bhEmp, bhCo, union, back: 0, taxable: AY, deduct, tax, net };
+    return { v2: true, F: N, H: Pw, workUsed: Pw, other: L, parts, P1: 0, P2: 0, P3: 0, extra: 0, bonus, gross, ins, bhEmp, bhCo, union, back: 0, taxable: AY, deduct, tax, net };
   },
-  rowFromEmp2(e){ const sal = e.salary || {}; return { v2: true, empId: e.id, code: e.code, name: e.fullName, dept: e.dept, title: e.title, contract: e.status === 'chinh_thuc' ? 'CT' : 'TV', std: 26, hours: 8, maxWork: this.deptMax(e.dept),
-    agreed: sal.agreed || 0, base: sal.base || 0, allowance: sal.allowance || 0, meal: sal.meal != null && sal.meal !== '' ? +sal.meal : 700000, work: 26, leave: 0, holiday: 0, holidayHours: 0, sick: 0, unpaid: 0, nightNormal: 0, nightOff: 0, nightHoliday: 0, late: 0, otNormal: 0, otOff: 0, otHoliday: 0,
+  rowFromEmp2(e){ const sal = e.salary || {}; return { v2: true, empId: e.id, code: e.code, name: e.fullName, dept: e.dept, title: e.title, contract: e.status === 'chinh_thuc' ? 'CT' : 'TV', std: this.v2Params().std, hours: this.v2Params().hours, maxWork: this.deptMax(e.dept),
+    agreed: sal.agreed || 0, base: sal.base || 0, allowance: sal.allowance || 0, meal: sal.meal != null && sal.meal !== '' ? +sal.meal : 700000, work: this.v2Params().std, leave: 0, holiday: 0, holidayHours: 0, sick: 0, unpaid: 0, nightNormal: 0, nightOff: 0, nightHoliday: 0, late: 0, otNormal: 0, otOff: 0, otHoliday: 0,
     deps: (e.tax || {}).dependents || 0, bonus: 0, unionFee: 0, advance: 0, otherDeduct: 0, status: e.status }; },
   calc(r, s){
     if (r.v2) return this.calc2(r, s);
@@ -1801,8 +1812,8 @@ Pages.payroll = {
         (months.length ? ' <button class="btn" id="pcopy">Tạo từ bảng ' + U.ymLabel(months[0]) + ' (giữ công & khoản cố định)</button>' : '') + '<p class="small muted">Có thể nhập bảng lương cũ từ file Excel ở mục Cài đặt & dữ liệu.</p></div>';
       const v2 = Pay.schemeFor(ym) === 'v2';
       body.querySelector('.card').insertAdjacentHTML('beforeend', '<p class="small muted">Cơ cấu áp dụng: <b>' + (v2 ? 'mới từ T9/2026 – lương theo ngày công, giờ, OT, ca đêm, lễ, hỗ trợ cơm' : 'cũ – P1/P2/P3 theo lương thoả thuận') + '</b>.</p>');
-      body.querySelector('#pnew').onclick = async () => { await DB.save('payrolls', { id: ym, month: ym, scheme: v2 ? 'v2' : 'v1', rows: emps.map(e => v2 ? Pay.rowFromEmp2(e) : Object.assign(Pay.rowFromEmp(e), { work: e.salary && e.salary.std || s.stdDays })) }); App.refresh(); };
-      const pc = body.querySelector('#pcopy'); if (pc) pc.onclick = async () => { const src = DB.get('payrolls', months[0]); await DB.save('payrolls', { id: ym, month: ym, scheme: v2 ? 'v2' : 'v1', rows: emps.map(e => { const o = (src.rows || []).find(r => r.empId === e.id) || {};
+      body.querySelector('#pnew').onclick = async () => { await DB.save('payrolls', { id: ym, month: ym, scheme: v2 ? 'v2' : 'v1', params: v2 ? Pay.v2Params() : undefined, rows: emps.map(e => v2 ? Pay.rowFromEmp2(e) : Object.assign(Pay.rowFromEmp(e), { work: e.salary && e.salary.std || s.stdDays })) }); App.refresh(); };
+      const pc = body.querySelector('#pcopy'); if (pc) pc.onclick = async () => { const src = DB.get('payrolls', months[0]); await DB.save('payrolls', { id: ym, month: ym, scheme: v2 ? 'v2' : 'v1', params: v2 ? Pay.v2Params() : undefined, rows: emps.map(e => { const o = (src.rows || []).find(r => r.empId === e.id) || {};
         if (v2) return Object.assign(Pay.rowFromEmp2(e), o.v2 ? { contract: o.contract, std: o.std, hours: o.hours, meal: o.meal, deps: o.deps } : {});
         return Object.assign(Pay.rowFromEmp(e), { work: o.work || s.stdDays, deps: o.deps != null ? o.deps : (e.tax || {}).dependents || 0 }); }) }); App.refresh(); };
       return;
@@ -1814,7 +1825,8 @@ Pages.payroll = {
     const ro = doc.locked ? ' disabled' : '';
     const inp = (i, k, w) => '<input data-i="' + i + '" data-k="' + k + '" value="' + (rows[i][k] === '' || rows[i][k] == null ? '' : rows[i][k]) + '" style="width:' + (w || 70) + 'px"' + ro + '>';
     const T = k => U.sum(res, x => x[k]);
-    let html = '<div class="kpis"><div class="kpi"><div class="v">' + rows.length + '</div><div class="l">Người trong bảng lương</div></div><div class="kpi"><div class="v">' + U.mil(T('gross')) + '</div><div class="l">Tổng thu nhập</div></div><div class="kpi"><div class="v">' + U.mil(T('net')) + '</div><div class="l">Tổng thực lãnh</div></div><div class="kpi"><div class="v">' + U.mil(T('bhCo')) + '</div><div class="l">BHXH công ty đóng (' + s.rateCo + '%)</div></div><div class="kpi"><div class="v">' + U.mil(T('tax')) + '</div><div class="l">Thuế TNCN khấu trừ</div></div><div class="kpi"><div class="v">' + U.mil(T('gross') + T('bhCo')) + '</div><div class="l">Tổng chi phí lương</div></div></div>' +
+    let html = '<div class="alert info"><b>' + U.esc(Pay.structures().v1.name) + '</b> – khối sản xuất: trong chuẩn = Lương TT × công/31, tách P1 (LCB + PC), P2, P3 (vượt ' + s.stdDays + ' công); khối văn phòng: theo công chuẩn. <a href="#/paystruct">Xem cơ cấu lương</a></div>' +
+      '<div class="kpis"><div class="kpi"><div class="v">' + rows.length + '</div><div class="l">Người trong bảng lương</div></div><div class="kpi"><div class="v">' + U.mil(T('gross')) + '</div><div class="l">Tổng thu nhập</div></div><div class="kpi"><div class="v">' + U.mil(T('net')) + '</div><div class="l">Tổng thực lãnh</div></div><div class="kpi"><div class="v">' + U.mil(T('bhCo')) + '</div><div class="l">BHXH công ty đóng (' + s.rateCo + '%)</div></div><div class="kpi"><div class="v">' + U.mil(T('tax')) + '</div><div class="l">Thuế TNCN khấu trừ</div></div><div class="kpi"><div class="v">' + U.mil(T('gross') + T('bhCo')) + '</div><div class="l">Tổng chi phí lương</div></div></div>' +
       '<div class="tw grid-edit" style="max-height:70vh"><table><thead><tr><th class="sticky-l">Nhân viên</th><th class="n">Công chuẩn</th><th class="n">Công TT</th><th class="n">OFF</th><th class="n">KP</th><th class="n">Lương thoả thuận</th><th class="n">LCB</th><th class="n">PC</th><th class="n">P1</th><th class="n">P2</th><th class="n">P3</th><th class="n">Trả thêm BHXH (Đ168)</th><th class="n">Thưởng/khác</th><th class="n">TỔNG THU NHẬP</th><th class="n">Lương đóng BH</th><th class="n">BHXH NLĐ</th><th class="n">Thuế TNCN</th><th class="n">Tạm ứng</th><th class="n">Truy thu BHYT</th><th class="n">Khấu trừ khác</th><th class="n">THỰC LÃNH</th></tr></thead><tbody>';
     let curDept = null;
     const deptTotal = d => { const ii = idx.filter(i => rows[i].dept === d); const t = k => U.money(U.sum(ii, i => res[i][k])); return '<tr><td class="sticky-l b">Cộng ' + U.esc(d || '') + ' (' + ii.length + ')</td><td colspan="7"></td><td class="n b">' + t('P1') + '</td><td class="n b">' + t('P2') + '</td><td class="n b">' + t('P3') + '</td><td class="n b">' + t('extra') + '</td><td class="n b">' + t('bonus') + '</td><td class="n b">' + t('gross') + '</td><td></td><td class="n b">' + t('bhEmp') + '</td><td class="n b">' + t('tax') + '</td><td colspan="3"></td><td class="n b">' + t('net') + '</td></tr>'; };
@@ -1857,7 +1869,8 @@ Pages.payroll = {
     const inp = (i, k, w) => '<input data-i="' + i + '" data-k="' + k + '" value="' + (rows[i][k] === '' || rows[i][k] == null ? '' : rows[i][k]) + '" style="width:' + (w || 52) + 'px"' + ro + '>';
     const T = f => U.sum(res, f);
     const IN = [['contract', 'HĐ'], ['std', 'Công chuẩn'], ['work', 'Công thường'], ['leave', 'Nghỉ phép'], ['holiday', 'Nghỉ lễ'], ['holidayHours', 'Đi làm lễ (giờ)'], ['sick', 'Nghỉ ốm'], ['unpaid', 'Nghỉ KL'], ['nightNormal', 'Đêm thường (giờ)'], ['nightOff', 'Đêm ngày off (giờ)'], ['nightHoliday', 'Đêm lễ (giờ)'], ['late', 'Đi trễ (giờ)'], ['otNormal', 'OT thường (giờ)'], ['otOff', 'OT ngày off (giờ)'], ['otHoliday', 'OT lễ (giờ)']];
-    let html = '<div class="alert info">Cơ cấu lương mới từ T9/2026 (theo file AT_BL_T9_2026): đơn giá ngày = (LCB + phụ cấp CV) ÷ công chuẩn; OT 150% / 200% / 300%; đi làm lễ 400%; ca đêm +30%, đêm lễ +90%; hỗ trợ cơm & hỗ trợ khác theo công; BHXH cho HĐ chính thức đủ 14 công; KPCĐ 2%.</div>' +
+    const PP = Object.assign({}, Pay.V2_DEFAULT, doc.params), pc = v => Math.round(v * 100) + '%';
+    let html = '<div class="alert info"><b>' + U.esc(Pay.structures().v2.name) + '</b> – tham số lưu cùng bảng lương tháng này: công chuẩn ' + PP.std + ', ' + PP.hours + ' giờ/ngày; OT ' + pc(PP.otNormal) + ' / ' + pc(PP.otOff) + ' / ' + pc(PP.otHoliday) + '; đi làm lễ ' + pc(PP.holidayRate) + '; ca đêm +' + pc(PP.night) + ', đêm lễ +' + pc(PP.nightHoliday) + '; BHXH từ ' + PP.minDaysBhxh + ' công; KPCĐ ' + PP.unionRate + '%. <a href="#/paystruct">Xem cơ cấu lương</a></div>' +
       '<div class="kpis"><div class="kpi"><div class="v">' + rows.length + '</div><div class="l">Người trong bảng lương</div></div><div class="kpi"><div class="v">' + U.mil(T(x => x.gross)) + '</div><div class="l">Tổng lương gross</div></div><div class="kpi"><div class="v">' + U.mil(T(x => x.net)) + '</div><div class="l">Tổng thực nhận</div></div><div class="kpi"><div class="v">' + U.mil(T(x => x.bhCo)) + '</div><div class="l">BHXH công ty (' + s.rateCo + '%)</div></div><div class="kpi"><div class="v">' + U.mil(T(x => x.union)) + '</div><div class="l">KPCĐ công ty (' + (s.unionRate == null ? 2 : s.unionRate) + '%)</div></div><div class="kpi"><div class="v">' + U.mil(T(x => x.tax)) + '</div><div class="l">Thuế TNCN</div></div></div>' +
       '<div class="tw grid-edit" style="max-height:70vh"><table><thead><tr><th class="sticky-l">Nhân viên</th>' + IN.map(c => '<th class="n">' + c[1] + '</th>').join('') +
       '<th class="n">Lương thoả thuận</th><th class="n">LCB + PC</th><th class="n">Lương công</th><th class="n">OT + lễ + đêm</th><th class="n">Cơm + hỗ trợ khác</th><th class="n">Trừ đi trễ</th><th class="n">Thưởng/khác</th><th class="n">GROSS</th><th class="n">Đóng BHXH trên</th><th class="n">BHXH NV</th><th class="n">Thuế TNCN</th><th class="n">Tạm ứng</th><th class="n">Trừ khác</th><th class="n">THỰC NHẬN</th></tr></thead><tbody>';
@@ -1931,6 +1944,71 @@ Pages.payroll = {
   },
   slips(doc, empIds){
     UI.modal('Phiếu lương ' + U.ymLabel(doc.month), this.slipHtml(doc, empIds) || '<div class="empty">Không có người</div>', [{ t: 'Đóng' }], { print: true });
+  }
+};
+
+/* ---------- Cơ cấu tính lương: lưu riêng cơ cấu T8 và T9 ---------- */
+Pages.paystruct = {
+  render(el){
+    const s = DB.settings(), st = Pay.structures(), P = st.v2.params, pc = v => Math.round(v * 100) + '%';
+    const docs = DB.all('payrolls').slice().sort(U.by(d => d.id));
+    const used = sc => docs.filter(d => (d.scheme || 'v1') === sc);
+    const monthLinks = sc => used(sc).map(d => '<a href="#/payroll?m=' + d.id + '">' + U.ymLabel(d.id) + '</a>' + (d.locked ? ' 🔒' : '')).join(' · ') || '<span class="muted">chưa có</span>';
+    const cmp = [
+      ['Áp dụng cho', 'Bảng lương đến ' + U.ymLabel(U.ym(U.addMonths(st.v2.from + '-01', -1))), 'Bảng lương từ ' + U.ymLabel(st.v2.from)],
+      ['File gốc', U.esc(st.v1.source), U.esc(st.v2.source)],
+      ['Căn cứ tính', 'Lương thoả thuận chia P1 (LCB + PC theo công) – P2 (hiệu quả) – P3 (vượt công chuẩn)', 'Đơn giá ngày = (LCB + PC chức vụ) ÷ ' + P.std + '; đơn giá giờ = đơn giá ngày ÷ ' + P.hours],
+      ['Công chuẩn', s.stdDays + ' công; khối sản xuất quy đổi ' + s.monthDays + ' ngày; có thể đặt riêng từng người', P.std + ' công, ' + P.hours + ' giờ/ngày; Kho vận & Giao hàng, Sản xuất tối đa 28 công thường'],
+      ['Lương theo công', 'SX: trong chuẩn = Lương TT × MIN(công, 26)/31, P1 = MIN((LCB+PC) × công/26, trong chuẩn), P2 = phần còn lại, P3 = Lương TT × công vượt/31. VP: P1 = (LCB+PC) × công/công chuẩn, P2 = Lương TT × công/công chuẩn − P1', 'Ngày thường, nghỉ phép, nghỉ lễ = đơn giá ngày × số ngày'],
+      ['Làm thêm, lễ, ca đêm', 'Không tách riêng (nằm trong P3)', 'OT ' + pc(P.otNormal) + ' (thường) / ' + pc(P.otOff) + ' (ngày off) / ' + pc(P.otHoliday) + ' (lễ); đi làm lễ ' + pc(P.holidayRate) + '; ca đêm +' + pc(P.night) + '; đêm lễ +' + pc(P.nightHoliday)],
+      ['Hỗ trợ', 'Trả thêm ' + s.extraRate + '% (LCB+PC) thay BHXH cho người chưa đóng (Điều 168)', 'Hỗ trợ cơm và hỗ trợ khác (= thoả thuận − LCB − PC − cơm) chia theo công thường (+1 ngày nếu đi làm lễ); trừ đi trễ theo giờ'],
+      ['BHXH', 'NLĐ ' + s.rateEmp + '%, công ty ' + s.rateCo + '% trên lương đóng BHXH khai báo', 'Chỉ HĐ chính thức (CT) đi làm từ ' + P.minDaysBhxh + ' công: NLĐ ' + s.rateEmp + '%, công ty ' + s.rateCo + '% trên LCB + PC; KPCĐ ' + P.unionRate + '% công ty'],
+      ['Thuế TNCN', 'Luỹ tiến có giảm trừ ' + U.money(s.selfDeduct) + 'đ + ' + U.money(s.depDeduct) + 'đ/NPT; thử việc 10%', 'CT: luỹ tiến trên (gross − OT − cơm − ca đêm − đêm lễ − BHXH − giảm trừ); TV: 10% gross; dưới ' + U.money(P.taxMin) + 'đ không khấu trừ'],
+      ['Các tháng đang dùng', monthLinks('v1'), monthLinks('v2')]
+    ];
+    const f = (k, t, step) => '<label class="f">' + t + '<input name="' + k + '" type="number" step="' + (step || 'any') + '" value="' + P[k] + '"></label>';
+    el.innerHTML = '<h2>Cơ cấu tính lương</h2><p class="muted">Mỗi cơ cấu lưu riêng. Bảng lương của từng tháng giữ cơ cấu và tham số tại thời điểm tạo / nhập, nên sửa cơ cấu không làm thay đổi tháng đã tính (đặc biệt tháng đã khoá).</p>' +
+      '<div class="card"><h3>So sánh 2 cơ cấu</h3><div class="tw"><table><thead><tr><th style="width:16%"></th><th>' + U.esc(st.v1.name) + '</th><th>' + U.esc(st.v2.name) + '</th></tr></thead><tbody>' + cmp.map(r => '<tr><td class="b">' + r[0] + '</td><td>' + r[1] + '</td><td>' + r[2] + '</td></tr>').join('') + '</tbody></table></div></div>' +
+      '<div class="grid g2"><div class="card"><h3>Cơ cấu T8/2026 (P1/P2/P3)</h3><label class="f">Tên cơ cấu<input id="v1name" value="' + U.esc(st.v1.name) + '"></label><p class="small muted">Tham số (công chuẩn ' + s.stdDays + ', quy đổi ' + s.monthDays + ' ngày, BHXH, thuế) sửa ở Cài đặt & dữ liệu. Cách tính P1/P2/P3 giữ nguyên như file lương tháng 8.</p></div>' +
+      '<div class="card"><h3>Cơ cấu T9/2026 (ngày công / giờ)</h3><div class="form"><label class="f two">Tên cơ cấu<input id="v2name" value="' + U.esc(st.v2.name) + '"></label><label class="f">Áp dụng từ tháng<input id="v2from" type="month" value="' + U.esc(st.v2.from) + '"></label>' +
+      f('std', 'Công chuẩn', 1) + f('hours', 'Giờ chuẩn / ngày', 1) + f('holidayRate', 'Đi làm lễ (hệ số)') + f('otNormal', 'OT ngày thường (hệ số)') + f('otOff', 'OT ngày off (hệ số)') + f('otHoliday', 'OT ngày lễ (hệ số)') + f('night', 'Phụ cấp ca đêm (hệ số cộng thêm)') + f('nightHoliday', 'Phụ cấp đêm lễ (hệ số cộng thêm)') + f('minDaysBhxh', 'Công tối thiểu để đóng BHXH', 1) + f('unionRate', 'KPCĐ công ty (%)') + f('taxMin', 'Ngưỡng khấu trừ thuế (đ)', 1) + '</div>' +
+      '<p class="small muted">Giới hạn công thường theo phòng (28 công) chỉnh ở Cài đặt & dữ liệu → Bộ phận.</p></div></div>' +
+      '<div class="toolbar"><button class="btn pri" id="pssave">Lưu cơ cấu</button></div>' +
+      '<div class="card"><h3>Bảng lương theo cơ cấu T9 – tham số đang lưu</h3>' + UI.table([
+        { t: 'Tháng', f: d => '<a href="#/payroll?m=' + d.id + '">' + U.ymLabel(d.id) + '</a>' + (d.locked ? ' <span class="tag ok">🔒 đã khoá</span>' : '') },
+        { t: 'Tham số', f: d => { const q = Object.assign({}, Pay.V2_DEFAULT, d.params); return 'công ' + q.std + ' · ' + q.hours + 'h · OT ' + pc(q.otNormal) + '/' + pc(q.otOff) + '/' + pc(q.otHoliday) + ' · lễ ' + pc(q.holidayRate) + ' · đêm +' + pc(q.night) + '/+' + pc(q.nightHoliday) + ' · BHXH ≥' + q.minDaysBhxh + ' công · KPCĐ ' + q.unionRate + '%'; } },
+        { t: '', f: d => d.locked ? '' : '<button class="btn sm" data-reapply="' + d.id + '">Áp dụng tham số hiện hành</button>' }
+      ], used('v2'), { empty: 'Chưa có bảng lương theo cơ cấu T9' }) + '</div>';
+    el.querySelector('#pssave').onclick = async () => {
+      const st2 = DB.settings(); st2.structures = st2.structures || JSON.parse(JSON.stringify(DEFAULT_SETTINGS.structures));
+      st2.structures.v1 = Object.assign({}, st.v1, { name: el.querySelector('#v1name').value.trim() || st.v1.name });
+      const np = {}; Object.keys(Pay.V2_DEFAULT).forEach(k => { const x = el.querySelector('[name=' + k + ']'); np[k] = x && x.value !== '' ? +x.value : Pay.V2_DEFAULT[k]; });
+      st2.structures.v2 = Object.assign({}, st.v2, { name: el.querySelector('#v2name').value.trim() || st.v2.name, from: el.querySelector('#v2from').value || st.v2.from, params: np });
+      await DB.save('settings', st2); UI.toast('Đã lưu cơ cấu lương'); App.refresh();
+    };
+    el.querySelectorAll('[data-reapply]').forEach(b => b.onclick = async () => { const d = DB.get('payrolls', b.dataset.reapply); if (!await UI.confirm('Áp dụng tham số cơ cấu hiện hành cho ' + U.ymLabel(d.id) + '? Số liệu tháng này sẽ tính lại.')) return; d.params = Pay.v2Params(); await DB.save('payrolls', d); UI.toast('Đã áp dụng'); App.refresh(); });
+  }
+};
+
+/* ---------- Tự nhập file lương có sẵn trong dự án Apps Script (chỉ chạy 1 lần mỗi file) ---------- */
+const AutoSeed = {
+  async run(){
+    if (!IS_GAS) return;
+    let list = [];
+    try { list = JSON.parse(await gs('pendingImports')) || []; } catch (e) { return; }
+    for (const it of list){
+      const flag = 'seed_' + it.id;
+      if (DB.get('settings', flag)) continue;
+      if (DB.get('payrolls', it.month)){ await DB.save('settings', { id: flag, at: U.today(), skipped: 'Đã có bảng lương ' + it.month }); continue; }
+      try {
+        const bin = atob(it.b64), buf = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+        const file = new File([buf], it.name, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+        const res = await Imp.parse(file);
+        const r = await Imp.apply(res, { overwriteStatus: false });
+        await DB.save('settings', { id: flag, at: new Date().toISOString(), file: it.name, added: r.added, updated: r.updated });
+        UI.toast('Đã tự nhập bảng lương ' + U.ymLabel(it.month) + ' từ file ' + it.name + ' (' + r.added + ' người mới, ' + r.updated + ' cập nhật)', 8000);
+      } catch (e) { UI.toast('Không tự nhập được ' + it.name + ': ' + (e.message || e), 8000); }
+    }
   }
 };
 
@@ -2322,7 +2400,7 @@ const Imp = {
     });
     list.push(['settings', s]);
     const payLocked = res.month && DB.lockedPayroll('payrolls', res.month);
-    if (res.month && !payLocked) list.push(['payrolls', { id: res.month, month: res.month, scheme: 'v2', rows: prow, source: 'Nhập từ Excel ' + U.today() }]);
+    if (res.month && !payLocked) list.push(['payrolls', { id: res.month, month: res.month, scheme: 'v2', params: Pay.v2Params(), rows: prow, source: 'Nhập từ Excel ' + U.today() }]);
     await DB.saveMany(list);
     return { added, updated, manual, payLocked };
   },
@@ -2445,6 +2523,7 @@ Pages.settings = {
 (async function init(){
   try {
     await DB.load();
+    await AutoSeed.run();
     if (!location.hash) history.replaceState(null, '', '#/dashboard');
     App.route();
   } catch (e) {
