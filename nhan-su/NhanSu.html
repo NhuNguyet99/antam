@@ -486,7 +486,10 @@ const DB = {
   _local(){ try { localStorage.setItem(LS_KEY, JSON.stringify(this.data)); } catch (e) { UI.toast('Bộ nhớ trình duyệt đầy – hãy sao lưu và dùng bản Google Apps Script'); } },
   _put(c, doc){ const a = this.all(c), i = a.findIndex(x => x.id === doc.id); if (i >= 0) a[i] = doc; else a.push(doc); },
   /** Lưu 1 bản ghi (cập nhật giao diện ngay, ghi xuống Sheet ở nền) */
-  async save(c, doc){
+  /** Bảng lương đã khoá: không cho sửa / xoá (máy chủ Apps Script cũng chặn) */
+  lockedPayroll(c, id){ if (c !== 'payrolls') return false; const d = this.get(c, id); return !!(d && d.locked); },
+  async save(c, doc, opt){
+    if (!(opt && opt.force) && doc.id && this.lockedPayroll(c, doc.id)) throw new Error('Bảng lương ' + doc.id + ' đã khoá – không thể sửa');
     if (!doc.id) doc.id = U.id();
     doc.updatedAt = new Date().toISOString();
     this._put(c, doc);
@@ -499,6 +502,8 @@ const DB = {
     return doc;
   },
   async saveMany(list){
+    const lk = list.find(([c, d]) => d.id && this.lockedPayroll(c, d.id));
+    if (lk) throw new Error('Bảng lương ' + lk[1].id + ' đã khoá – không thể ghi đè');
     const now = new Date().toISOString();
     list.forEach(([c, d]) => { if (!d.id) d.id = U.id(); d.updatedAt = now; this._put(c, d); });
     if (!IS_GAS){ this._local(); return; }
@@ -509,6 +514,7 @@ const DB = {
     }
   },
   async remove(c, id){
+    if (this.lockedPayroll(c, id)) throw new Error('Bảng lương ' + id + ' đã khoá – không thể xoá');
     this.data[c] = this.all(c).filter(x => x.id !== id);
     if (!IS_GAS){ this._local(); return; }
     await gs('deleteDoc', c, id);
@@ -1743,8 +1749,10 @@ Pages.payroll = {
     const doc = DB.get('payrolls', ym);
     el.innerHTML = '<h2>Chấm công & bảng lương</h2><div class="toolbar"><input type="month" id="pm" value="' + ym + '">' +
       (months.length ? '<select id="pms">' + U.opts(months.map(m => ({ v: m, t: U.ymLabel(m) })), ym) + '</select>' : '') + '<span class="grow"></span>' +
-      (doc ? (doc.locked ? '<span class="tag ok">Đã chốt</span><button class="btn" id="punlock">Mở chốt</button>' : '<button class="btn" id="psync">Cập nhật lương từ hồ sơ NV</button><button class="btn" id="padd">+ Thêm NV</button><button class="btn pri" id="plock">Chốt bảng lương</button>') +
-        '<button class="btn" id="pxls">Xuất Excel</button><button class="btn" id="pslip">In phiếu lương</button><button class="btn ghost danger" id="pdel">Xoá</button>' : '') + '</div><div id="pbody"></div>';
+      (doc ? (doc.locked ? '<span class="tag ok">🔒 Đã khoá</span><button class="btn" id="punlock">Mở khoá (cần mật khẩu)</button>' : '<button class="btn" id="psync">Cập nhật lương từ hồ sơ NV</button><button class="btn" id="padd">+ Thêm NV</button><button class="btn pri" id="plock">🔒 Khoá bảng lương</button>') +
+        '<button class="btn" id="pxls">Xuất Excel</button><button class="btn" id="pslip">In phiếu lương</button>' + (doc.locked ? '' : '<button class="btn ghost danger" id="pdel">Xoá</button>') : '') + '</div>' +
+      (doc && doc.locked ? '<div class="alert ok">Bảng lương ' + U.ymLabel(ym) + ' đã khoá lúc ' + U.fd((doc.lockedAt || '').slice(0, 10)) + ' ' + (doc.lockedAt || '').slice(11, 16) + (doc.lockedBy ? ' bởi ' + U.esc(doc.lockedBy) : '') + ' – không ai sửa, xoá hay nhập đè được. Vẫn xem, in phiếu và xuất Excel bình thường. Chỉ mở khoá được bằng mật khẩu quản lý lương.</div>' : '') +
+      '<div id="pbody"></div>';
     el.querySelector('#pm').onchange = e => App.go('payroll', { m: e.target.value });
     const pms = el.querySelector('#pms'); if (pms) pms.onchange = e => App.go('payroll', { m: e.target.value });
     const body = el.querySelector('#pbody');
@@ -1782,11 +1790,11 @@ Pages.payroll = {
     body.innerHTML = html;
     body.querySelectorAll('input[data-i]').forEach(inpEl => inpEl.onchange = async () => { const r = rows[+inpEl.dataset.i]; r[inpEl.dataset.k] = inpEl.value === '' ? '' : U.num(inpEl.value); if (r.manual && ['work', 'std'].includes(inpEl.dataset.k)) delete r.manual; await DB.save('payrolls', doc); App.refresh(); });
     const $ = id => el.querySelector(id);
-    if ($('#plock')) $('#plock').onclick = async () => { if (!await UI.confirm('Chốt bảng lương ' + U.ymLabel(ym) + '? Sau khi chốt không sửa được (có thể mở chốt).')) return; doc.locked = true; doc.lockedAt = U.today(); await DB.save('payrolls', doc); App.refresh(); };
-    if ($('#punlock')) $('#punlock').onclick = async () => { doc.locked = false; await DB.save('payrolls', doc); App.refresh(); };
+    if ($('#plock')) $('#plock').onclick = () => PayLock.lock(doc);
+    if ($('#punlock')) $('#punlock').onclick = () => PayLock.unlock(doc);
     if ($('#psync')) $('#psync').onclick = async () => { rows.forEach(r => { const e = DB.get('employees', r.empId); if (!e) return; const n = Pay.rowFromEmp(e); ['name', 'dept', 'title', 'calc', 'agreed', 'base', 'allowance', 'extra168', 'insured', 'method', 'deps'].forEach(k => r[k] = n[k]); delete r.manual; }); await DB.save('payrolls', doc); UI.toast('Đã cập nhật từ hồ sơ nhân viên'); App.refresh(); };
     if ($('#padd')) $('#padd').onclick = () => { const have = new Set(rows.map(r => r.empId)); const cands = Emp.all().filter(e => !have.has(e.id)); UI.modal('Thêm nhân viên vào bảng lương', cands.length ? cands.map(e => '<label style="display:block"><input type="checkbox" value="' + e.id + '"> ' + U.esc(e.code + ' – ' + e.fullName + ' (' + (e.dept || '') + ')') + '</label>').join('') : 'Tất cả nhân viên đã có trong bảng', [{ t: 'Huỷ' }, { t: 'Thêm', cls: 'pri', fn: async w => { w.querySelectorAll('input:checked').forEach(c => { const e = DB.get('employees', c.value); rows.push(Object.assign(Pay.rowFromEmp(e), { work: s.stdDays })); }); await DB.save('payrolls', doc); App.refresh(); } }], { size: 'sm' }); };
-    $('#pdel').onclick = async () => { if (!await UI.confirm('Xoá bảng lương ' + U.ymLabel(ym) + '?')) return; await DB.remove('payrolls', ym); App.go('payroll'); };
+    if ($('#pdel')) $('#pdel').onclick = async () => { if (!await UI.confirm('Xoá bảng lương ' + U.ymLabel(ym) + '?')) return; await DB.remove('payrolls', ym); App.go('payroll'); };
     $('#pxls').onclick = () => Xls.payroll(doc);
     $('#pslip').onclick = () => this.slips(doc);
     body.querySelectorAll('[data-slip]').forEach(b => b.onclick = () => this.slips(doc, [b.dataset.slip]));
@@ -1823,6 +1831,59 @@ Pages.payroll = {
   },
   slips(doc, empIds){
     UI.modal('Phiếu lương ' + U.ymLabel(doc.month), this.slipHtml(doc, empIds) || '<div class="empty">Không có người</div>', [{ t: 'Đóng' }], { print: true });
+  }
+};
+
+/* ---------- Khoá bảng lương (mật khẩu quản lý lương) ---------- */
+const PayLock = {
+  async hasPin(){ return IS_GAS ? !!(await gs('hasPayrollPin')) : !!DB.get('settings', 'pay_pin'); },
+  async hash(salt, pin){
+    const data = new TextEncoder().encode(salt + '|' + pin);
+    if (window.crypto && crypto.subtle){ const d = await crypto.subtle.digest('SHA-256', data); return btoa(String.fromCharCode(...new Uint8Array(d))); }
+    let h = 0; for (const b of data) h = (h * 31 + b) >>> 0; return String(h);
+  },
+  async checkLocal(pin){ const p = DB.get('settings', 'pay_pin'); if (!p) throw new Error('Chưa đặt mật khẩu quản lý lương'); if (await this.hash(p.salt, pin) !== p.hash) throw new Error('Sai mật khẩu quản lý lương'); },
+  async setPin(oldPin, newPin){
+    if (String(newPin || '').length < 6) throw new Error('Mật khẩu tối thiểu 6 ký tự');
+    if (IS_GAS) return gs('setPayrollPin', oldPin, newPin);
+    if (DB.get('settings', 'pay_pin')) await this.checkLocal(oldPin);
+    const salt = U.id();
+    await DB.save('settings', { id: 'pay_pin', salt, hash: await this.hash(salt, newPin) });
+  },
+  async setPinDialog(after){
+    const has = await this.hasPin();
+    UI.modal(has ? 'Đổi mật khẩu quản lý lương' : 'Đặt mật khẩu quản lý lương',
+      (has ? '' : '<p>Cần đặt mật khẩu trước khi khoá bảng lương. Chỉ người biết mật khẩu mới mở khoá được.</p>') +
+      '<div class="form" style="grid-template-columns:1fr">' + (has ? '<label class="f">Mật khẩu hiện tại<input type="password" id="pin_old" autocomplete="current-password"></label>' : '') +
+      '<label class="f">Mật khẩu mới (tối thiểu 6 ký tự)<input type="password" id="pin_new" autocomplete="new-password"></label><label class="f">Nhập lại mật khẩu mới<input type="password" id="pin_new2" autocomplete="new-password"></label></div>',
+      [{ t: 'Huỷ' }, { t: 'Lưu mật khẩu', cls: 'pri', fn: async w => {
+        const o = has ? w.querySelector('#pin_old').value : '', n = w.querySelector('#pin_new').value, n2 = w.querySelector('#pin_new2').value;
+        if (n !== n2) throw new Error('Hai lần nhập mật khẩu mới không khớp');
+        await this.setPin(o, n); UI.toast('Đã lưu mật khẩu quản lý lương');
+        if (after) setTimeout(after, 50);
+      } }], { size: 'sm' });
+  },
+  async lock(doc){
+    if (!await this.hasPin()){ this.setPinDialog(() => this.lock(doc)); return; }
+    const s = DB.settings(), net = U.sum(doc.rows, r => Pay.calc(r, s).net);
+    UI.modal('Khoá bảng lương ' + U.ymLabel(doc.month), '<p>Bảng lương có <b>' + doc.rows.length + '</b> người, tổng thực lãnh <b>' + U.money(net) + 'đ</b>.</p><p>Sau khi khoá, <b>không ai sửa, xoá hay nhập đè</b> được bảng lương này. Vẫn xem, in phiếu lương và xuất Excel được. Chỉ mở khoá được bằng mật khẩu quản lý lương.</p>',
+      [{ t: 'Huỷ' }, { t: '🔒 Khoá bảng lương', cls: 'pri', fn: async () => {
+        const body = Object.assign({}, doc); delete body.id; body.lockedNet = net;
+        let res;
+        if (IS_GAS) res = Object.assign(JSON.parse(await gs('lockPayroll', doc.id, JSON.stringify(body))), { id: doc.id });
+        else { res = Object.assign(body, { id: doc.id, locked: true, lockedAt: new Date().toISOString(), lockedBy: '' }); await DB.save('payrolls', res, { force: true }); }
+        DB._put('payrolls', res); UI.toast('Đã khoá bảng lương ' + U.ymLabel(doc.month)); App.refresh();
+      } }], { size: 'sm' });
+  },
+  unlock(doc){
+    UI.modal('Mở khoá bảng lương ' + U.ymLabel(doc.month), '<label class="f">Mật khẩu quản lý lương<input type="password" id="pin_un" autocomplete="current-password"></label><p class="small muted">Sau khi sửa xong, nhớ khoá lại.</p>',
+      [{ t: 'Huỷ' }, { t: 'Mở khoá', cls: 'pri', fn: async w => {
+        const pin = w.querySelector('#pin_un').value;
+        let res;
+        if (IS_GAS) res = Object.assign(JSON.parse(await gs('unlockPayroll', doc.id, pin)), { id: doc.id });
+        else { await this.checkLocal(pin); res = Object.assign({}, doc, { locked: false, unlockedAt: new Date().toISOString() }); await DB.save('payrolls', res, { force: true }); }
+        DB._put('payrolls', res); UI.toast('Đã mở khoá bảng lương ' + U.ymLabel(doc.month)); App.refresh();
+      } }], { size: 'sm' });
   }
 };
 
@@ -2115,9 +2176,10 @@ const Imp = {
       }
     });
     list.push(['settings', s]);
-    if (res.month) list.push(['payrolls', { id: res.month, month: res.month, rows: prow, source: 'Nhập từ Excel ' + U.today() }]);
+    const payLocked = res.month && DB.lockedPayroll('payrolls', res.month);
+    if (res.month && !payLocked) list.push(['payrolls', { id: res.month, month: res.month, rows: prow, source: 'Nhập từ Excel ' + U.today() }]);
     await DB.saveMany(list);
-    return { added, updated, manual };
+    return { added, updated, manual, payLocked };
   }
 };
 
@@ -2140,6 +2202,7 @@ Pages.settings = {
       '<div class="card"><h3>Bộ phận / khối</h3><p class="small muted">Cách tính lương: <b>sx</b> = khối sản xuất (tách P3 khi vượt công chuẩn, quy đổi 31 ngày); <b>vp</b> = khối văn phòng.</p><div id="sdepts"></div><button class="btn sm" id="sadd">+ Thêm bộ phận</button></div>' +
       '<div class="card"><h3>Tiêu chí phiếu đánh giá</h3><div class="grid g2"><label class="f">Phỏng vấn (mỗi dòng: tên tiêu chí | trọng số %)<textarea name="evalCriteria" style="min-height:150px">' + U.esc(s.evalCriteria.map(c => c.name + ' | ' + c.w).join('\n')) + '</textarea></label><label class="f">Thử việc (mỗi dòng 1 tiêu chí)<textarea name="probCriteria" style="min-height:150px">' + U.esc(s.probCriteria.join('\n')) + '</textarea></label></div></div>' +
       '<div class="toolbar"><button class="btn pri" id="ssave">Lưu cài đặt</button></div>' +
+      '<div class="card"><h3>Mật khẩu quản lý lương</h3><p class="small muted">Dùng để mở khoá bảng lương đã khoá. ' + (IS_GAS ? 'Lưu dạng mã hoá trong cài đặt của dự án Apps Script, không nằm trong Google Sheet.' : 'Chế độ trình duyệt: chỉ bảo vệ trên máy này.') + ' Quên mật khẩu: người sở hữu dự án vào Apps Script → Cài đặt dự án → Thuộc tính tập lệnh, xoá dòng PAY_PIN rồi đặt lại.</p><button class="btn" id="spin">Đặt / đổi mật khẩu</button></div>' +
       '<div class="card"><h3>Sao lưu & khôi phục</h3><div class="toolbar"><button class="btn" id="bk">Tải bản sao lưu (.json)</button><div id="rs" style="flex:1"></div>' + (IS_GAS ? '' : '<button class="btn danger" id="wipe">Xoá toàn bộ dữ liệu trên trình duyệt này</button>') + '</div>' +
       '<p class="small muted">Chế độ hiện tại: <b>' + (IS_GAS ? 'Google Apps Script – dữ liệu ở Google Sheet, CV ở Google Drive' : 'trình duyệt (localStorage + IndexedDB)') + '</b>. Bản sao lưu chứa lương, số tài khoản ngân hàng – chỉ lưu ở nơi an toàn, không đưa lên kho mã công khai.</p></div>';
     const drawD = () => { el.querySelector('#sdepts').innerHTML = s.depts.map((d, i) => '<div class="toolbar"><input data-dn="' + i + '" value="' + U.esc(d.name) + '" style="min-width:260px"><select data-dc="' + i + '" style="min-width:0">' + U.opts([{ v: 'sx', t: 'sx – sản xuất' }, { v: 'vp', t: 'vp – văn phòng' }], d.calc) + '</select><button class="btn sm ghost danger" data-dx="' + i + '">Xoá</button></div>').join('');
@@ -2171,16 +2234,17 @@ Pages.settings = {
           '<div class="toolbar" style="margin-top:10px"><label><input type="checkbox" id="impst"> Ghi đè trạng thái/ngày nghỉ của nhân viên đã có</label><span class="grow"></span><button class="btn pri" id="impgo">Nhập ' + res.rows.length + ' nhân viên' + (res.month ? ' + bảng lương ' + U.ymLabel(res.month) : '') + '</button></div>';
         box.querySelector('#impgo').onclick = async () => {
           const r = await Imp.apply(res, { overwriteStatus: box.querySelector('#impst').checked });
-          box.innerHTML = '<div class="alert ok">Đã nhập: ' + r.added + ' nhân viên mới, ' + r.updated + ' cập nhật.' + (res.month ? ' Bảng lương ' + U.ymLabel(res.month) + ' đã tạo' + (r.manual ? ' (' + r.manual + ' dòng giữ nguyên số P1/P2/P3/thuế từ file vì khác công thức chuẩn)' : ' – khớp 100% công thức') + '.' : '') + ' <a href="#/emps">Xem hồ sơ nhân sự</a> · <a href="#/legal">Xem cảnh báo pháp lý</a></div>';
+          box.innerHTML = '<div class="alert ok">Đã nhập: ' + r.added + ' nhân viên mới, ' + r.updated + ' cập nhật.' + (r.payLocked ? ' Bảng lương ' + U.ymLabel(res.month) + ' đang khoá nên KHÔNG bị ghi đè.' : res.month ? ' Bảng lương ' + U.ymLabel(res.month) + ' đã tạo' + (r.manual ? ' (' + r.manual + ' dòng giữ nguyên số P1/P2/P3/thuế từ file vì khác công thức chuẩn)' : ' – khớp 100% công thức') + '.' : '') + ' <a href="#/emps">Xem hồ sơ nhân sự</a> · <a href="#/legal">Xem cảnh báo pháp lý</a></div>';
           App.renderNav();
         };
       } catch (e) { box.innerHTML = '<div class="alert bad">' + U.esc(e.message) + '</div>'; }
     });
+    el.querySelector('#spin').onclick = () => PayLock.setPinDialog();
     el.querySelector('#bk').onclick = () => U.dl('nhan-su-an-tam_sao-luu_' + U.today() + '.json', JSON.stringify({ app: 'nhan-su-an-tam', at: new Date().toISOString(), data: DB.data }, null, 1), 'application/json');
     UI.fileDrop(el.querySelector('#rs'), false, '.json', async files => {
       try {
         const j = JSON.parse(await U.readAsText(files[0])), d = j.data || j;
-        const list = []; COLLECTIONS.forEach(c => (d[c] || []).forEach(x => x && x.id && list.push([c, x])));
+        const list = []; COLLECTIONS.forEach(c => (d[c] || []).forEach(x => x && x.id && !DB.lockedPayroll(c, x.id) && list.push([c, x])));
         if (!await UI.confirm('Khôi phục ' + list.length + ' bản ghi từ file? Bản ghi trùng mã sẽ bị ghi đè.')) return;
         await DB.saveMany(list); UI.toast('Đã khôi phục ' + list.length + ' bản ghi'); App.refresh();
       } catch (e) { UI.toast('File không hợp lệ: ' + e.message); }

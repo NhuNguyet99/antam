@@ -69,7 +69,8 @@ Tiếp nhận yêu cầu → Duyệt (Đang tuyển) → Lọc CV theo MTCV → 
   - Khối văn phòng: tính theo công chuẩn.
   - Trả thêm khoản tương đương BHXH (Điều 168) cho người chưa đóng BHXH.
   - BHXH 10,5% / 21,5%. Thuế TNCN luỹ tiến 5 bậc, giảm trừ 15,5 triệu + 6,2 triệu/người phụ thuộc; thử việc khấu trừ 10%.
-  - Chốt bảng, xuất Excel (kèm sheet chuyển khoản ngân hàng), in phiếu lương từng người.
+  - Xuất Excel (kèm sheet chuyển khoản ngân hàng), in phiếu lương từng người (nút **Phiếu** cạnh tên).
+  - **Khoá bảng lương** khi đã nhập xong: lần đầu khoá, web yêu cầu đặt **mật khẩu quản lý lương** (tối thiểu 6 ký tự). Bảng đã khoá thì máy chủ Google từ chối mọi lệnh sửa, xoá, nhập đè từ Excel hay khôi phục sao lưu; vẫn xem, in và xuất Excel được. Chỉ mở khoá được bằng mật khẩu (sai 5 lần thì tạm chặn 15 phút). Mật khẩu lưu dạng mã hoá trong Thuộc tính tập lệnh của dự án Apps Script, không nằm trong Google Sheet. Quên mật khẩu: người sở hữu dự án vào Apps Script → Cài đặt dự án → Thuộc tính tập lệnh, xoá `PAY_PIN` rồi đặt lại.
 - **Cơ cấu nhân sự & lương:** số người, quỹ lương, lương bình quân theo khối và cấp bậc; thâm niên; biến động vào/nghỉ 12 tháng.
 
 Các tham số (lương tối thiểu vùng, tỷ lệ BHXH, giảm trừ gia cảnh, biểu thuế, bộ phận, tiêu chí phiếu đánh giá) sửa trong **Cài đặt & dữ liệu** khi nhà nước điều chỉnh.
