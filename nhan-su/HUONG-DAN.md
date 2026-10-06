@@ -69,9 +69,14 @@ Tiếp nhận yêu cầu → Duyệt (Đang tuyển) → Lọc CV theo MTCV → 
 
 - **Bật một lần:** mở Google Sheet **"An Tâm – CV nhận qua email"** trên Drive → menu **An Tâm CV → Bật tự động nhận CV (15 phút/lần)** → đăng nhập và **cho phép** quyền đọc Gmail, Drive, Sheet. Lần đầu quét lại 30 ngày gần nhất.
   - Nếu Google báo "ứng dụng chưa được xác minh": bấm **Nâng cao → Đi tới… → Cho phép**.
-- **Hộp thư được quét:** Gmail của tài khoản bấm "Bật".
-  - Email tuyển dụng của công ty là một hộp thư khác: vào hộp thư đó → Cài đặt → **Chuyển tiếp** sang Gmail này.
-  - Sau đó ghi địa chỉ email tuyển dụng vào tab **Cài đặt** của sheet, để chỉ nhận thư gửi tới địa chỉ đó.
+- **Hộp thư được quét:** Gmail của tài khoản bấm "Bật". Trạng thái và lần quét gần nhất xem ở web → **Cài đặt & dữ liệu → Nhận CV qua email**.
+- **Ứng viên gửi CV về một email khác** (email tên miền công ty, Outlook, Gmail khác):
+  1. Trong hộp thư đó bật **tự động chuyển tiếp** (Forwarding) tới Gmail đang chạy công cụ nhận CV:
+     - **Gmail / Google Workspace:** ⚙ Cài đặt → Xem tất cả chế độ cài đặt → **Chuyển tiếp và POP/IMAP** → Thêm địa chỉ chuyển tiếp → lấy mã xác nhận ở Gmail nhận → chọn **Chuyển tiếp bản sao**.
+     - **Outlook / Microsoft 365:** Cài đặt → Thư → **Chuyển tiếp**.
+     - **Email tên miền** (cPanel, Mắt Bão, PA, Zimbra…): mục **Forwarders / Chuyển tiếp thư**.
+  2. Web → **Cài đặt & dữ liệu → Nhận CV qua email** → nhập địa chỉ email nhận CV → **Lưu email nhận CV**. Nhiều địa chỉ thì cách nhau dấu phẩy. Web chỉ nhận thư gửi tới các địa chỉ này, thư riêng khác trong Gmail bị bỏ qua.
+  3. Gửi thử 1 thư có file CV, khoảng 15 phút sau bấm **Lấy CV mới từ email ngay**.
 - **Thư nào được nhận:** thư có file PDF, Word hoặc ảnh (ảnh nhỏ như logo, chữ ký được bỏ qua) và có từ khoá ứng tuyển trong tiêu đề, tên file hoặc nội dung ("ứng tuyển", "CV", "hồ sơ", "xin việc"…).
   - Sửa danh sách từ khoá và địa chỉ cần bỏ qua ở tab **Cài đặt**.
   - Thư có nhiều file: file CV chính là file tên có "CV / sơ yếu / lý lịch", nếu không có thì lấy file PDF hoặc Word lớn nhất. Các file khác lưu kèm.

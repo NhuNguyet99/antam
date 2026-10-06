@@ -15,7 +15,7 @@ const CFG_TAB = 'Cài đặt';
 const HEAD = ['Thời gian nhận', 'Người gửi', 'Email người gửi', 'Tiêu đề email', 'Nội dung thư (trích)', 'Tên file CV', 'Link CV', 'File kèm khác',
   'Mã thư (Gmail)', 'Mã file CV (Drive)', 'Mã file kèm (Drive)', 'Trạng thái trên web', 'Vị trí trên web', 'Mã ứng viên', 'Ghi chú'];
 const CFG_DEFAULT = [
-  ['Địa chỉ email nhận CV (để trống = mọi thư đến hộp thư này)', ''],
+  ['Địa chỉ email nhận CV – thư chuyển tiếp từ hộp thư khác (cách nhau dấu phẩy; để trống = mọi thư đến Gmail này)', ''],
   ['Từ khoá nhận diện thư ứng tuyển – cách nhau dấu phẩy (để trống = mọi thư có file CV)', 'ứng tuyển, ung tuyen, cv, resume, hồ sơ, ho so, xin việc, xin viec, sơ yếu, so yeu, lý lịch, ly lich, apply, application, tuyển dụng, tuyen dung'],
   ['Bỏ qua thư từ các địa chỉ / tên miền (cách nhau dấu phẩy)', ''],
   ['Số ngày quét lại khi bật lần đầu', 30],
@@ -88,7 +88,7 @@ function cfg_(cfg) {
   const v = cfg.getRange(2, 1, Math.max(1, cfg.getLastRow() - 1), 2).getValues();
   const get = i => (v[i] && v[i][1] !== undefined ? v[i][1] : CFG_DEFAULT[i][1]);
   const list = x => String(x || '').split(',').map(s => norm_(s)).filter(Boolean);
-  return { to: String(get(0)).trim(), keywords: list(get(1)), skip: list(get(2)), days: Math.max(1, Number(get(3)) || 30), folder: String(get(4) || CFG_DEFAULT[4][1]).trim() };
+  return { to: String(get(0)).split(/[,;\s]+/).map(x => x.trim().toLowerCase()).filter(x => /@/.test(x)), keywords: list(get(1)), skip: list(get(2)), days: Math.max(1, Number(get(3)) || 30), folder: String(get(4) || CFG_DEFAULT[4][1]).trim() };
 }
 
 /** Bỏ dấu tiếng Việt, chữ thường */
@@ -133,7 +133,7 @@ function quetCVEmail() {
     const first = !props.getProperty('LAST_RUN');
     const days = first ? c.days : 3;
     let q = 'has:attachment -in:sent -in:chats -in:spam -in:trash newer_than:' + days + 'd';
-    if (c.to) q += ' {to:' + c.to + ' deliveredto:' + c.to + ' cc:' + c.to + '}';
+    if (c.to.length) q += ' {' + c.to.map(a => 'to:' + a + ' deliveredto:' + a + ' cc:' + a).join(' ') + '}';
     const last = log.getLastRow();
     const seen = new Set(last > 1 ? log.getRange(2, 9, last - 1, 1).getValues().map(r => String(r[0])) : []);
     const me = norm_(Session.getEffectiveUser().getEmail());

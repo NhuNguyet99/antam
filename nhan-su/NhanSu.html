@@ -3336,11 +3336,27 @@ Pages.settings = {
     Auth.usersCard(el.querySelector('#usersbox'));
     const cvm = el.querySelector('#cvmail'); if (cvm) (async () => {
       let i = {}; try { i = JSON.parse(await gs('cvEmailInfo')); } catch (e) { cvm.querySelector('p').textContent = e.message; return; }
-      cvm.innerHTML = '<h3>📧 Nhận CV qua email</h3>' + (i.configured ? '<p>Google Sheet nhận CV: <a href="' + U.esc(i.url) + '" target="_blank" rel="noopener">An Tâm – CV nhận qua email</a> · ' + i.total + ' thư CV, ' + i.waiting + ' chờ đưa lên web' + (i.ok ? '' : ' <span class="tag bad">không mở được sheet</span>') + '</p>' : '<div class="alert warn">Chưa kết nối Google Sheet nhận CV.</div>') +
-        '<p class="small muted">Bật tự động quét Gmail (1 lần): mở Google Sheet → menu <b>An Tâm CV → Bật tự động nhận CV</b> → cho phép quyền. Sheet có tab <b>Cài đặt</b>: địa chỉ email nhận CV, từ khoá nhận diện thư ứng tuyển, địa chỉ bỏ qua. Web tự lấy CV mới mỗi khi mở và 10 phút/lần.</p>' +
-        (Auth.user && Auth.user.role === 'admin' ? '<div class="toolbar"><input id="cvsid" placeholder="Dán link Google Sheet nhận CV khác (nếu cần)" style="flex:1"><button class="btn" id="cvsset">Kết nối</button></div>' : '') +
+      const admin = Auth.user && Auth.user.role === 'admin', gm = i.owner || 'Gmail đang chạy công cụ nhận CV';
+      const ran = i.lastRun && !isNaN(Date.parse(i.lastRun)) ? new Date(i.lastRun) : null, fresh = ran && Date.now() - ran.getTime() < 2 * 3600 * 1000;
+      cvm.innerHTML = '<h3>📧 Nhận CV qua email</h3>' + (!i.configured ? '<div class="alert warn">Chưa kết nối Google Sheet nhận CV.</div>' :
+        '<p>Google Sheet: <a href="' + U.esc(i.url) + '" target="_blank" rel="noopener">An Tâm – CV nhận qua email</a> · ' + i.total + ' thư CV, ' + i.waiting + ' chờ đưa lên web' + (i.ok ? '' : ' <span class="tag bad">không mở được sheet</span>') + '</p>' +
+        '<p>Trạng thái: ' + (fresh ? '<span class="tag ok">Đang tự động quét Gmail</span> lần gần nhất ' + U.fd(U.iso(ran)) + ' ' + String(ran.getHours()).padStart(2, '0') + ':' + String(ran.getMinutes()).padStart(2, '0') + ' – ' + U.esc(i.lastResult) :
+          ran ? '<span class="tag warn">Lâu chưa quét</span> lần gần nhất ' + U.fd(U.iso(ran)) + ' – mở Google Sheet → menu <b>An Tâm CV → Bật tự động nhận CV</b> để bật lại' :
+          '<span class="tag bad">Chưa bật</span> – mở Google Sheet → menu <b>An Tâm CV → Bật tự động nhận CV (15 phút/lần)</b> → cho phép quyền') + '</p>') +
+        '<h4 style="margin:14px 0 6px">Ứng viên gửi CV về một email khác</h4>' +
+        '<ol class="small" style="margin:0 0 8px 18px;padding:0">' +
+          '<li>Trong hộp thư nhận CV đó, bật <b>tự động chuyển tiếp</b> (Forwarding) tới <b>' + U.esc(gm) + '</b>:' +
+            '<ul style="margin:4px 0 4px 16px;padding:0"><li><b>Gmail / Google Workspace:</b> ⚙ Cài đặt → Xem tất cả chế độ cài đặt → <b>Chuyển tiếp và POP/IMAP</b> → Thêm địa chỉ chuyển tiếp → nhập ' + U.esc(gm) + ' → mở Gmail ' + U.esc(gm) + ' lấy mã xác nhận → chọn <b>Chuyển tiếp bản sao</b> → Lưu.</li>' +
+            '<li><b>Outlook / Microsoft 365:</b> Cài đặt → Thư → <b>Chuyển tiếp</b> → Bật → nhập ' + U.esc(gm) + ' → chọn giữ bản sao → Lưu.</li>' +
+            '<li><b>Email tên miền công ty</b> (cPanel, Mắt Bão, PA, Zimbra…): mục <b>Forwarders / Chuyển tiếp thư</b> của hộp thư → thêm ' + U.esc(gm) + '.</li></ul></li>' +
+          '<li>Ghi địa chỉ email nhận CV vào ô dưới (nhiều địa chỉ cách nhau dấu phẩy) → <b>Lưu</b>. Web chỉ nhận thư gửi tới các địa chỉ này, bỏ qua thư riêng khác trong Gmail.</li>' +
+          '<li>Gửi thử 1 thư có file CV tới địa chỉ đó; khoảng 15 phút sau bấm <b>Lấy CV mới từ email ngay</b>.</li></ol>' +
+        (i.configured ? '<div class="toolbar"><input id="cvto" placeholder="VD: tuyendung@antam.vn" value="' + U.esc(i.to || '') + '" style="flex:1"' + (admin ? '' : ' disabled') + '>' + (admin ? '<button class="btn" id="cvtosave">Lưu email nhận CV</button>' : '') + '</div>' +
+          (i.to ? '<p class="small muted" style="margin-top:4px">Đang nhận thư gửi tới: <b>' + U.esc(i.to) + '</b></p>' : '<p class="small muted" style="margin-top:4px">Đang để trống: nhận mọi thư ứng tuyển đến ' + U.esc(gm) + '.</p>') : '') +
+        (admin ? '<div class="toolbar"><input id="cvsid" placeholder="Dán link Google Sheet nhận CV khác (nếu cần)" style="flex:1"><button class="btn" id="cvsset">Kết nối</button></div>' : '') +
         '<div class="toolbar"><button class="btn pri" id="cvsync">Lấy CV mới từ email ngay</button></div>';
       const set = cvm.querySelector('#cvsset'); if (set) set.onclick = async () => { try { await gs('setCvEmailSheet', cvm.querySelector('#cvsid').value); UI.toast('Đã kết nối'); App.refresh(); } catch (e) { UI.toast(e.message); } };
+      const sto = cvm.querySelector('#cvtosave'); if (sto) sto.onclick = async () => { sto.disabled = true; try { await gs('setCvEmailTo', cvm.querySelector('#cvto').value); UI.toast('Đã lưu email nhận CV – áp dụng từ lần quét kế tiếp'); App.refresh(); } catch (e) { sto.disabled = false; UI.toast(e.message); } };
       cvm.querySelector('#cvsync').onclick = () => EmailCV.sync(true);
     })();
     el.querySelector('#bk').onclick = () => U.dl('nhan-su-an-tam_sao-luu_' + U.today() + '.json', JSON.stringify({ app: 'nhan-su-an-tam', at: new Date().toISOString(), data: DB.data }, null, 1), 'application/json');

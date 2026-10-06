@@ -289,19 +289,63 @@ function cvSheet_() {
   return SpreadsheetApp.openById(id).getSheetByName(CV_TAB);
 }
 
-/** Thông tin cho trang Cài đặt */
+/** Tab "Cài đặt" của sheet nhận CV – giống CFG_DEFAULT trong NhanCV-Email.gs */
+const CV_CFG_TAB = 'Cài đặt';
+const CV_CFG_DEFAULT = [
+  ['Địa chỉ email nhận CV – thư chuyển tiếp từ hộp thư khác (cách nhau dấu phẩy; để trống = mọi thư đến Gmail này)', ''],
+  ['Từ khoá nhận diện thư ứng tuyển – cách nhau dấu phẩy (để trống = mọi thư có file CV)', 'ứng tuyển, ung tuyen, cv, resume, hồ sơ, ho so, xin việc, xin viec, sơ yếu, so yeu, lý lịch, ly lich, apply, application, tuyển dụng, tuyen dung'],
+  ['Bỏ qua thư từ các địa chỉ / tên miền (cách nhau dấu phẩy)', ''],
+  ['Số ngày quét lại khi bật lần đầu', 30],
+  ['Thư mục lưu CV trên Google Drive', 'An Tâm – CV qua email (chờ xử lý)'],
+  ['Lần quét gần nhất', ''],
+  ['Kết quả lần quét gần nhất', '']
+];
+
+function cvCfgSheet_(create) {
+  const id = cvSheetId_();
+  if (!id) return null;
+  const ss = SpreadsheetApp.openById(id);
+  let cfg = ss.getSheetByName(CV_CFG_TAB);
+  if (!cfg && create) {
+    cfg = ss.insertSheet(CV_CFG_TAB);
+    cfg.getRange(1, 1, 1, 2).setValues([['Cài đặt', 'Giá trị']]).setFontWeight('bold');
+    cfg.getRange(2, 1, CV_CFG_DEFAULT.length, 2).setValues(CV_CFG_DEFAULT);
+  }
+  return cfg;
+}
+
+/** Thông tin cho trang Cài đặt: link sheet, số thư, email nhận CV, lần quét gần nhất */
 function cvEmailInfo_() {
   const id = cvSheetId_();
   if (!id) return JSON.stringify({ configured: false });
-  let url = 'https://docs.google.com/spreadsheets/d/' + id + '/edit', waiting = 0, total = 0, ok = true;
+  const out = { configured: true, url: 'https://docs.google.com/spreadsheets/d/' + id + '/edit', total: 0, waiting: 0, ok: true, to: '', lastRun: '', lastResult: '', owner: '' };
   try {
     const sh = cvSheet_();
     if (sh && sh.getLastRow() > 1) {
       const st = sh.getRange(2, CV_COL.st, sh.getLastRow() - 1, 1).getValues();
-      total = st.length; waiting = st.filter(r => !r[0]).length;
+      out.total = st.length; out.waiting = st.filter(r => !r[0]).length;
     }
-  } catch (e) { ok = false; }
-  return JSON.stringify({ configured: true, url, total, waiting, ok });
+    const cfg = cvCfgSheet_(false);
+    if (cfg && cfg.getLastRow() > 1) {
+      const v = cfg.getRange(2, 2, Math.min(7, cfg.getLastRow() - 1), 1).getValues().map(r => r[0]);
+      out.to = String(v[0] || '');
+      out.lastRun = v[5] instanceof Date ? v[5].toISOString() : String(v[5] || '');
+      out.lastResult = String(v[6] || '');
+    }
+    try { out.owner = DriveApp.getFileById(id).getOwner().getEmail(); } catch (e) { /* không đọc được chủ sở hữu */ }
+  } catch (e) { out.ok = false; }
+  return JSON.stringify(out);
+}
+
+/** Ghi địa chỉ email nhận CV (thư chuyển tiếp từ hộp thư khác) vào tab Cài đặt của sheet nhận CV */
+function setCvEmailTo_(addrs) {
+  const list = String(addrs || '').split(/[,;\s]+/).map(x => x.trim().toLowerCase()).filter(Boolean);
+  const bad = list.filter(x => !/^[^@\s]+@[^@\s]+\.[a-z]{2,}$/.test(x));
+  if (bad.length) throw new Error('Email không hợp lệ: ' + bad.join(', '));
+  const cfg = cvCfgSheet_(true);
+  if (!cfg) throw new Error('Chưa kết nối Google Sheet nhận CV');
+  cfg.getRange(2, 2).setValue(list.join(', '));
+  return cvEmailInfo_();
 }
 
 /** Nhận các dòng CV mới (chưa đưa lên web), đánh dấu "đang xử lý" để 2 máy không nhập trùng */
@@ -472,6 +516,7 @@ function cvEmailInfo(t) { auth_(t); return cvEmailInfo_(); }
 function emailInbox(t) { auth_(t, true); return emailInbox_(); }
 function emailMarkImported(t, json) { auth_(t, true); return emailMarkImported_(json); }
 function setCvEmailSheet(t, idOrUrl) { admin_(t); return setCvEmailSheet_(idOrUrl); }
+function setCvEmailTo(t, addrs) { admin_(t); return setCvEmailTo_(addrs); }
 function rootFolderUrl(t) { auth_(t); return rootFolderUrl_(); }
 function sendReport(t, to, subject, html) { auth_(t, true); return sendReport_(to, subject, html); }
 function hasPayrollPin(t) { auth_(t); return hasPayrollPin_(); }
