@@ -834,6 +834,27 @@ const Rec = {
   genderWarn(text){ const t = U.norm(text); return /(^|[^a-z])(nam|nu)( |, |\/)?(tu|tuoi)? ?\d{2}/.test(t) || /(^|[^a-z])nam, tuoi|(^|[^a-z])nu tu \d/.test(t); }
 };
 
+/* ---------- Thu gọn các yêu cầu tuyển dụng mẫu (tạo từ poster) – chỉ giữ vài vị trí làm ví dụ ---------- */
+const ReqTrim = {
+  KEEP: ['nhan vien qc', 'nhan vien c&b', 'nhan vien sale online'],
+  /** Yêu cầu mẫu chưa dùng: tạo tự động từ poster, còn "Chờ duyệt", chưa có ứng viên */
+  candidates(){
+    if (DB.get('settings', 'trimmed_reqs')) return { keep: [], drop: [] };
+    const all = Rec.reqs(), unused = all.filter(r => /tu dong tu poster/.test(U.norm(r.note)) && r.status === 'cho_duyet' && !Rec.cands().some(c => c.reqId === r.id));
+    if (unused.length <= 3 || unused.length < all.length * 0.8) return { keep: [], drop: [] };
+    let keep = this.KEEP.map(k => unused.find(r => U.norm(r.position) === k)).filter(Boolean);
+    if (keep.length < 3) keep = keep.concat(unused.filter(r => !keep.includes(r)).slice(0, 3 - keep.length));
+    return { keep, drop: unused.filter(r => !keep.includes(r)) };
+  },
+  async run(){
+    const { keep, drop } = this.candidates();
+    if (!drop.length) return;
+    if (!await UI.confirm('Xoá ' + drop.length + ' yêu cầu tuyển dụng mẫu, chỉ giữ ' + keep.length + ' vị trí làm ví dụ:\n' + keep.map(r => '• ' + r.code + ' ' + r.position).join('\n') + '\nYêu cầu bạn tự tạo và yêu cầu đã có ứng viên không bị xoá.')) return;
+    await DB.save('settings', { id: 'trimmed_reqs', at: U.today(), kept: keep.map(r => r.code) });
+    await Del.reqs(drop.map(r => r.id), { noConfirm: true });
+  }
+};
+
 /* ---------- Yêu cầu tuyển dụng ---------- */
 Pages.reqs = {
   render(el, p){
@@ -843,14 +864,17 @@ Pages.reqs = {
     if (q) list = list.filter(r => U.norm(r.code + ' ' + r.position + ' ' + r.dept).includes(q));
     const all = Rec.reqs(), open = all.filter(r => r.status === 'dang_tuyen');
     const need = U.sum(open, r => Math.max(0, (+r.qty || 1) - Rec.hired(r)));
+    const seeds = ReqTrim.candidates();
     el.innerHTML = '<h2>Yêu cầu tuyển dụng</h2>' +
+      (seeds.drop.length && Auth.canWrite() ? '<div class="alert warn"><b>' + all.length + '</b> vị trí đang là mẫu tạo sẵn từ poster (chưa có ứng viên). <button class="btn sm pri" id="rtrim">Chỉ giữ ' + seeds.keep.length + ' vị trí ví dụ: ' + U.esc(seeds.keep.map(r => r.position).join(', ')) + '</button> <button class="btn sm ghost" id="rtrimx">Giữ nguyên tất cả</button></div>' : '') +
       '<div class="kpis">' +
       '<div class="kpi warn"><div class="v">' + all.filter(r => r.status === 'cho_duyet').length + '</div><div class="l">Chờ duyệt</div></div>' +
       '<div class="kpi"><div class="v">' + open.length + '</div><div class="l">Vị trí đang tuyển</div></div>' +
       '<div class="kpi bad"><div class="v">' + need + '</div><div class="l">Người còn thiếu</div></div>' +
       '<div class="kpi ok"><div class="v">' + all.filter(r => r.status === 'da_du').length + '</div><div class="l">Vị trí đã tuyển đủ</div></div></div>' +
-      '<div class="toolbar"><input id="rq" placeholder="Tìm vị trí, phòng ban…" value="' + U.esc(p.q || '') + '"><select id="rs">' + U.opts(REQ_STATUS, st, 'Tất cả trạng thái') + '</select><span class="grow"></span><button class="btn pri" id="radd">+ Tiếp nhận yêu cầu</button></div>' +
+      '<div class="toolbar"><input id="rq" placeholder="Tìm vị trí, phòng ban…" value="' + U.esc(p.q || '') + '"><select id="rs">' + U.opts(REQ_STATUS, st, 'Tất cả trạng thái') + '</select><span class="grow"></span><button class="btn danger" id="rbulk" hidden></button><button class="btn pri" id="radd">+ Tiếp nhận yêu cầu</button></div>' +
       UI.table([
+        UI.selCol('rq'),
         { t: 'Mã', f: r => '<b>' + U.esc(r.code) + '</b>' },
         { t: 'Vị trí / Phòng ban', f: r => '<a href="javascript:void 0" data-open="' + r.id + '">' + U.esc(r.position) + '</a><div class="small muted">' + U.esc(r.dept) + '</div>' },
         { t: 'Đã tuyển / Cần', n: 1, f: r => { const h = Rec.hired(r), q2 = +r.qty || 1; return '<b>' + h + '</b> / ' + q2 + UI.bar(h / q2 * 100, h >= q2 ? 'ok' : ''); } },
@@ -867,6 +891,9 @@ Pages.reqs = {
     el.querySelectorAll('[data-open]').forEach(a => a.onclick = () => this.edit(DB.get('requisitions', a.dataset.open)));
     el.querySelectorAll('[data-screen]').forEach(a => a.onclick = () => App.go('screen', { req: a.dataset.screen }));
     UI.bindActs(el, 'rq', id => this.edit(DB.get('requisitions', id)), id => Del.req(id));
+    UI.bindSel(el, 'rq', el.querySelector('#rbulk'), ids => Del.reqs(ids));
+    const tr = el.querySelector('#rtrim'); if (tr) tr.onclick = () => ReqTrim.run();
+    const tx = el.querySelector('#rtrimx'); if (tx) tx.onclick = async () => { await DB.save('settings', { id: 'trimmed_reqs', at: U.today(), kept: 'all' }); App.refresh(); };
   },
   edit(r){
     const isNew = !r;
@@ -1787,6 +1814,16 @@ const Del = {
     await DB.remove('requisitions', id);
     if (cs.length){ cs.forEach(c => { c.reqId = ''; }); await DB.saveMany(cs.map(c => ['candidates', c])); }
     return this.done(1, 'yêu cầu tuyển dụng');
+  },
+  /** Xoá nhiều yêu cầu tuyển dụng: ứng viên giữ lại, chỉ gỡ liên kết */
+  async reqs(ids, opt){
+    const list = ids.map(id => DB.get('requisitions', id)).filter(Boolean);
+    if (!list.length) return false;
+    const cs = Rec.cands().filter(c => ids.includes(c.reqId));
+    if (!(opt && opt.noConfirm) && !await UI.confirm('Xoá ' + list.length + ' yêu cầu tuyển dụng: ' + this.names(list, r => r.code + ' ' + r.position) + '?' + (cs.length ? '\n' + cs.length + ' ứng viên của các yêu cầu này vẫn giữ lại (bỏ liên kết).' : ''))) return false;
+    await DB.removeMany(list.map(r => ['requisitions', r.id]));
+    if (cs.length){ cs.forEach(c => { c.reqId = ''; }); await DB.saveMany(cs.map(c => ['candidates', c])); }
+    return this.done(list.length, 'yêu cầu tuyển dụng');
   },
   async evals(ids){
     const list = ids.map(id => DB.get('evaluations', id)).filter(Boolean);

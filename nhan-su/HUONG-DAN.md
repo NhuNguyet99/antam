@@ -36,7 +36,11 @@ Có thể mở thẳng file `NhanSu.html` bằng trình duyệt để dùng th�
 3. Vào **Hồ sơ nhân sự**, bổ sung những gì file lương không có: ngày sinh, CCCD, **hợp đồng** (số HĐ, loại, ngày hết hạn), giấy tờ hồ sơ. Đây là căn cứ để web cảnh báo hạn hợp đồng và kiểm tra pháp lý.
 4. Kiểm tra lại trạng thái **thử việc**. File tháng 8 ghi "CÒN THỬ VIỆC" cho 17 người; nếu ai đã chuyển chính thức thì vào hồ sơ đổi trạng thái hoặc dùng **Theo dõi thử việc → Đánh giá thử việc**.
 
-Web đã có sẵn **16 yêu cầu tuyển dụng** kèm MTCV lấy từ các poster trong thư mục "Hình ảnh poster", ở trạng thái **Chờ duyệt**. Xác nhận số lượng rồi chuyển sang **Đang tuyển**. Poster "nhân viên bảo trì.png" không đọc được chữ nên MTCV vị trí này là bản mẫu, cần sửa lại.
+Web có sẵn **16 yêu cầu tuyển dụng mẫu** kèm MTCV lấy từ các poster, ở trạng thái **Chờ duyệt**.
+
+- Trang **Yêu cầu tuyển dụng** có nút **Chỉ giữ 3 vị trí ví dụ** (Nhân viên QC, Nhân viên C&B, Nhân viên sale online) để xoá các vị trí mẫu chưa dùng.
+- Muốn xoá nhiều yêu cầu khác: tích ô đầu dòng rồi bấm **Xoá … dòng đã chọn**.
+- Vị trí giữ lại: xác nhận số lượng rồi chuyển sang **Đang tuyển**.
 
 ## 3. Quy trình tuyển dụng trên web
 
