@@ -126,6 +126,17 @@ Menu **Hệ thống → Tải dữ liệu lên**. Mọi file đều được xem
 - **Cơ cấu tính lương** (menu Nhân sự): lưu riêng 2 cơ cấu – T8/2026 (P1/P2/P3) và T9/2026 (ngày công/giờ) – với bảng so sánh, tháng áp dụng, tham số (công chuẩn, giờ chuẩn, hệ số OT/lễ/ca đêm, số công tối thiểu đóng BHXH, KPCĐ, ngưỡng thuế). Mỗi bảng lương lưu kèm bản sao tham số lúc tạo/nhập, nên sửa cơ cấu không làm đổi tháng đã tính; tháng chưa khoá có nút "Áp dụng tham số hiện hành".
 - **Cơ cấu nhân sự & lương:** số người, quỹ lương, lương bình quân theo khối và cấp bậc; thâm niên; biến động vào/nghỉ 12 tháng.
 
+### Dọn dữ liệu tự động (một lần)
+
+Lần đầu tài khoản Quản trị hoặc HCNS mở web bản mới, web tự làm một lần các việc sau.
+
+1. **Sao lưu toàn bộ dữ liệu** ra file .json trong thư mục Drive **"An Tâm – Sao lưu dữ liệu"**.
+2. **Gộp hồ sơ nhân sự trùng** theo lựa chọn mặc định ở mục dưới.
+3. **Sửa ngày vào làm** bị lùi 1 ngày.
+4. **Xoá các yêu cầu tuyển dụng mẫu** chưa dùng, chỉ giữ 3 vị trí ví dụ.
+
+Kết quả hiện ở trang **Tổng quan**, kèm nút **Xem chi tiết** và link file sao lưu. Muốn quay lại như trước: **Tải dữ liệu lên → Khôi phục bản sao lưu** → chọn file .json đó.
+
 ### Lọc hồ sơ trùng
 
 **Hồ sơ nhân sự → 🔍 Lọc hồ sơ trùng.** Khi có trùng, trang cũng hiện cảnh báo kèm số nhóm.

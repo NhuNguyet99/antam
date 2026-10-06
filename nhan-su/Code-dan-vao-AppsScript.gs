@@ -413,6 +413,40 @@ function setCvEmailSheet_(idOrUrl) {
   return cvEmailInfo_();
 }
 
+/* ---------------- Việc bảo trì dữ liệu tự động (chạy 1 lần) ---------------- */
+
+/** Nhận việc: chỉ máy đầu tiên được làm (tránh 2 máy cùng chạy) */
+function claimTask_(id) {
+  if (!/^[a-z0-9-]{3,60}$/.test(String(id))) throw new Error('Mã việc không hợp lệ');
+  const props = PropertiesService.getScriptProperties(), key = 'TASK_' + id;
+  const lock = LockService.getScriptLock();
+  lock.waitLock(10000);
+  try {
+    if (props.getProperty(key)) return false;
+    props.setProperty(key, new Date().toISOString());
+    return true;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Trả lại việc khi làm dở bị lỗi, để lần mở web sau làm lại */
+function releaseTask_(id) {
+  if (!/^[a-z0-9-]{3,60}$/.test(String(id))) throw new Error('Mã việc không hợp lệ');
+  PropertiesService.getScriptProperties().deleteProperty('TASK_' + id);
+  return true;
+}
+
+/** Sao lưu toàn bộ dữ liệu ra file .json trong thư mục Drive "An Tâm – Sao lưu dữ liệu" */
+function backupData_(label) {
+  const it = DriveApp.getFoldersByName('An Tâm – Sao lưu dữ liệu');
+  const folder = it.hasNext() ? it.next() : DriveApp.createFolder('An Tâm – Sao lưu dữ liệu');
+  const stamp = Utilities.formatDate(new Date(), 'Asia/Ho_Chi_Minh', 'yyyy-MM-dd HH.mm');
+  const json = JSON.stringify({ app: 'nhan-su-an-tam', at: new Date().toISOString(), note: String(label || '').slice(0, 200), data: JSON.parse(getAll_()) });
+  const f = folder.createFile('nhan-su-an-tam_sao-luu_' + stamp + '.json', json, 'application/json');
+  return JSON.stringify({ url: f.getUrl(), name: f.getName() });
+}
+
 /* ---------------- Gửi báo cáo cho Giám đốc ---------------- */
 
 function sendReport_(to, subject, html) {
@@ -517,6 +551,9 @@ function emailInbox(t) { auth_(t, true); return emailInbox_(); }
 function emailMarkImported(t, json) { auth_(t, true); return emailMarkImported_(json); }
 function setCvEmailSheet(t, idOrUrl) { admin_(t); return setCvEmailSheet_(idOrUrl); }
 function setCvEmailTo(t, addrs) { admin_(t); return setCvEmailTo_(addrs); }
+function claimTask(t, id) { auth_(t, true); return claimTask_(id); }
+function releaseTask(t, id) { auth_(t, true); return releaseTask_(id); }
+function backupData(t, label) { auth_(t, true); return backupData_(label); }
 function rootFolderUrl(t) { auth_(t); return rootFolderUrl_(); }
 function sendReport(t, to, subject, html) { auth_(t, true); return sendReport_(to, subject, html); }
 function hasPayrollPin(t) { auth_(t); return hasPayrollPin_(); }

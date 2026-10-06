@@ -2561,6 +2561,46 @@ const AutoSeed = {
   }
 };
 
+/* ---------- Tự động dọn dữ liệu 1 lần khi mở web: gộp hồ sơ trùng, sửa ngày lệch, thu gọn yêu cầu mẫu ---------- */
+const AutoFix = {
+  ID: 'don-du-lieu-20261006',
+  done(){ return DB.get('settings', 'autofix_' + this.ID); },
+  async run(){
+    if (!IS_GAS || !Auth.canWrite() || this.done()) return;
+    const groups = Dedup.groups(), trim = ReqTrim.candidates();
+    let fixes = []; try { fixes = await Dedup.dateFixes(); } catch (e) { console.warn(e); }
+    if (!groups.length && !fixes.length && !trim.drop.length) return;
+    UI.toast('Đang tự động dọn dữ liệu: gộp hồ sơ trùng, sửa ngày vào làm, thu gọn yêu cầu mẫu…', 6000);
+    const bk = JSON.parse(await gs('backupData', 'Trước khi tự động gộp hồ sơ trùng / thu gọn yêu cầu mẫu')); // sao lưu trước, lỗi thì dừng
+    if (!await gs('claimTask', this.ID)) return;                       // máy khác đã / đang làm
+    try { await this.apply(groups, fixes, trim, bk); }
+    catch (e) { try { await gs('releaseTask', this.ID); } catch (e2) { /* bỏ qua */ } throw e; }
+  },
+  async apply(groups, fixes, trim, bk){
+    const sel = groups.map(g => ({ g, keep: g[0].id, pick: Dedup.defaults(g, g[0]) }));
+    const merged = sel.map(s => s.g[0].code + ' ' + s.g[0].fullName + ' ← xoá ' + s.g.slice(1).map(e => e.code).join(', '));
+    const r = sel.length || fixes.length ? await Dedup.apply(sel, fixes) : { groups: 0, removed: 0, dates: 0, locked: 0 };
+    if (trim.drop.length){
+      await DB.save('settings', { id: 'trimmed_reqs', at: U.today(), kept: trim.keep.map(x => x.code) });
+      await DB.removeMany(trim.drop.map(x => ['requisitions', x.id]));
+    }
+    await DB.save('settings', { id: 'autofix_' + this.ID, at: new Date().toISOString(), by: (Auth.user || {}).u || '', groups: r.groups, removed: r.removed, dates: r.dates, locked: r.locked,
+      reqsRemoved: trim.drop.map(x => x.code + ' ' + x.position), reqsKept: trim.keep.map(x => x.code + ' ' + x.position), merged, dateFixes: fixes.map(f => f.code + ' ' + f.name + ': ' + f.from + ' → ' + f.to), backup: bk.url, backupName: bk.name });
+    UI.toast('Đã tự động: gộp ' + r.groups + ' nhóm hồ sơ trùng (xoá ' + r.removed + ' mã), sửa ' + r.dates + ' ngày vào làm, xoá ' + trim.drop.length + ' yêu cầu mẫu. Đã sao lưu trước khi làm.', 10000);
+  },
+  /** Thông báo trên trang Tổng quan */
+  banner(){
+    const d = this.done(); if (!d || d.hidden) return '';
+    return '<div class="alert ok" id="afx"><b>Đã tự động dọn dữ liệu</b> ' + U.fd(d.at.slice(0, 10)) + ': gộp ' + d.groups + ' nhóm hồ sơ trùng (xoá ' + d.removed + ' mã), sửa ' + d.dates + ' ngày vào làm lệch 1 ngày, xoá ' + (d.reqsRemoved || []).length + ' yêu cầu tuyển dụng mẫu (giữ ' + U.esc((d.reqsKept || []).join(', ')) + '). ' +
+      'Bản sao lưu trước khi dọn: <a href="' + U.esc(d.backup) + '" target="_blank" rel="noopener">' + U.esc(d.backupName || 'file .json') + '</a> (khôi phục ở Tải dữ liệu lên → Khôi phục bản sao lưu). <a href="javascript:void 0" id="afxd">Xem chi tiết</a> · <a href="javascript:void 0" id="afxh">Ẩn</a></div>';
+  },
+  bind(el){
+    const d = this.done(); if (!d) return;
+    const a = el.querySelector('#afxd'); if (a) a.onclick = () => UI.modal('Chi tiết dọn dữ liệu tự động', '<h4>Hồ sơ trùng đã gộp (giữ mã ← xoá mã)</h4><ul>' + (d.merged || []).map(x => '<li>' + U.esc(x) + '</li>').join('') + '</ul><h4>Ngày vào làm đã sửa</h4><ul>' + (d.dateFixes || []).map(x => '<li>' + U.esc(x) + '</li>').join('') + '</ul><h4>Yêu cầu tuyển dụng mẫu đã xoá</h4><ul>' + (d.reqsRemoved || []).map(x => '<li>' + U.esc(x) + '</li>').join('') + '</ul>', [{ t: 'Đóng' }], { print: true });
+    const h = el.querySelector('#afxh'); if (h) h.onclick = async () => { await DB.save('settings', Object.assign({}, d, { hidden: true })); App.refresh(); };
+  }
+};
+
 /* ---------- Khoá bảng lương (mật khẩu quản lý lương) ---------- */
 const PayLock = {
   async hasPin(){ return IS_GAS ? !!(await gs('hasPayrollPin')) : !!DB.get('settings', 'pay_pin'); },
@@ -2666,7 +2706,7 @@ Pages.dashboard = {
     const ctr = act.map(e => ({ e, c: Emp.curContract(e) })).filter(x => x.c && x.c.end && x.c.type !== 'thu_viec' && x.c.end <= U.addDays(today, s.alertContract)).sort(U.by(x => x.c.end));
     const tasks = DB.all('legal_tasks').map(t => ({ t, n: Legal.periods(t).next })).filter(x => x.n && x.n.due <= U.addDays(today, 20)).sort(U.by(x => x.n.due));
     const kpi = (v, l, cls, go) => '<div class="kpi ' + (cls || '') + '"' + (go ? ' data-go="' + go + '"' : '') + '><div class="v">' + v + '</div><div class="l">' + l + '</div></div>';
-    el.innerHTML = '<h2>Tổng quan nhân sự – ' + U.fd(today) + '</h2>' +
+    el.innerHTML = '<h2>Tổng quan nhân sự – ' + U.fd(today) + '</h2>' + AutoFix.banner() +
       (!IS_GAS ? '<div class="alert info">Đang chạy ở chế độ trình duyệt: dữ liệu chỉ lưu trên máy này. Đưa lên Google Apps Script (xem HUONG-DAN) để lưu vào Google Sheet và lưu CV lên Google Drive, dùng chung cả phòng.</div>' : '') +
       (!act.length ? '<div class="alert warn">Chưa có dữ liệu nhân viên. Vào <a href="#/settings">Cài đặt & dữ liệu</a> → "Nhập từ file lương Excel" và chọn file <b>Lương T8 mới.xlsx</b>.</div>' : '') +
       '<div class="kpis">' + kpi(act.length, 'Nhân sự đang làm việc', '', 'emps') + kpi(act.filter(e => e.status === 'thu_viec').length, 'Đang thử việc', 'warn', 'probation') +
@@ -2683,6 +2723,7 @@ Pages.dashboard = {
     el.querySelectorAll('[data-go]').forEach(k => k.onclick = () => App.go(k.dataset.go));
     el.querySelectorAll('[data-c]').forEach(a => a.onclick = () => Cand.edit(DB.get('candidates', a.dataset.c)));
     el.querySelectorAll('[data-e]').forEach(a => a.onclick = () => Emp.edit(DB.get('employees', a.dataset.e)));
+    AutoFix.bind(el);
     el.querySelectorAll('[data-pe]').forEach(a => a.onclick = () => Prob.evaluate(DB.get('employees', a.dataset.pe)));
   }
 };
@@ -3371,6 +3412,7 @@ Pages.settings = {
     if (!await Auth.ensure()) return;
     await DB.load();
     if (Auth.canWrite()) await AutoSeed.run();
+    if (Auth.canWrite()) { try { await AutoFix.run(); } catch (e) { UI.toast('Không tự dọn được dữ liệu: ' + (e.message || e), 8000); } }
     if (!location.hash) history.replaceState(null, '', '#/dashboard');
     App.route();
     if (IS_GAS && Auth.canWrite()){ setTimeout(() => EmailCV.sync(), 1500); setInterval(() => EmailCV.sync(), 10 * 60 * 1000); }
