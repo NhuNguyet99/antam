@@ -11,16 +11,45 @@ const ROOT_FOLDER_NAME = 'An Tâm – Kho CV';
 const COLLECTIONS = ['settings', 'requisitions', 'candidates', 'evaluations', 'employees', 'payrolls', 'legal_tasks', 'cv_files'];
 const ID_RE = /^[A-Za-z0-9_\-.~:@+]{1,200}$/;
 
+/** Nạp giao diện từ GitHub (để trống = dùng file NhanSu.html trong dự án Apps Script) */
+const HTML_SOURCE_URL = '';
+
 function doGet() {
-  return HtmlService.createHtmlOutputFromFile('NhanSu')
+  const out = HtmlService.createHtmlOutput(pageHtml_())
     .setTitle('Nhân sự An Tâm')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1')
     .setXFrameOptionsMode(HtmlService.XFrameOptionsMode.DEFAULT);
+  return out;
 }
 
+/** Nội dung trang: lấy từ GitHub (lưu tạm 10 phút) hoặc từ file NhanSu trong dự án */
+function pageHtml_() {
+  if (!HTML_SOURCE_URL) return HtmlService.createHtmlOutputFromFile('NhanSu').getContent();
+  const cache = CacheService.getScriptCache();
+  const n = Number(cache.get('html_n') || 0);
+  if (n) {
+    const parts = cache.getAll(Array.from({ length: n }, (_, i) => 'html_' + i));
+    if (Object.keys(parts).length === n) return Array.from({ length: n }, (_, i) => parts['html_' + i]).join('');
+  }
+  const res = UrlFetchApp.fetch(HTML_SOURCE_URL, { muteHttpExceptions: true });
+  if (res.getResponseCode() !== 200) {
+    try { return HtmlService.createHtmlOutputFromFile('NhanSu').getContent(); }
+    catch (e) { throw new Error('Không tải được giao diện từ ' + HTML_SOURCE_URL + ' (mã ' + res.getResponseCode() + ')'); }
+  }
+  const html = res.getContentText('UTF-8'), size = 90000, chunks = {};
+  for (let i = 0; i * size < html.length; i++) chunks['html_' + i] = html.slice(i * size, (i + 1) * size);
+  chunks.html_n = String(Object.keys(chunks).length);
+  try { cache.putAll(chunks, 600); } catch (e) { /* bỏ qua nếu bộ nhớ tạm đầy */ }
+  return html;
+}
+
+/** Mã Google Sheet dữ liệu nhân sự – dùng khi script không được tạo từ bên trong Sheet (để trống nếu script gắn trong Sheet) */
+const DB_SPREADSHEET_ID = '';
+
 function sheet_() {
-  const ss = SpreadsheetApp.getActive();
-  if (!ss) throw new Error('Script phải được tạo từ Google Sheet dữ liệu nhân sự (Tiện ích mở rộng → Apps Script)');
+  const id = DB_SPREADSHEET_ID || PropertiesService.getScriptProperties().getProperty('DB_SPREADSHEET_ID');
+  const ss = SpreadsheetApp.getActive() || (id ? SpreadsheetApp.openById(id) : null);
+  if (!ss) throw new Error('Chưa gắn Google Sheet dữ liệu: điền DB_SPREADSHEET_ID trong Code.gs, hoặc tạo script từ Google Sheet (Tiện ích mở rộng → Apps Script)');
   let sh = ss.getSheetByName(DATA_SHEET);
   if (!sh) {
     sh = ss.insertSheet(DATA_SHEET);
