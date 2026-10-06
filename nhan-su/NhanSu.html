@@ -60,6 +60,7 @@ h2{font-size:20px} h3{font-size:16px} h4{font-size:14px}
 .kpi{background:var(--panel);border:1px solid var(--line);border-radius:var(--radius);padding:12px 14px;box-shadow:var(--shadow);cursor:default}
 .kpi[data-go]{cursor:pointer}
 .kpi .v{font-size:24px;font-weight:700}
+.kpis.money .v{font-size:19px;font-variant-numeric:tabular-nums}
 .kpi .l{color:var(--muted);font-size:12px}
 .kpi.bad .v{color:var(--bad)} .kpi.warn .v{color:var(--warn)} .kpi.ok .v{color:var(--ok)}
 .btn{display:inline-flex;align-items:center;gap:6px;border:1px solid var(--line);background:var(--panel);color:var(--text);padding:7px 12px;border-radius:8px;cursor:pointer;font:inherit;font-weight:500;white-space:nowrap}
@@ -118,6 +119,9 @@ tfoot td{font-weight:700;background:var(--panel2)}
 .kc{background:var(--panel);border:1px solid var(--line);border-radius:8px;padding:8px;margin-bottom:8px;cursor:pointer;box-shadow:var(--shadow)}
 .kc:hover{border-color:var(--brand)}
 .kc .nm{font-weight:600}
+.kc{position:relative}.kc .kx{position:absolute;top:4px;right:4px;padding:0 6px;opacity:.55}.kc .kx:hover{opacity:1}
+.acts{display:inline-flex;gap:4px;white-space:nowrap;vertical-align:middle}
+.btn[hidden]{display:none}
 .empty{padding:24px;text-align:center;color:var(--muted)}
 .modal-bg{position:fixed;inset:0;background:rgba(10,14,20,.45);display:flex;align-items:flex-start;justify-content:center;z-index:50;overflow:auto;padding:30px 12px}
 .modal{background:var(--panel);border-radius:12px;width:min(980px,100%);box-shadow:0 20px 50px rgba(0,0,0,.3);border:1px solid var(--line)}
@@ -206,6 +210,8 @@ const U = {
   id(){ return Date.now().toString(36) + Math.random().toString(36).slice(2, 8); },
   num(v){ if (v == null || v === '') return 0; if (typeof v === 'number') return isFinite(v) ? v : 0; const n = Number(String(v).replace(/[^\d,.\-]/g, '').replace(/\./g, '').replace(',', '.')); return isFinite(n) ? n : 0; },
   money(v){ const n = Math.round(Number(v) || 0); return n.toLocaleString('vi-VN'); },
+  /** Số công / giờ: tối đa 2 số lẻ */
+  qty(v){ return (Math.round((Number(v) || 0) * 100) / 100).toLocaleString('vi-VN'); },
   mil(v){ return (Math.round((Number(v) || 0) / 100000) / 10).toLocaleString('vi-VN') + ' tr'; },
   pct(v, d = 0){ return (Number(v) || 0).toFixed(d) + '%'; },
   today(){ const d = new Date(); return U.iso(d); },
@@ -530,6 +536,18 @@ const DB = {
     if (!IS_GAS){ this._local(); return; }
     await gs('deleteDoc', c, id);
   },
+  /** Xoá nhiều bản ghi một lần: list = [[collection, id], ...] */
+  async removeMany(list){
+    if (!list.length) return;
+    const lk = list.find(([c, id]) => this.lockedPayroll(c, id));
+    if (lk) throw new Error('Bảng lương ' + lk[1] + ' đã khoá – không thể xoá');
+    list.forEach(([c, id]) => { this.data[c] = this.all(c).filter(x => x.id !== id); });
+    if (!IS_GAS){ this._local(); return; }
+    for (let i = 0; i < list.length; i += 200){
+      this.pending++;
+      try { await gs('deleteDocs', JSON.stringify(list.slice(i, i + 200))); } finally { this.pending--; }
+    }
+  },
   settings(){ return this.get('settings', 'main') || DEFAULT_SETTINGS; },
   async seed(){
     const list = [];
@@ -708,11 +726,39 @@ const UI = {
     return wrap;
   },
   printModal(){ document.body.classList.add('printing-modal'); setTimeout(() => { window.print(); setTimeout(() => document.body.classList.remove('printing-modal'), 300); }, 50); },
-  confirm(msg){ return new Promise(res => { UI.modal('Xác nhận', '<p>' + U.esc(msg) + '</p>', [{ t: 'Huỷ', fn: () => res(false) }, { t: 'Đồng ý', cls: 'pri', fn: () => res(true) }], { size: 'sm', onClose: () => res(false) }); }); },
+  confirm(msg){ return new Promise(res => { UI.modal('Xác nhận', '<p>' + U.esc(msg).replace(/\n/g, '<br>') + '</p>', [{ t: 'Huỷ', fn: () => res(false) }, { t: 'Đồng ý', cls: 'pri', fn: () => res(true) }], { size: 'sm', onClose: () => res(false) }); }); },
   bar(p, cls){ p = Math.max(0, Math.min(100, p || 0)); return '<div class="bar ' + (cls || '') + '"><i style="width:' + p.toFixed(1) + '%"></i></div>'; },
   hbars(rows, fmt){ const max = Math.max(1, ...rows.map(r => r[1])); return '<div class="hbars">' + rows.map(r => '<div class="row"><div class="small">' + U.esc(r[0]) + '</div>' + UI.bar(r[1] / max * 100, r[2]) + '<div class="small n b">' + (fmt ? fmt(r[1]) : r[1]) + '</div></div>').join('') + '</div>'; },
+  /** Nút Sửa / Xoá cuối mỗi dòng (ẩn với tài khoản "Chỉ xem"). scope phân biệt các bảng trong cùng trang. */
+  acts(scope, id, opt){
+    opt = opt || {};
+    if (!Auth.canWrite()) return '';
+    const k = U.esc(scope + '|' + id);
+    return '<span class="acts no-print">' + (opt.edit === false ? '' : '<button class="btn sm" data-aed="' + k + '">' + (opt.edit || 'Sửa') + '</button>') + (opt.del === false ? '' : '<button class="btn sm ghost danger" data-adel="' + k + '">' + (opt.del || 'Xoá') + '</button>') + '</span>';
+  },
+  bindActs(el, scope, onEdit, onDel){
+    const run = (attr, fn) => el.querySelectorAll('[' + attr + '^="' + scope + '|"]').forEach(b => b.onclick = async ev => {
+      ev.preventDefault(); ev.stopPropagation();
+      b.disabled = true;
+      try { await fn(b.getAttribute(attr).slice(scope.length + 1)); } catch (e) { UI.toast(e.message || String(e)); } finally { b.disabled = false; }
+    });
+    if (onEdit) run('data-aed', onEdit);
+    if (onDel) run('data-adel', onDel);
+  },
+  /** Cột ô chọn để xoá nhiều dòng một lần */
+  selCol(scope){ return Auth.canWrite() ? { t: '<input type="checkbox" data-sall="' + scope + '" title="Chọn tất cả">', f: r => '<input type="checkbox" data-sel="' + scope + '" value="' + U.esc(r.id) + '">' } : null; },
+  bindSel(el, scope, btn, onDel){
+    if (!btn) return;
+    const boxes = () => [...el.querySelectorAll('[data-sel="' + scope + '"]')];
+    const upd = () => { const n = boxes().filter(b => b.checked).length; btn.hidden = !n; btn.textContent = 'Xoá ' + n + ' dòng đã chọn'; };
+    boxes().forEach(b => b.onchange = upd);
+    const all = el.querySelector('[data-sall="' + scope + '"]'); if (all) all.onchange = () => { boxes().forEach(b => b.checked = all.checked); upd(); };
+    btn.onclick = async () => { btn.disabled = true; try { await onDel(boxes().filter(b => b.checked).map(b => b.value)); } catch (e) { UI.toast(e.message || String(e)); } finally { btn.disabled = false; } };
+    upd();
+  },
   table(cols, rows, opt){
     opt = opt || {};
+    cols = cols.filter(Boolean);
     if (!rows.length) return '<div class="empty">' + (opt.empty || 'Chưa có dữ liệu') + '</div>';
     return '<div class="tw"' + (opt.maxH ? ' style="max-height:' + opt.maxH + 'px"' : '') + '><table><thead><tr>' + cols.map(c => '<th' + (c.n ? ' class="n"' : '') + '>' + c.t + '</th>').join('') + '</tr></thead><tbody>' +
       rows.map(r => '<tr' + (opt.rowAttr ? ' ' + opt.rowAttr(r) : '') + '>' + cols.map(c => '<td' + (c.n ? ' class="n"' : '') + '>' + c.f(r) + '</td>').join('') + '</tr>').join('') + '</tbody>' + (opt.foot ? '<tfoot><tr>' + opt.foot + '</tr></tfoot>' : '') + '</table></div>';
@@ -812,13 +858,14 @@ Pages.reqs = {
         { t: 'Cần trước', f: r => { const d = r.needBy ? U.diff(U.today(), r.needBy) : null; return r.needBy ? U.fd(r.needBy) + (r.status === 'dang_tuyen' && d < 0 ? '<div><span class="tag bad">Trễ ' + (-d) + ' ngày</span></div>' : '') : '<span class="muted">—</span>'; } },
         { t: 'Mức lương', f: r => U.esc(r.salary || '') },
         { t: 'Trạng thái', f: r => UI.tag(reqStatusOf(r.status)) },
-        { t: '', f: r => '<button class="btn sm" data-screen="' + r.id + '">Lọc CV</button>' }
+        { t: '', f: r => '<span class="acts"><button class="btn sm" data-screen="' + r.id + '">Lọc CV</button>' + UI.acts('rq', r.id) + '</span>' }
       ], list, { empty: 'Chưa có yêu cầu tuyển dụng' });
     el.querySelector('#rq').onchange = e => App.go('reqs', Object.assign({}, p, { q: e.target.value }));
     el.querySelector('#rs').onchange = e => App.go('reqs', Object.assign({}, p, { status: e.target.value }));
     el.querySelector('#radd').onclick = () => this.edit();
     el.querySelectorAll('[data-open]').forEach(a => a.onclick = () => this.edit(DB.get('requisitions', a.dataset.open)));
     el.querySelectorAll('[data-screen]').forEach(a => a.onclick = () => App.go('screen', { req: a.dataset.screen }));
+    UI.bindActs(el, 'rq', id => this.edit(DB.get('requisitions', id)), id => Del.req(id));
   },
   edit(r){
     const isNew = !r;
@@ -846,7 +893,7 @@ Pages.reqs = {
       (Rec.genderWarn(r.jd) ? '<div class="alert warn">Lưu ý pháp lý: MTCV có yêu cầu giới tính/độ tuổi. Điều 8 BLLĐ 2019 cấm phân biệt đối xử về giới tính, tuổi trong tuyển dụng (trừ khi là yêu cầu đặc thù của công việc) – nên ghi "ưu tiên" thay vì điều kiện bắt buộc.</div>' : '') +
       '<p class="muted small">Tiêu chí chấm điểm CV (từ khoá bắt buộc/ưu tiên, số năm kinh nghiệm) chỉnh ở trang <b>Lọc CV theo MTCV</b>. Đang có ' + cands.length + ' ứng viên cho yêu cầu này.</p>';
     const m = UI.modal((isNew ? 'Tiếp nhận' : 'Sửa') + ' yêu cầu tuyển dụng', body, [
-      ...(isNew ? [] : [{ t: 'Xoá', cls: 'danger', fn: async () => { if (cands.length){ UI.toast('Yêu cầu đã có ứng viên – chuyển sang "Huỷ" thay vì xoá'); return false; } if (!await UI.confirm('Xoá yêu cầu ' + r.code + '?')) return false; await DB.remove('requisitions', r.id); App.refresh(); } }]),
+      ...(isNew || !Auth.canWrite() ? [] : [{ t: 'Xoá', cls: 'danger', fn: () => Del.req(r.id) }]),
       { t: 'Đóng' },
       { t: 'Lưu', cls: 'pri', fn: async w => {
         const f = U.formData(w);
@@ -1142,7 +1189,7 @@ const Cand = {
       return c;
     };
     const m = UI.modal((isNew ? 'Phiếu thông tin ứng viên mới' : 'Phiếu thông tin ứng viên – ' + c.fullName), body, [
-      ...(isNew ? [] : [{ t: 'Xoá', cls: 'danger', fn: async () => { if (!await UI.confirm('Xoá ứng viên ' + c.fullName + '? (file CV vẫn giữ trong Kho CV)')) return false; await DB.remove('candidates', c.id); App.refresh(); } }]),
+      ...(isNew || !Auth.canWrite() ? [] : [{ t: 'Xoá', cls: 'danger', fn: () => Del.cands([c.id]) }]),
       { t: 'In phiếu', fn: async w => { await save(w); Cand.printInfo(c); return false; } },
       { t: 'Đóng' },
       { t: 'Lưu', cls: 'pri', fn: async w => { await save(w); if (c.reqId) await Rec.syncReq(c.reqId); App.refresh(); } }
@@ -1228,7 +1275,7 @@ Pages.cands = {
       '<select id="creq">' + U.opts(reqOpts, p.req, 'Tất cả yêu cầu') + '</select>' +
       '<select id="cdept">' + U.opts(Rec.depts(), p.dept, 'Tất cả phòng ban') + '</select>' +
       (view === 'table' ? '<select id="cstage">' + U.opts(ALL_STAGES.map(s => ({ v: s.v, t: s.t })), p.stage, 'Tất cả giai đoạn') + '</select>' : '') +
-      '<span class="grow"></span><button class="btn" id="cview">' + (view === 'kanban' ? 'Xem dạng bảng' : 'Xem dạng bảng Kanban') + '</button><button class="btn" id="cxls">Tải Excel</button><button class="btn pri" id="cadd">+ Thêm ứng viên</button></div><div id="cbody"></div>';
+      '<span class="grow"></span><button class="btn danger" id="cbulk" hidden></button><button class="btn" id="cview">' + (view === 'kanban' ? 'Xem dạng bảng' : 'Xem dạng bảng Kanban') + '</button><button class="btn" id="cxls">Tải Excel</button><button class="btn pri" id="cadd">+ Thêm ứng viên</button></div><div id="cbody"></div>';
     const set = (k, v) => App.go('cands', Object.assign({}, p, { [k]: v }));
     el.querySelector('#cq').onchange = e => set('q', e.target.value);
     el.querySelector('#creq').onchange = e => set('req', e.target.value);
@@ -1242,10 +1289,13 @@ Pages.cands = {
       const cols = STAGES.map(s => [s, list.filter(c => c.stage === s.v)]).concat([[{ v: 'out', t: 'Loại / dừng' }, list.filter(c => STAGES_OUT.find(s => s.v === c.stage))]]);
       body.innerHTML = '<div class="kanban">' + cols.map(([s, cs2]) => '<div class="col"><h4><span>' + U.esc(s.t) + '</span><span>' + cs2.length + '</span></h4>' +
         cs2.sort(U.by(c => c.score || 0, true)).map(c => '<div class="kc" data-c="' + c.id + '"><div class="nm">' + U.esc(c.fullName) + '</div><div class="small muted">' + U.esc(c.position || '') + '</div>' +
+          (Auth.canWrite() ? '<button class="btn sm ghost danger kx" data-adel="kb|' + c.id + '" title="Xoá ứng viên">✕</button>' : '') +
           '<div class="small">' + (c.score != null ? '<span class="score ' + Rec.scoreCls(c.score) + '" style="font-size:13px">' + c.score + 'đ</span> · ' : '') + (s.v === 'hen_pv' && c.ivDate ? 'PV ' + U.fd(c.ivDate) + ' ' + U.esc(c.ivTime || '') : s.v === 'out' ? UI.tag(stageOf(c.stage)) : U.fd(Cand.stageDate(c, c.stage) || c.receivedDate)) + '</div></div>').join('') + '</div>').join('') + '</div>';
       body.querySelectorAll('[data-c]').forEach(x => x.onclick = () => Cand.edit(DB.get('candidates', x.dataset.c)));
+      UI.bindActs(body, 'kb', null, id => Del.cands([id]));
     } else {
       body.innerHTML = UI.table([
+        UI.selCol('ca'),
         { t: 'Mã', f: c => U.esc(c.code) },
         { t: 'Họ tên', f: c => '<a href="javascript:void 0" data-c="' + c.id + '">' + U.esc(c.fullName) + '</a><div class="small muted">' + U.esc(c.phone || '') + '</div>' },
         { t: 'Vị trí', f: c => U.esc(c.position || '') + '<div class="small muted">' + U.esc(c.dept || '') + '</div>' },
@@ -1254,8 +1304,11 @@ Pages.cands = {
         { t: 'Giai đoạn', f: c => UI.tag(stageOf(c.stage)) },
         { t: 'Phỏng vấn', f: c => c.ivDate ? U.fd(c.ivDate) + ' ' + U.esc(c.ivTime || '') : '' },
         { t: 'Nhận CV', f: c => U.fd(c.receivedDate) },
-        { t: 'CV', f: c => c.cvFile ? '<a href="javascript:void 0" data-cv="' + c.cvFile.id + '">Mở</a>' : '' }
+        { t: 'CV', f: c => c.cvFile ? '<a href="javascript:void 0" data-cv="' + c.cvFile.id + '">Mở</a>' : '' },
+        { t: '', f: c => UI.acts('ca', c.id) }
       ], list.sort(U.by(c => c.receivedDate || '', true)), { empty: 'Chưa có ứng viên' });
+      UI.bindActs(body, 'ca', id => Cand.edit(DB.get('candidates', id)), id => Del.cands([id]));
+      UI.bindSel(body, 'ca', el.querySelector('#cbulk'), ids => Del.cands(ids));
       body.querySelectorAll('[data-c]').forEach(x => x.onclick = () => Cand.edit(DB.get('candidates', x.dataset.c)));
       body.querySelectorAll('[data-cv]').forEach(x => x.onclick = () => Files.open(DB.get('cv_files', x.dataset.cv)));
     }
@@ -1286,7 +1339,7 @@ const Eval = {
       '<label class="no-print" style="display:block;margin-top:10px"><input type="checkbox" name="_sync" checked> Cập nhật giai đoạn ứng viên theo kết luận</label>';
     const read = w => { e.criteria.forEach((x, i) => { const r = w.querySelector('[name=sc' + i + ']:checked'); x.score = r ? +r.value : 0; x.note = U.val(w, '[name=nt' + i + ']'); }); ['round', 'date', 'interviewer', 'proposedSalary', 'proposedStart', 'comment'].forEach(k => e[k] = U.val(w, '[name=' + k + ']')); const cc = w.querySelector('[name=conclusion]:checked'); e.conclusion = cc ? cc.value : ''; e.round = +e.round || 1; e.total = total(e.criteria); };
     const m = UI.modal('Phiếu đánh giá phỏng vấn', body, [
-      ...(isNew ? [] : [{ t: 'Xoá phiếu', cls: 'danger', fn: async () => { if (!await UI.confirm('Xoá phiếu đánh giá này?')) return false; await DB.remove('evaluations', e.id); App.refresh(); } }]),
+      ...(isNew || !Auth.canWrite() ? [] : [{ t: 'Xoá phiếu', cls: 'danger', fn: () => Del.evals([e.id]) }]),
       { t: 'Đóng' },
       { t: 'Lưu', cls: 'pri', fn: async w => {
         read(w);
@@ -1332,11 +1385,12 @@ Pages.interviews = {
         { t: 'Người PV', f: e => U.esc(e.interviewer || '') },
         { t: 'Tổng điểm', n: 1, f: e => '<b>' + e.total + '%</b>' },
         { t: 'Kết luận', f: e => UI.tag({ t: Eval.concl(e.conclusion), c: e.conclusion === 'dat' ? 'ok' : e.conclusion === 'khong_dat' ? 'bad' : 'warn' }) },
-        { t: '', f: e => '<button class="btn sm" data-ev="' + e.id + '">Mở / In</button>' }
+        { t: '', f: e => '<span class="acts"><button class="btn sm" data-ev="' + e.id + '">Mở / In</button>' + UI.acts('ev', e.id, { edit: false }) + '</span>' }
       ], evs) + '</div>';
     el.querySelectorAll('[data-c]').forEach(x => x.onclick = () => Cand.edit(DB.get('candidates', x.dataset.c)));
     el.querySelectorAll('[data-ev]').forEach(x => x.onclick = () => Eval.edit(DB.get('evaluations', x.dataset.ev)));
     el.querySelectorAll('[data-new]').forEach(x => x.onclick = () => Eval.edit(null, x.dataset.new));
+    UI.bindActs(el, 'ev', null, id => Del.evals([id]));
   }
 };
 
@@ -1360,16 +1414,23 @@ const Prob = {
       const rr = w.querySelector('[name=result]:checked'); ev.result = rr ? rr.value : '';
       ev.comment = U.val(w, '[name=comment]'); ev.evaluator = U.val(w, '[name=evaluator]'); ev.date = U.val(w, '[name=date]');
       if (!ev.result) throw new Error('Chọn kết quả Đạt / Không đạt');
+      const wasDat = p.result === 'dat';
       p.eval = ev; p.result = ev.result; e.probation = p;
       const c = e.candidateId && DB.get('candidates', e.candidateId);
       if (ev.result === 'dat'){
         e.status = 'chinh_thuc';
         const start = U.addDays(p.end || ev.date, 1), type = U.val(w, '[name=ctype]'), months = +U.val(w, '[name=months]') || 12;
         e.contracts = e.contracts || [];
-        e.contracts.push({ id: U.id(), no: U.val(w, '[name=cno]'), type, sign: start, start, end: type === 'xdth' ? U.addDays(U.addMonths(start, Math.min(36, months)), -1) : '', salary: U.num(c && c.offerSalary) || (e.salary || {}).agreed || 0 });
+        if (!p.contractId && wasDat){ const cc = Emp.curContract(e); if (cc && cc.type !== 'thu_viec') p.contractId = cc.id; } // phiếu cũ đã tạo HĐ: không tạo trùng
+        const ct = { id: p.contractId || U.id(), no: U.val(w, '[name=cno]'), type, sign: start, start, end: type === 'xdth' ? U.addDays(U.addMonths(start, Math.min(36, months)), -1) : '', salary: U.num(c && c.offerSalary) || (e.salary || {}).agreed || 0 };
+        const ci = e.contracts.findIndex(x => x.id === ct.id);
+        if (ci >= 0) e.contracts[ci] = Object.assign({}, e.contracts[ci], ct, { no: ct.no || e.contracts[ci].no });
+        else e.contracts.push(ct);
+        p.contractId = ct.id;
         if (c){ c.offerSalary && ((e.salary = e.salary || {}).agreed = U.num(c.offerSalary)); Cand.pushStage(c, 'dat_tv', 'Đạt thử việc ' + U.fd(ev.date)); }
         e.tax = Object.assign({ dependents: 0 }, e.tax, { method: 'luy_tien' });
       } else {
+        if (p.contractId){ e.contracts = (e.contracts || []).filter(x => x.id !== p.contractId); delete p.contractId; } // đổi từ Đạt sang Không đạt: bỏ HĐ đã tự tạo
         e.status = 'nghi_viec'; e.endDate = ev.date; e.leaveReason = 'Không đạt thử việc';
         if (c) Cand.pushStage(c, 'khong_dat_tv', 'Không đạt thử việc ' + U.fd(ev.date));
       }
@@ -1400,7 +1461,7 @@ Pages.probation = {
         { t: 'Kết thúc', f: x => U.fd(x.end) + (x.max && x.end > x.max ? '<div><span class="tag bad">Vượt mức Điều 25 (tối đa ' + U.fd(x.max) + ')</span></div>' : '') },
         { t: 'Còn lại', f: x => x.left == null ? '—' : x.left < 0 ? '<span class="tag bad">Quá ' + (-x.left) + ' ngày</span>' : x.left <= s.alertProbation ? '<span class="tag warn">' + x.left + ' ngày</span>' : x.left + ' ngày' },
         { t: 'BHXH', f: x => x.e.bhxh && x.e.bhxh.joined ? '<span class="tag ok">Đã tham gia</span>' : '<span class="tag">Chưa</span>' },
-        { t: '', f: x => '<button class="btn sm pri" data-ev="' + x.e.id + '">Đánh giá thử việc</button>' }
+        { t: '', f: x => '<span class="acts"><button class="btn sm pri" data-ev="' + x.e.id + '">Đánh giá thử việc</button>' + UI.acts('pe', x.e.id, { edit: 'Sửa hồ sơ' }) + '</span>' }
       ], act, { empty: 'Không có nhân viên đang thử việc' }) + '</div>' +
       '<div class="card"><h3>Kết quả thử việc</h3>' + UI.table([
         { t: 'Nhân viên', f: e => U.esc(e.fullName) + '<div class="small muted">' + U.esc(e.title || '') + '</div>' },
@@ -1408,10 +1469,12 @@ Pages.probation = {
         { t: 'Điểm TB', n: 1, f: e => { const sc = (e.probation.eval || {}).scores || []; return sc.length ? (U.sum(sc) / sc.length).toFixed(1) + '/5' : '—'; } },
         { t: 'Kết quả', f: e => UI.tag(e.probation.result === 'dat' ? { t: 'Đạt', c: 'ok' } : { t: 'Không đạt', c: 'bad' }) },
         { t: 'Người đánh giá', f: e => U.esc((e.probation.eval || {}).evaluator || '') + ' ' + U.fd((e.probation.eval || {}).date) },
-        { t: '', f: e => '<button class="btn sm" data-ev="' + e.id + '">Xem / In</button>' }
+        { t: '', f: e => '<span class="acts"><button class="btn sm" data-ev="' + e.id + '">Xem / Sửa / In</button>' + UI.acts('pr', e.id, { edit: false, del: 'Xoá kết quả' }) + '</span>' }
       ], done) + '</div>';
     el.querySelectorAll('[data-e]').forEach(x => x.onclick = () => Emp.edit(DB.get('employees', x.dataset.e)));
     el.querySelectorAll('[data-ev]').forEach(x => x.onclick = () => Prob.evaluate(DB.get('employees', x.dataset.ev)));
+    UI.bindActs(el, 'pe', id => Emp.edit(DB.get('employees', id)), id => Del.emps([id]));
+    UI.bindActs(el, 'pr', null, id => Del.probResult(DB.get('employees', id)));
   }
 };
 
@@ -1426,8 +1489,9 @@ Pages.cvstore = {
       (IS_GAS ? '<button class="btn" id="kdrive">Mở thư mục Google Drive</button>' : '') + '<button class="btn pri" id="kup">+ Lưu CV vào kho</button></div>' +
       '<p class="muted small">' + files.length + ' file · CV được lưu theo <b>Phòng ban → Vị trí</b>' + (IS_GAS ? ' trong thư mục Google Drive "An Tâm – Kho CV".' : ' trong trình duyệt này (bản Google Apps Script lưu lên Google Drive).') + '</p>' +
       '<div class="card tree">' + ([...tree.keys()].sort().map(d => { const byPos = U.groupBy(tree.get(d), f => f.position || 'Chưa phân loại'); return '<details open><summary>' + U.esc(d) + ' <span class="muted">(' + tree.get(d).length + ')</span></summary>' +
-        [...byPos.keys()].sort().map(pos => '<details class="lv2" open><summary>' + U.esc(pos) + ' <span class="muted">(' + byPos.get(pos).length + ')</span></summary>' + byPos.get(pos).map(f => { const c = DB.get('candidates', f.candidateId); return '<div class="file"><a href="javascript:void 0" data-open="' + f.id + '">' + U.esc(f.name) + '</a><span class="small muted">' + U.fd(f.uploadedAt.slice(0, 10)) + ' · ' + Math.max(1, Math.round((f.size || 0) / 1024)) + ' KB</span>' + (c ? ' <a href="javascript:void 0" data-c="' + c.id + '">' + U.esc(c.fullName) + '</a> ' + UI.tag(stageOf(c.stage)) : '') + '<span class="grow" style="flex:1"></span><button class="btn sm ghost" data-mv="' + f.id + '">Phân loại lại</button></div>'; }).join('') + '</details>').join('') + '</details>'; }).join('') || '<div class="empty">Kho CV trống</div>') + '</div>';
+        [...byPos.keys()].sort().map(pos => '<details class="lv2" open><summary>' + U.esc(pos) + ' <span class="muted">(' + byPos.get(pos).length + ')</span></summary>' + byPos.get(pos).map(f => { const c = DB.get('candidates', f.candidateId); return '<div class="file"><a href="javascript:void 0" data-open="' + f.id + '">' + U.esc(f.name) + '</a><span class="small muted">' + U.fd(f.uploadedAt.slice(0, 10)) + ' · ' + Math.max(1, Math.round((f.size || 0) / 1024)) + ' KB</span>' + (c ? ' <a href="javascript:void 0" data-c="' + c.id + '">' + U.esc(c.fullName) + '</a> ' + UI.tag(stageOf(c.stage)) : '') + '<span class="grow" style="flex:1"></span><button class="btn sm ghost" data-mv="' + f.id + '">Phân loại lại</button>' + UI.acts('cv', f.id, { edit: false }) + '</div>'; }).join('') + '</details>').join('') + '</details>'; }).join('') || '<div class="empty">Kho CV trống</div>') + '</div>';
     el.querySelector('#kq').onchange = e => App.go('cvstore', { q: e.target.value });
+    UI.bindActs(el, 'cv', null, id => Del.cv(id));
     el.querySelectorAll('[data-open]').forEach(a => a.onclick = () => Files.open(DB.get('cv_files', a.dataset.open)));
     el.querySelectorAll('[data-c]').forEach(a => a.onclick = () => Cand.edit(DB.get('candidates', a.dataset.c)));
     const kd = el.querySelector('#kdrive'); if (kd) kd.onclick = async () => window.open(await gs('rootFolderUrl'), '_blank');
@@ -1531,7 +1595,7 @@ const Emp = {
       '<div data-p="4" hidden><div class="grid g2"><div><h4>Hồ sơ giấy tờ (' + this.docsPct(e) + '%)</h4>' + DOC_LIST.map(d => '<label style="display:block;margin:4px 0"><input type="checkbox" name="d_' + d.k + '"' + (e.docs[d.k] ? ' checked' : '') + '> ' + U.esc(d.t) + (REQUIRED_DOCS.includes(d.k) ? ' <span class="tag warn">bắt buộc</span>' : '') + '</label>').join('') + '</div>' +
       '<div><h4>Phép năm ' + yr + '</h4><p>Được nghỉ: <b>' + this.leaveDays(e, yr) + '</b> ngày (12 ngày + thâm niên, tính theo tỷ lệ nếu vào làm trong năm – Điều 113, 114)</p><label class="f">Số ngày phép đã nghỉ năm ' + yr + '<input type="number" step="0.5" name="leaveUsed" value="' + U.esc(e.leave[yr] || 0) + '"></label></div></div></div>';
     const m = UI.modal(isNew ? 'Thêm nhân viên' : 'Hồ sơ nhân viên – ' + e.fullName, body, [
-      ...(isNew ? [] : [{ t: 'Xoá', cls: 'danger', fn: async () => { if (!await UI.confirm('Xoá hẳn hồ sơ ' + e.fullName + '? (Nên chuyển trạng thái "Đã nghỉ việc" để giữ lịch sử)')) return false; await DB.remove('employees', e.id); App.refresh(); } }]),
+      ...(isNew || !Auth.canWrite() ? [] : [{ t: 'Xoá nhân viên', cls: 'danger', fn: () => Del.emps([e.id]) }]),
       { t: 'Đóng' },
       { t: 'Lưu', cls: 'pri', fn: async w => {
         const f = U.formData(w);
@@ -1560,7 +1624,7 @@ const Emp = {
         { t: '', f: c => '<button class="btn sm" data-ce="' + c.id + '">Sửa</button> <button class="btn sm ghost danger" data-cd="' + c.id + '">Xoá</button>' }
       ], (e.contracts || []).slice().sort(U.by(c => c.start || '')), { empty: 'Chưa có hợp đồng' });
       m.querySelectorAll('[data-ce]').forEach(b => b.onclick = () => Contracts.editOne(e, e.contracts.find(c => c.id === b.dataset.ce), drawC));
-      m.querySelectorAll('[data-cd]').forEach(b => b.onclick = () => { e.contracts = e.contracts.filter(c => c.id !== b.dataset.cd); drawC(); });
+      m.querySelectorAll('[data-cd]').forEach(b => b.onclick = async () => { if (!await UI.confirm('Xoá hợp đồng này khỏi hồ sơ? (Bấm "Lưu" hồ sơ để ghi lại)')) return; e.contracts = e.contracts.filter(c => c.id !== b.dataset.cd); drawC(); });
     };
     drawC();
     m.querySelector('#eaddc').onclick = () => Contracts.editOne(e, null, drawC);
@@ -1582,8 +1646,9 @@ Pages.emps = {
       '<div class="kpi warn"><div class="v">' + act.filter(e => e.status === 'thu_viec').length + '</div><div class="l">Thử việc</div></div>' +
       '<div class="kpi ok"><div class="v">' + act.filter(e => e.bhxh && e.bhxh.joined).length + '</div><div class="l">Đã tham gia BHXH</div></div>' +
       '<div class="kpi bad"><div class="v">' + act.filter(e => Emp.missingReq(e).length).length + '</div><div class="l">Thiếu hồ sơ bắt buộc</div></div></div>' +
-      '<div class="toolbar"><input id="eq" placeholder="Tìm mã, tên, chức danh…" value="' + U.esc(p.q || '') + '"><select id="es">' + U.opts([{ v: 'active', t: 'Đang làm việc' }].concat(EMP_STATUS), st, 'Tất cả') + '</select><select id="ed">' + U.opts(Rec.depts(), p.dept, 'Tất cả bộ phận') + '</select><span class="grow"></span><button class="btn" id="exls">Tải Excel</button><button class="btn pri" id="eadd">+ Thêm nhân viên</button></div>' +
+      '<div class="toolbar"><input id="eq" placeholder="Tìm mã, tên, chức danh…" value="' + U.esc(p.q || '') + '"><select id="es">' + U.opts([{ v: 'active', t: 'Đang làm việc' }].concat(EMP_STATUS), st, 'Tất cả') + '</select><select id="ed">' + U.opts(Rec.depts(), p.dept, 'Tất cả bộ phận') + '</select><span class="grow"></span><button class="btn danger" id="ebulk" hidden></button><button class="btn" id="exls">Tải Excel</button><button class="btn pri" id="eadd">+ Thêm nhân viên</button></div>' +
       UI.table([
+        UI.selCol('em'),
         { t: 'Mã', f: e => U.esc(e.code) },
         { t: 'Họ tên', f: e => '<a href="javascript:void 0" data-e="' + e.id + '">' + U.esc(e.fullName) + '</a><div class="small muted">' + U.esc(e.title || '') + '</div>' },
         { t: 'Bộ phận', f: e => U.esc(e.dept || '') + (e.grade ? '<div class="small muted">' + U.esc(e.grade) + '</div>' : '') },
@@ -1592,7 +1657,8 @@ Pages.emps = {
         { t: 'Hợp đồng hiện tại', f: e => { const c = Emp.curContract(e); if (!c) return '<span class="tag bad">Chưa có</span>'; const l = c.end ? U.diff(U.today(), c.end) : null; return ctOf(c.type) + '<div class="small ' + (l != null && l < 0 ? 'b' : 'muted') + '">' + (c.end ? 'đến ' + U.fd(c.end) + (l < 0 ? ' (đã hết hạn)' : '') : 'không thời hạn') + '</div>'; } },
         { t: 'Lương TT', n: 1, f: e => e.salary && e.salary.agreed ? U.money(e.salary.agreed) : '' },
         { t: 'BHXH', f: e => e.bhxh && e.bhxh.joined ? '<span class="tag ok">Có</span>' : '<span class="tag">Chưa</span>' },
-        { t: 'Hồ sơ', f: e => UI.bar(Emp.docsPct(e), Emp.docsPct(e) >= 80 ? 'ok' : 'warn') + '<span class="small muted">' + Emp.docsPct(e) + '%</span>' }
+        { t: 'Hồ sơ', f: e => UI.bar(Emp.docsPct(e), Emp.docsPct(e) >= 80 ? 'ok' : 'warn') + '<span class="small muted">' + Emp.docsPct(e) + '%</span>' },
+        { t: '', f: e => UI.acts('em', e.id) }
       ], list, { empty: 'Chưa có nhân viên. Vào "Cài đặt & dữ liệu" để nhập từ file lương Excel.' });
     const set = (k, v) => App.go('emps', Object.assign({}, p, { [k]: v }));
     el.querySelector('#eq').onchange = e => set('q', e.target.value);
@@ -1601,6 +1667,99 @@ Pages.emps = {
     el.querySelector('#eadd').onclick = () => Emp.edit();
     el.querySelector('#exls').onclick = () => Xls.employees(list);
     el.querySelectorAll('[data-e]').forEach(a => a.onclick = () => Emp.edit(DB.get('employees', a.dataset.e)));
+    UI.bindActs(el, 'em', id => Emp.edit(DB.get('employees', id)), id => Del.emps([id]));
+    UI.bindSel(el, 'em', el.querySelector('#ebulk'), ids => Del.emps(ids));
+  }
+};
+
+/* ---------- Xoá dữ liệu – dùng chung cho mọi mục (hỏi xác nhận, gỡ liên kết liên quan) ---------- */
+const Del = {
+  names(list, f){ const n = list.map(f); return n.length > 5 ? n.slice(0, 5).join(', ') + '… (+' + (n.length - 5) + ' người)' : n.join(', '); },
+  done(n, what){ UI.toast('Đã xoá ' + (n > 1 ? n + ' ' : '') + what); App.refresh(); return true; },
+  /** Nhân viên: gỡ liên kết ở ứng viên; dòng lương đã lập vẫn giữ để không lệch bảng lương cũ */
+  async emps(ids){
+    const list = ids.map(id => DB.get('employees', id)).filter(Boolean);
+    if (!list.length) return false;
+    const pays = DB.all('payrolls').filter(d => (d.rows || []).some(r => ids.includes(r.empId))).map(d => U.ymLabel(d.id));
+    if (!await UI.confirm('Xoá hẳn ' + (list.length > 1 ? list.length + ' hồ sơ nhân viên: ' : 'hồ sơ nhân viên ') + this.names(list, e => e.fullName) + '?' +
+      '\nNếu chỉ nghỉ việc, nên sửa trạng thái thành "Đã nghỉ việc" để giữ lịch sử.' +
+      (pays.length ? '\nDòng lương đã có trong bảng lương ' + pays.join(', ') + ' vẫn giữ nguyên.' : ''))) return false;
+    const cs = Rec.cands().filter(c => c.employeeId && ids.includes(c.employeeId));
+    await DB.removeMany(list.map(e => ['employees', e.id]));
+    if (cs.length){ cs.forEach(c => { c.employeeId = ''; }); await DB.saveMany(cs.map(c => ['candidates', c])); }
+    return this.done(list.length, 'hồ sơ nhân viên');
+  },
+  /** Ứng viên: xoá kèm phiếu đánh giá; file CV vẫn giữ trong Kho CV */
+  async cands(ids){
+    const list = ids.map(id => DB.get('candidates', id)).filter(Boolean);
+    if (!list.length) return false;
+    const evs = DB.all('evaluations').filter(e => ids.includes(e.candidateId));
+    if (!await UI.confirm('Xoá ' + (list.length > 1 ? list.length + ' ứng viên: ' : 'ứng viên ') + this.names(list, c => c.fullName) + '?' +
+      (evs.length ? '\nXoá kèm ' + evs.length + ' phiếu đánh giá phỏng vấn.' : '') + '\nFile CV vẫn giữ trong Kho CV (xoá riêng ở mục Kho CV nếu cần).')) return false;
+    await DB.removeMany(list.map(c => ['candidates', c.id]).concat(evs.map(e => ['evaluations', e.id])));
+    for (const r of new Set(list.map(c => c.reqId).filter(Boolean))) await Rec.syncReq(r);
+    return this.done(list.length, 'ứng viên');
+  },
+  /** Yêu cầu tuyển dụng: ứng viên giữ lại, chỉ gỡ liên kết */
+  async req(id){
+    const r = DB.get('requisitions', id); if (!r) return false;
+    const cs = Rec.cands().filter(c => c.reqId === id);
+    if (!await UI.confirm('Xoá yêu cầu tuyển dụng ' + r.code + ' – ' + r.position + '?' + (cs.length ? '\n' + cs.length + ' ứng viên của yêu cầu này vẫn giữ lại (giữ phòng ban, vị trí; bỏ liên kết với yêu cầu). Nếu chỉ dừng tuyển, nên đổi trạng thái thành "Huỷ".' : ''))) return false;
+    await DB.remove('requisitions', id);
+    if (cs.length){ cs.forEach(c => { c.reqId = ''; }); await DB.saveMany(cs.map(c => ['candidates', c])); }
+    return this.done(1, 'yêu cầu tuyển dụng');
+  },
+  async evals(ids){
+    const list = ids.map(id => DB.get('evaluations', id)).filter(Boolean);
+    if (!list.length) return false;
+    const nm = e => (DB.get('candidates', e.candidateId) || {}).fullName || '(ứng viên đã xoá)';
+    if (!await UI.confirm('Xoá ' + (list.length > 1 ? list.length + ' phiếu đánh giá' : 'phiếu đánh giá vòng ' + list[0].round + ' của ' + nm(list[0])) + '?')) return false;
+    await DB.removeMany(list.map(e => ['evaluations', e.id]));
+    return this.done(list.length, 'phiếu đánh giá');
+  },
+  /** File CV: bản Apps Script chuyển file vào thùng rác Google Drive */
+  async cv(id){
+    const f = DB.get('cv_files', id); if (!f) return false;
+    const cs = Rec.cands().filter(c => c.cvFile && c.cvFile.id === id);
+    if (!await UI.confirm('Xoá file CV "' + f.name + '"?' + (f.driveId ? '\nFile được chuyển vào thùng rác Google Drive (khôi phục được trong 30 ngày).' : '') + (cs.length ? '\nỨng viên ' + this.names(cs, c => c.fullName) + ' sẽ không còn file CV đính kèm.' : ''))) return false;
+    if (IS_GAS && f.driveId) await gs('trashFile', f.driveId);
+    else if (f.local){ try { const db = await Files.idb(); await new Promise(res => { const tx = db.transaction('f', 'readwrite'); tx.objectStore('f').delete(f.id); tx.oncomplete = res; tx.onerror = res; }); } catch (e) { /* bỏ qua */ } }
+    await DB.remove('cv_files', id);
+    if (cs.length){ cs.forEach(c => { delete c.cvFile; }); await DB.saveMany(cs.map(c => ['candidates', c])); }
+    return this.done(1, 'file CV');
+  },
+  async legal(id){
+    const t = DB.get('legal_tasks', id); if (!t) return false;
+    if (!await UI.confirm('Xoá việc định kỳ "' + t.title + '"?')) return false;
+    await DB.remove('legal_tasks', id);
+    return this.done(1, 'việc định kỳ');
+  },
+  async contract(e, c){
+    if (!await UI.confirm('Xoá hợp đồng ' + (c.no ? 'số ' + c.no + ' ' : '') + '(' + ctOf(c.type) + ', ' + U.fd(c.start) + ' – ' + (c.end ? U.fd(c.end) : 'không thời hạn') + ') của ' + e.fullName + '?')) return false;
+    e.contracts = (e.contracts || []).filter(x => x.id !== c.id);
+    if (e.probation && e.probation.contractId === c.id) delete e.probation.contractId;
+    await DB.save('employees', e);
+    return this.done(1, 'hợp đồng');
+  },
+  /** Kết quả thử việc: trả nhân viên về "Thử việc", bỏ HĐ do phiếu tự tạo */
+  async probResult(e){
+    const p = e && e.probation; if (!p || !p.result) return false;
+    if (!await UI.confirm('Xoá kết quả đánh giá thử việc của ' + e.fullName + '?\nNhân viên trở lại trạng thái "Thử việc"' + (p.contractId ? ', hợp đồng chính thức tạo từ phiếu này cũng bị xoá' : '') + '. Đánh giá lại ở mục "Đang thử việc".')) return false;
+    if (p.contractId) e.contracts = (e.contracts || []).filter(x => x.id !== p.contractId);
+    if (p.result === 'khong_dat' && e.leaveReason === 'Không đạt thử việc'){ e.endDate = ''; e.leaveReason = ''; }
+    delete p.result; delete p.eval; delete p.contractId;
+    e.status = 'thu_viec';
+    await DB.save('employees', e);
+    return this.done(1, 'kết quả thử việc');
+  },
+  /** Bỏ 1 người khỏi bảng lương chưa khoá */
+  async payRow(doc, i){
+    const r = doc.rows[i]; if (!r) return false;
+    if (doc.locked) throw new Error('Bảng lương đã khoá – không thể sửa');
+    if (!await UI.confirm('Bỏ ' + r.name + ' khỏi bảng lương ' + U.ymLabel(doc.id) + '? (Hồ sơ nhân viên không bị xoá; thêm lại bằng nút "+ Thêm NV")')) return false;
+    doc.rows.splice(i, 1);
+    await DB.save('payrolls', doc);
+    return this.done(1, 'dòng lương của ' + r.name);
   }
 };
 
@@ -1652,12 +1811,14 @@ Pages.contracts = {
         { t: 'Còn lại', f: r => r.left == null ? '' : r.left < 0 ? '<span class="tag bad">Quá ' + (-r.left) + ' ngày</span>' : r.left <= s.alertContract ? '<span class="tag warn">' + r.left + ' ngày</span>' : r.left + ' ngày' },
         { t: 'Số lần HĐ XĐTH', n: 1, f: r => r.x + (r.x >= 2 ? ' <span class="tag warn">lần sau: KXĐTH</span>' : '') },
         { t: 'Gợi ý xử lý', f: r => !r.c ? 'Ký HĐLĐ bằng văn bản (Điều 14)' : r.left != null && r.left < 0 ? (r.left >= -30 ? 'Ký HĐ mới trong 30 ngày kể từ ngày hết hạn' : 'Quá 30 ngày: HĐ đã trở thành không xác định thời hạn – lập phụ lục/HĐ KXĐTH') : r.left != null && r.left <= s.alertContract ? (r.x >= 2 ? 'Chuẩn bị HĐ không xác định thời hạn' : 'Đánh giá, quyết định gia hạn / ký mới hoặc thông báo chấm dứt (Điều 45)') : '' },
-        { t: '', f: r => '<button class="btn sm pri" data-n="' + r.e.id + '">' + (r.c ? 'Ký HĐ mới' : 'Thêm HĐ') + '</button>' }
+        { t: '', f: r => '<span class="acts"><button class="btn sm pri" data-n="' + r.e.id + '">' + (r.c ? 'Ký HĐ mới' : 'Thêm HĐ') + '</button>' + (r.c ? UI.acts('ct', r.e.id + '|' + r.c.id, { edit: 'Sửa HĐ', del: 'Xoá HĐ' }) : '') + '</span>' }
       ], list, { empty: 'Không có nhân viên phù hợp' });
     el.querySelector('#cf').onchange = e => App.go('contracts', { f: e.target.value });
     el.querySelectorAll('[data-go]').forEach(k => k.onclick = () => App.go('contracts', { f: k.dataset.go }));
     el.querySelectorAll('[data-e]').forEach(a => a.onclick = () => Emp.edit(DB.get('employees', a.dataset.e)));
     el.querySelectorAll('[data-n]').forEach(a => a.onclick = () => Contracts.editOne(DB.get('employees', a.dataset.n), null));
+    const ctOfKey = k => { const [eid, cid] = k.split('|'), e = DB.get('employees', eid); return [e, e && (e.contracts || []).find(c => c.id === cid)]; };
+    UI.bindActs(el, 'ct', k => { const [e, c] = ctOfKey(k); if (e && c) Contracts.editOne(e, c); }, k => { const [e, c] = ctOfKey(k); return e && c && Del.contract(e, c); });
   }
 };
 
@@ -1755,16 +1916,17 @@ Pages.legal = {
         { t: 'Phụ trách', f: r => U.esc(r.t.owner || '') },
         { t: 'Kỳ / hạn tiếp theo', f: r => r.next ? U.esc(r.next.label) + '<div class="b">' + U.fd(r.next.due) + '</div>' : '<span class="tag ok">Đã xong</span>' },
         { t: 'Tình trạng', f: r => { if (!r.next) return ''; const d = U.diff(today, r.next.due); return d < 0 ? '<span class="tag bad">Quá hạn ' + (-d) + ' ngày</span>' : d <= 10 ? '<span class="tag warn">Còn ' + d + ' ngày</span>' : '<span class="tag">Còn ' + d + ' ngày</span>'; } },
-        { t: '', f: r => (r.next ? '<button class="btn sm pri" data-done="' + r.t.id + '|' + r.next.key + '">Đã hoàn thành</button> ' : '') + '<button class="btn sm ghost" data-ed="' + r.t.id + '">Sửa</button>' }
+        { t: '', f: r => (r.next ? '<button class="btn sm pri" data-done="' + r.t.id + '|' + r.next.key + '">Đã hoàn thành</button> ' : '') + '<button class="btn sm ghost" data-ed="' + r.t.id + '">Sửa</button>' + UI.acts('lt', r.t.id, { edit: false }) }
       ], rows);
       b.querySelectorAll('[data-done]').forEach(x => x.onclick = async () => { const [id, key] = x.dataset.done.split('|'); const t = DB.get('legal_tasks', id); t.done = t.done || {}; t.done[key] = today; await DB.save('legal_tasks', t); App.refresh(); });
       const edit = t => {
         const isNew = !t; t = t ? Object.assign({}, t) : { freq: 'yearly', month: 12, day: 31, done: {} };
         UI.modal((isNew ? 'Thêm' : 'Sửa') + ' việc định kỳ', '<div class="form"><label class="f full">Công việc<input name="title" value="' + U.esc(t.title || '') + '"></label><label class="f full">Căn cứ<input name="basis" value="' + U.esc(t.basis || '') + '"></label><label class="f">Tần suất<select name="freq">' + U.opts([{ v: 'monthly', t: 'Hằng tháng' }, { v: 'yearly', t: 'Hằng năm' }, { v: 'once', t: 'Một lần' }], t.freq) + '</select></label><label class="f">Hạn: ngày<input type="number" name="day" value="' + (t.day || 31) + '"></label><label class="f">Hạn: tháng (việc hằng năm)<input type="number" name="month" value="' + (t.month || 12) + '"></label><label class="f">Việc tháng: hạn rơi vào tháng sau (0/1)<input type="number" name="lag" value="' + (t.lag || 0) + '"></label><label class="f">Phụ trách<input name="owner" value="' + U.esc(t.owner || '') + '"></label></div>',
-          [...(isNew ? [] : [{ t: 'Xoá', cls: 'danger', fn: async () => { await DB.remove('legal_tasks', t.id); App.refresh(); } }]), { t: 'Huỷ' }, { t: 'Lưu', cls: 'pri', fn: async w => { const f = U.formData(w); Object.assign(t, f, { day: +f.day || 31, month: +f.month || 12, lag: +f.lag || 0 }); await DB.save('legal_tasks', t); App.refresh(); } }], { size: 'sm' });
+          [...(isNew || !Auth.canWrite() ? [] : [{ t: 'Xoá', cls: 'danger', fn: () => Del.legal(t.id) }]), { t: 'Huỷ' }, { t: 'Lưu', cls: 'pri', fn: async w => { const f = U.formData(w); Object.assign(t, f, { day: +f.day || 31, month: +f.month || 12, lag: +f.lag || 0 }); await DB.save('legal_tasks', t); App.refresh(); } }], { size: 'sm' });
       };
       b.querySelector('#ltadd').onclick = () => edit();
       b.querySelectorAll('[data-ed]').forEach(x => x.onclick = () => edit(DB.get('legal_tasks', x.dataset.ed)));
+      UI.bindActs(b, 'lt', null, id => Del.legal(id));
     } else {
       const s = DB.settings();
       const r = (a, c) => '<tr><td style="width:28%"><b>' + a + '</b></td><td>' + c + '</td></tr>';
@@ -1902,14 +2064,19 @@ Pages.payroll = {
     const inp = (i, k, w) => '<input data-i="' + i + '" data-k="' + k + '" value="' + (rows[i][k] === '' || rows[i][k] == null ? '' : rows[i][k]) + '" style="width:' + (w || 70) + 'px"' + ro + '>';
     const T = k => U.sum(res, x => x[k]);
     let html = '<div class="alert info"><b>' + U.esc(Pay.structures().v1.name) + '</b> – khối sản xuất: trong chuẩn = Lương TT × công/31, tách P1 (LCB + PC), P2, P3 (vượt ' + s.stdDays + ' công); khối văn phòng: theo công chuẩn. <a href="#/paystruct">Xem cơ cấu lương</a></div>' +
-      '<div class="kpis"><div class="kpi"><div class="v">' + rows.length + '</div><div class="l">Người trong bảng lương</div></div><div class="kpi"><div class="v">' + U.mil(T('gross')) + '</div><div class="l">Tổng thu nhập</div></div><div class="kpi"><div class="v">' + U.mil(T('net')) + '</div><div class="l">Tổng thực lãnh</div></div><div class="kpi"><div class="v">' + U.mil(T('bhCo')) + '</div><div class="l">BHXH công ty đóng (' + s.rateCo + '%)</div></div><div class="kpi"><div class="v">' + U.mil(T('tax')) + '</div><div class="l">Thuế TNCN khấu trừ</div></div><div class="kpi"><div class="v">' + U.mil(T('gross') + T('bhCo')) + '</div><div class="l">Tổng chi phí lương</div></div></div>' +
+      '<div class="kpis money"><div class="kpi"><div class="v">' + rows.length + '</div><div class="l">Người trong bảng lương</div></div><div class="kpi"><div class="v">' + U.money(T('gross')) + '</div><div class="l">Tổng thu nhập</div></div><div class="kpi"><div class="v">' + U.money(T('net')) + '</div><div class="l">Tổng thực lãnh</div></div><div class="kpi"><div class="v">' + U.money(T('bhCo')) + '</div><div class="l">BHXH công ty đóng (' + s.rateCo + '%)</div></div><div class="kpi"><div class="v">' + U.money(T('tax')) + '</div><div class="l">Thuế TNCN khấu trừ</div></div><div class="kpi"><div class="v">' + U.money(T('gross') + T('bhCo')) + '</div><div class="l">Tổng chi phí lương</div></div></div>' +
       '<div class="tw grid-edit" style="max-height:70vh"><table><thead><tr><th class="sticky-l">Nhân viên</th><th class="n">Công chuẩn</th><th class="n">Công TT</th><th class="n">OFF</th><th class="n">KP</th><th class="n">Lương thoả thuận</th><th class="n">LCB</th><th class="n">PC</th><th class="n">P1</th><th class="n">P2</th><th class="n">P3</th><th class="n">Trả thêm BHXH (Đ168)</th><th class="n">Thưởng/khác</th><th class="n">TỔNG THU NHẬP</th><th class="n">Lương đóng BH</th><th class="n">BHXH NLĐ</th><th class="n">Thuế TNCN</th><th class="n">Tạm ứng</th><th class="n">Truy thu BHYT</th><th class="n">Khấu trừ khác</th><th class="n">THỰC LÃNH</th></tr></thead><tbody>';
     let curDept = null;
-    const deptTotal = d => { const ii = idx.filter(i => rows[i].dept === d); const t = k => U.money(U.sum(ii, i => res[i][k])); return '<tr><td class="sticky-l b">Cộng ' + U.esc(d || '') + ' (' + ii.length + ')</td><td colspan="7"></td><td class="n b">' + t('P1') + '</td><td class="n b">' + t('P2') + '</td><td class="n b">' + t('P3') + '</td><td class="n b">' + t('extra') + '</td><td class="n b">' + t('bonus') + '</td><td class="n b">' + t('gross') + '</td><td></td><td class="n b">' + t('bhEmp') + '</td><td class="n b">' + t('tax') + '</td><td colspan="3"></td><td class="n b">' + t('net') + '</td></tr>'; };
+    /** Dòng tổng: cộng đủ mọi cột công và tiền */
+    const totRow = (ii, label, cls) => { const R = f => U.sum(ii, i => +f(rows[i], res[i]) || 0), q = f => '<td class="n ' + cls + '">' + U.qty(R(f)) + '</td>', m = f => '<td class="n ' + cls + '">' + U.money(R(f)) + '</td>';
+      return '<td class="sticky-l ' + cls + '">' + label + '</td><td class="n muted">—</td>' + q(r => r.work) + q(r => r.off) + q(r => r.kp) + m(r => r.agreed) + m(r => r.base) + m(r => r.allowance) +
+        m((r, x) => x.P1) + m((r, x) => x.P2) + m((r, x) => x.P3) + m((r, x) => x.extra) + m((r, x) => x.bonus) + m((r, x) => x.gross) + m((r, x) => x.ins) + m((r, x) => x.bhEmp) + m((r, x) => x.tax) +
+        m(r => r.advance) + m((r, x) => x.back) + m(r => r.otherDeduct) + m((r, x) => x.net); };
+    const deptTotal = d => { const ii = idx.filter(i => rows[i].dept === d); return '<tr>' + totRow(ii, 'Cộng ' + U.esc(d || '') + ' (' + ii.length + ')', 'b') + '</tr>'; };
     idx.forEach(i => {
       const r = rows[i], x = res[i];
       if (r.dept !== curDept){ if (curDept !== null) html += deptTotal(curDept); curDept = r.dept; html += '<tr><td colspan="21" class="b" style="background:var(--brand-soft);color:var(--brand)">KHỐI: ' + U.esc(r.dept || '—') + ' · ' + (r.calc === 'sx' ? 'cách tính sản xuất (tách P3)' : 'cách tính văn phòng') + '</td></tr>'; }
-      html += '<tr><td class="sticky-l"><b>' + U.esc(r.name) + '</b> <button class="btn sm ghost no-print" data-slip="' + U.esc(r.empId) + '" title="In phiếu lương của người này">Phiếu</button><div class="small muted">' + U.esc(r.code) + (r.manual && Object.keys(r.manual).length ? ' · <span class="tag warn" title="Số P1/P2/P3/thuế lấy nguyên từ file Excel vì khác công thức">nhập từ file</span>' : '') + (r.method === 'flat10' ? ' · thuế 10%' : '') + '</div></td>' +
+      html += '<tr><td class="sticky-l"><b>' + U.esc(r.name) + '</b> <button class="btn sm ghost no-print" data-slip="' + U.esc(r.empId) + '" title="In phiếu lương của người này">Phiếu</button>' + (doc.locked ? '' : UI.acts('pr', i, { edit: 'Hồ sơ', del: '✕' })) + '<div class="small muted">' + U.esc(r.code) + (r.manual && Object.keys(r.manual).length ? ' · <span class="tag warn" title="Số P1/P2/P3/thuế lấy nguyên từ file Excel vì khác công thức">nhập từ file</span>' : '') + (r.method === 'flat10' ? ' · thuế 10%' : '') + '</div></td>' +
         '<td class="n">' + inp(i, 'std', 50) + '</td><td class="n">' + inp(i, 'work', 50) + '</td><td class="n">' + inp(i, 'off', 44) + '</td><td class="n">' + inp(i, 'kp', 44) + '</td>' +
         '<td class="n">' + U.money(r.agreed) + '</td><td class="n">' + U.money(r.base) + '</td><td class="n">' + U.money(r.allowance) + '</td>' +
         '<td class="n">' + U.money(x.P1) + '</td><td class="n">' + U.money(x.P2) + '</td><td class="n">' + U.money(x.P3) + '</td><td class="n">' + U.money(x.extra) + '</td>' +
@@ -1917,7 +2084,7 @@ Pages.payroll = {
         '<td class="n">' + inp(i, 'advance', 90) + '</td><td class="n">' + inp(i, 'bhytBack', 80) + '</td><td class="n">' + inp(i, 'otherDeduct', 80) + '</td><td class="n b">' + U.money(x.net) + '</td></tr>';
     });
     if (curDept !== null) html += deptTotal(curDept);
-    html += '</tbody><tfoot><tr><td class="sticky-l">TỔNG CỘNG</td><td colspan="7"></td><td class="n">' + U.money(T('P1')) + '</td><td class="n">' + U.money(T('P2')) + '</td><td class="n">' + U.money(T('P3')) + '</td><td class="n">' + U.money(T('extra')) + '</td><td class="n">' + U.money(T('bonus')) + '</td><td class="n">' + U.money(T('gross')) + '</td><td></td><td class="n">' + U.money(T('bhEmp')) + '</td><td class="n">' + U.money(T('tax')) + '</td><td class="n">' + U.money(U.sum(rows, r => +r.advance || 0)) + '</td><td class="n">' + U.money(T('back')) + '</td><td class="n">' + U.money(U.sum(rows, r => +r.otherDeduct || 0)) + '</td><td class="n">' + U.money(T('net')) + '</td></tr></tfoot></table></div>' +
+    html += '</tbody><tfoot><tr>' + totRow(idx, 'TỔNG CỘNG (' + rows.length + ' người)', '') + '</tr></tfoot></table></div>' +
       '<p class="small muted">Sửa ô trắng (công, thưởng, tạm ứng…) – số liệu tự tính lại và lưu. Lương thoả thuận / LCB / PC / BHXH / cách tính thuế lấy từ hồ sơ nhân viên (bấm "Cập nhật lương từ hồ sơ NV" sau khi sửa hồ sơ). Thuế luỹ tiến: giảm trừ ' + U.money(s.selfDeduct) + 'đ + ' + U.money(s.depDeduct) + 'đ/người phụ thuộc.</p>';
     body.innerHTML = html;
     this.bind(el, body, doc, ym, s);
@@ -1935,6 +2102,7 @@ Pages.payroll = {
     $('#pxls').onclick = () => Xls.payroll(doc);
     $('#pslip').onclick = () => this.slips(doc);
     body.querySelectorAll('[data-slip]').forEach(b => b.onclick = () => this.slips(doc, [b.dataset.slip]));
+    UI.bindActs(body, 'pr', i => { const e = DB.get('employees', rows[+i].empId); if (e) Emp.edit(e); else UI.toast('Không còn hồ sơ nhân viên này'); }, i => Del.payRow(doc, +i));
   },
   /** Lưới bảng lương cơ cấu mới (từ T9/2026) */
   renderV2(el, body, doc, ym, s){
@@ -1947,22 +2115,29 @@ Pages.payroll = {
     const IN = [['contract', 'HĐ'], ['std', 'Công chuẩn'], ['work', 'Công thường'], ['leave', 'Nghỉ phép'], ['holiday', 'Nghỉ lễ'], ['holidayHours', 'Đi làm lễ (giờ)'], ['sick', 'Nghỉ ốm'], ['unpaid', 'Nghỉ KL'], ['nightNormal', 'Đêm thường (giờ)'], ['nightOff', 'Đêm ngày off (giờ)'], ['nightHoliday', 'Đêm lễ (giờ)'], ['late', 'Đi trễ (giờ)'], ['otNormal', 'OT thường (giờ)'], ['otOff', 'OT ngày off (giờ)'], ['otHoliday', 'OT lễ (giờ)']];
     const PP = Object.assign({}, Pay.V2_DEFAULT, doc.params), pc = v => Math.round(v * 100) + '%';
     let html = '<div class="alert info"><b>' + U.esc(Pay.structures().v2.name) + '</b> – tham số lưu cùng bảng lương tháng này: công chuẩn ' + PP.std + ', ' + PP.hours + ' giờ/ngày; OT ' + pc(PP.otNormal) + ' / ' + pc(PP.otOff) + ' / ' + pc(PP.otHoliday) + '; đi làm lễ ' + pc(PP.holidayRate) + '; ca đêm +' + pc(PP.night) + ', đêm lễ +' + pc(PP.nightHoliday) + '; BHXH từ ' + PP.minDaysBhxh + ' công; KPCĐ ' + PP.unionRate + '%. <a href="#/paystruct">Xem cơ cấu lương</a></div>' +
-      '<div class="kpis"><div class="kpi"><div class="v">' + rows.length + '</div><div class="l">Người trong bảng lương</div></div><div class="kpi"><div class="v">' + U.mil(T(x => x.gross)) + '</div><div class="l">Tổng lương gross</div></div><div class="kpi"><div class="v">' + U.mil(T(x => x.net)) + '</div><div class="l">Tổng thực nhận</div></div><div class="kpi"><div class="v">' + U.mil(T(x => x.bhCo)) + '</div><div class="l">BHXH công ty (' + s.rateCo + '%)</div></div><div class="kpi"><div class="v">' + U.mil(T(x => x.union)) + '</div><div class="l">KPCĐ công ty (' + (s.unionRate == null ? 2 : s.unionRate) + '%)</div></div><div class="kpi"><div class="v">' + U.mil(T(x => x.tax)) + '</div><div class="l">Thuế TNCN</div></div></div>' +
+      '<div class="kpis money"><div class="kpi"><div class="v">' + rows.length + '</div><div class="l">Người trong bảng lương</div></div><div class="kpi"><div class="v">' + U.money(T(x => x.gross)) + '</div><div class="l">Tổng lương gross</div></div><div class="kpi"><div class="v">' + U.money(T(x => x.net)) + '</div><div class="l">Tổng thực nhận</div></div><div class="kpi"><div class="v">' + U.money(T(x => x.bhCo)) + '</div><div class="l">BHXH công ty (' + s.rateCo + '%)</div></div><div class="kpi"><div class="v">' + U.money(T(x => x.union)) + '</div><div class="l">KPCĐ công ty (' + (s.unionRate == null ? 2 : s.unionRate) + '%)</div></div><div class="kpi"><div class="v">' + U.money(T(x => x.tax)) + '</div><div class="l">Thuế TNCN</div></div></div>' +
       '<div class="tw grid-edit" style="max-height:70vh"><table><thead><tr><th class="sticky-l">Nhân viên</th>' + IN.map(c => '<th class="n">' + c[1] + '</th>').join('') +
       '<th class="n">Lương thoả thuận</th><th class="n">LCB + PC</th><th class="n">Lương công</th><th class="n">OT + lễ + đêm</th><th class="n">Cơm + hỗ trợ khác</th><th class="n">Trừ đi trễ</th><th class="n">Thưởng/khác</th><th class="n">GROSS</th><th class="n">Đóng BHXH trên</th><th class="n">BHXH NV</th><th class="n">Thuế TNCN</th><th class="n">Tạm ứng</th><th class="n">Trừ khác</th><th class="n">THỰC NHẬN</th></tr></thead><tbody>';
     let cur = null;
     const NC = IN.length + 15;
-    const sub = d => { const ii = idx.filter(i => rows[i].dept === d); const t = f => U.money(U.sum(ii, i => f(res[i]))); return '<tr><td class="sticky-l b">Cộng ' + U.esc(d || '') + ' (' + ii.length + ')</td><td colspan="' + (IN.length + 6) + '"></td><td class="n b">' + t(x => x.gross) + '</td><td></td><td class="n b">' + t(x => x.bhEmp) + '</td><td class="n b">' + t(x => x.tax) + '</td><td colspan="2"></td><td class="n b">' + t(x => x.net) + '</td></tr>'; };
+    /** Dòng tổng: cộng đủ mọi cột công, giờ và tiền */
+    const totRow = (ii, label, cls) => { const R = f => U.sum(ii, i => +f(rows[i], res[i], res[i].parts) || 0), q = f => '<td class="n ' + cls + '">' + U.qty(R(f)) + '</td>', m = f => '<td class="n ' + cls + '">' + U.money(R(f)) + '</td>';
+      const ct = ii.filter(i => rows[i].contract === 'CT').length;
+      return '<td class="sticky-l ' + cls + '">' + label + '</td>' + IN.map(([k]) => k === 'contract' ? '<td class="n small ' + cls + '">CT ' + ct + '<br>TV ' + (ii.length - ct) + '</td>' : k === 'std' ? '<td class="n muted">—</td>' : q(r => r[k])).join('') +
+        m(r => r.agreed) + m(r => (+r.base || 0) + (+r.allowance || 0)) + m((r, x, pt) => pt.AD + pt.AE + pt.AF) + m((r, x, pt) => pt.AG + pt.AH + pt.AJ + pt.AK) + m((r, x, pt) => pt.AI + pt.AL) +
+        '<td class="n ' + cls + '">' + (R((r, x, pt) => pt.AM) ? '-' + U.money(R((r, x, pt) => pt.AM)) : '0') + '</td>' +
+        m(r => r.bonus) + m((r, x) => x.gross) + m((r, x) => x.ins) + m((r, x) => x.bhEmp) + m((r, x) => x.tax) + m(r => r.advance) + m(r => r.otherDeduct) + m((r, x) => x.net); };
+    const sub = d => { const ii = idx.filter(i => rows[i].dept === d); return '<tr>' + totRow(ii, 'Cộng ' + U.esc(d || '') + ' (' + ii.length + ')', 'b') + '</tr>'; };
     idx.forEach(i => {
       const r = rows[i], x = res[i], pt = x.parts;
       if (r.dept !== cur){ if (cur !== null) html += sub(cur); cur = r.dept; html += '<tr><td colspan="' + NC + '" class="b" style="background:var(--brand-soft);color:var(--brand)">' + U.esc(r.dept || '—') + (+r.maxWork ? ' · công thường tối đa ' + r.maxWork : '') + '</td></tr>'; }
-      html += '<tr><td class="sticky-l"><b>' + U.esc(r.name) + '</b> <button class="btn sm ghost no-print" data-slip="' + U.esc(r.empId) + '">Phiếu</button><div class="small muted">' + U.esc(r.code || '') + (r.title ? ' · ' + U.esc(r.title) : '') + (r.manual && Object.keys(r.manual).length ? ' · <span class="tag warn" title="Một số khoản lấy nguyên số từ file Excel vì khác công thức">nhập từ file</span>' : '') + '</div></td>' +
+      html += '<tr><td class="sticky-l"><b>' + U.esc(r.name) + '</b> <button class="btn sm ghost no-print" data-slip="' + U.esc(r.empId) + '">Phiếu</button>' + (doc.locked ? '' : UI.acts('pr', i, { edit: 'Hồ sơ', del: '✕' })) + '<div class="small muted">' + U.esc(r.code || '') + (r.title ? ' · ' + U.esc(r.title) : '') + (r.manual && Object.keys(r.manual).length ? ' · <span class="tag warn" title="Một số khoản lấy nguyên số từ file Excel vì khác công thức">nhập từ file</span>' : '') + '</div></td>' +
         IN.map(([k]) => '<td class="n">' + (k === 'contract' ? '<select data-i="' + i + '" data-k="contract" style="width:58px;min-width:0"' + ro + '>' + U.opts([{ v: 'CT', t: 'CT' }, { v: 'TV', t: 'TV' }], r.contract) + '</select>' : inp(i, k, k === 'work' || k === 'std' ? 48 : 46)) + '</td>').join('') +
         '<td class="n">' + U.money(r.agreed) + '</td><td class="n">' + U.money((+r.base || 0) + (+r.allowance || 0)) + '</td><td class="n">' + U.money(pt.AD + pt.AE + pt.AF) + '</td><td class="n">' + U.money(pt.AG + pt.AH + pt.AJ + pt.AK) + '</td><td class="n">' + U.money(pt.AI + pt.AL) + '</td><td class="n">' + (pt.AM ? '-' + U.money(pt.AM) : '0') + '</td>' +
         '<td class="n">' + inp(i, 'bonus', 80) + '</td><td class="n b">' + U.money(x.gross) + '</td><td class="n">' + U.money(x.ins) + '</td><td class="n">' + U.money(x.bhEmp) + '</td><td class="n">' + U.money(x.tax) + '</td><td class="n">' + inp(i, 'advance', 84) + '</td><td class="n">' + inp(i, 'otherDeduct', 74) + '</td><td class="n b">' + U.money(x.net) + '</td></tr>';
     });
     if (cur !== null) html += sub(cur);
-    html += '</tbody><tfoot><tr><td class="sticky-l">TỔNG CỘNG</td><td colspan="' + (IN.length + 6) + '"></td><td class="n">' + U.money(T(x => x.gross)) + '</td><td></td><td class="n">' + U.money(T(x => x.bhEmp)) + '</td><td class="n">' + U.money(T(x => x.tax)) + '</td><td class="n">' + U.money(U.sum(rows, r => +r.advance || 0)) + '</td><td class="n">' + U.money(U.sum(rows, r => +r.otherDeduct || 0)) + '</td><td class="n">' + U.money(T(x => x.net)) + '</td></tr></tfoot></table></div>' +
+    html += '</tbody><tfoot><tr>' + totRow(idx, 'TỔNG CỘNG (' + rows.length + ' người)', '') + '</tr></tfoot></table></div>' +
       '<p class="small muted">Nhập công / giờ vào ô trắng – số liệu tự tính lại và lưu. CT = hợp đồng chính thức, TV = thử việc. Lương thoả thuận, LCB, phụ cấp, hỗ trợ cơm, số người phụ thuộc lấy từ hồ sơ nhân viên (bấm "Cập nhật lương từ hồ sơ NV" sau khi sửa hồ sơ).</p>';
     body.innerHTML = html;
   },

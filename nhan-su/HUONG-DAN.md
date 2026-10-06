@@ -70,10 +70,25 @@ Tiếp nhận yêu cầu → Duyệt (Đang tuyển) → Lọc CV theo MTCV → 
   - Trả thêm khoản tương đương BHXH (Điều 168) cho người chưa đóng BHXH.
   - BHXH 10,5% / 21,5%. Thuế TNCN luỹ tiến 5 bậc, giảm trừ 15,5 triệu + 6,2 triệu/người phụ thuộc; thử việc khấu trừ 10%.
   - Xuất Excel (kèm sheet chuyển khoản ngân hàng), in phiếu lương từng người (nút **Phiếu** cạnh tên).
+  - Dòng **Cộng từng bộ phận** và **TỔNG CỘNG** cộng đủ mọi cột: công, giờ (OT, ca đêm, đi làm lễ, đi trễ…), số người HĐ chính thức / thử việc và mọi khoản tiền. Ô tổng đầu trang hiện số tiền đầy đủ, không làm tròn triệu.
+  - Bảng lương chưa khoá: nút **✕** cạnh tên để bỏ một người khỏi bảng lương tháng đó (không xoá hồ sơ), nút **Hồ sơ** để mở hồ sơ nhân viên.
   - **Khoá bảng lương** khi đã nhập xong: lần đầu khoá, web yêu cầu đặt **mật khẩu quản lý lương** (tối thiểu 6 ký tự). Bảng đã khoá thì máy chủ Google từ chối mọi lệnh sửa, xoá, nhập đè từ Excel hay khôi phục sao lưu; vẫn xem, in và xuất Excel được. Chỉ mở khoá được bằng mật khẩu (sai 5 lần thì tạm chặn 15 phút). Mật khẩu lưu dạng mã hoá trong Thuộc tính tập lệnh của dự án Apps Script, không nằm trong Google Sheet. Quên mật khẩu: người sở hữu dự án vào Apps Script → Cài đặt dự án → Thuộc tính tập lệnh, xoá `PAY_PIN` rồi đặt lại.
 - **Hai cơ cấu lương:** bảng lương đến **T8/2026** tính theo P1/P2/P3 như file lương cũ (giữ nguyên). Từ **T9/2026** tính theo file `AT_BL_T9_2026_TongHopCong`: đơn giá ngày = (LCB + phụ cấp CV) ÷ công chuẩn, đơn giá giờ = đơn giá ngày ÷ 8; lương ngày thường, nghỉ phép, nghỉ lễ theo ngày; đi làm lễ 400%; OT 150% / 200% (ngày off) / 300% (lễ); ca đêm +30%, đêm lễ +90%; hỗ trợ cơm và hỗ trợ khác (= thoả thuận − LCB − PC − cơm) chia theo công; trừ đi trễ theo giờ; Kho vận & Giao hàng, Sản xuất tính tối đa 28 công thường; BHXH 10,5% / 21,5% chỉ cho HĐ chính thức đi làm từ 14 công, trên LCB + PC; KPCĐ 2% công ty; thuế: CT luỹ tiến (không tính OT, cơm, ca đêm), thử việc 10%, dưới 5 triệu không khấu trừ. Tháng bắt đầu cơ cấu mới chỉnh ở Cài đặt (`paySchemeFrom`). Nhập file lương T9 ở **Cài đặt & dữ liệu → Nhập từ file lương Excel**: web tự nhận ra mẫu mới.
 - **Cơ cấu tính lương** (menu Nhân sự): lưu riêng 2 cơ cấu – T8/2026 (P1/P2/P3) và T9/2026 (ngày công/giờ) – với bảng so sánh, tháng áp dụng, tham số (công chuẩn, giờ chuẩn, hệ số OT/lễ/ca đêm, số công tối thiểu đóng BHXH, KPCĐ, ngưỡng thuế). Mỗi bảng lương lưu kèm bản sao tham số lúc tạo/nhập, nên sửa cơ cấu không làm đổi tháng đã tính; tháng chưa khoá có nút "Áp dụng tham số hiện hành".
 - **Cơ cấu nhân sự & lương:** số người, quỹ lương, lương bình quân theo khối và cấp bậc; thâm niên; biến động vào/nghỉ 12 tháng.
+
+### Sửa và xoá dữ liệu
+
+Mỗi dòng ở các mục đều có nút **Sửa** và **Xoá**: hồ sơ nhân sự, yêu cầu tuyển dụng, ứng viên (bảng và thẻ Kanban – nút ✕), phiếu đánh giá phỏng vấn, kết quả thử việc, hợp đồng, Kho CV, việc định kỳ, dòng bảng lương. Trong cửa sổ chi tiết cũng có nút Xoá. Lưu ý:
+
+- **Xoá nhiều cùng lúc:** ở **Hồ sơ nhân sự** và **Ứng viên** (dạng bảng), tích ô đầu dòng (hoặc ô ở tiêu đề để chọn tất cả) rồi bấm **Xoá … dòng đã chọn**.
+- Mọi lệnh xoá đều hỏi xác nhận và tự gỡ liên kết liên quan:
+  - **Xoá nhân viên:** ứng viên gốc bỏ liên kết; dòng lương ở các tháng đã lập vẫn giữ. Người chỉ nghỉ việc nên chuyển trạng thái "Đã nghỉ việc" thay vì xoá.
+  - **Xoá ứng viên:** xoá kèm phiếu đánh giá phỏng vấn; file CV vẫn ở Kho CV.
+  - **Xoá yêu cầu tuyển dụng:** các ứng viên vẫn giữ lại, chỉ bỏ liên kết.
+  - **Xoá file trong Kho CV:** file chuyển vào thùng rác Google Drive, khôi phục được trong 30 ngày.
+  - **Xoá kết quả thử việc:** nhân viên trở về "Thử việc", hợp đồng do phiếu tự tạo cũng bị xoá. Đánh giá lại nhiều lần không tạo hợp đồng trùng.
+- Tài khoản **Chỉ xem** không thấy các nút này. Bảng lương **đã khoá** không sửa, xoá được dòng nào.
 
 Các tham số (lương tối thiểu vùng, tỷ lệ BHXH, giảm trừ gia cảnh, biểu thuế, bộ phận, tiêu chí phiếu đánh giá) sửa trong **Cài đặt & dữ liệu** khi nhà nước điều chỉnh.
 

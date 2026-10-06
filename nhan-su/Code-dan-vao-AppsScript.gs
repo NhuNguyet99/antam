@@ -114,16 +114,25 @@ function setDocs_(json) {
 }
 
 function deleteDoc_(collection, id) {
-  check_(collection, id);
+  return deleteDocs_(JSON.stringify([[collection, id]]));
+}
+
+/** Xoá nhiều bản ghi một lần: json = [[collection, id], ...] */
+function deleteDocs_(json) {
+  const list = JSON.parse(json);
+  if (!Array.isArray(list)) throw new Error('Dữ liệu xoá không hợp lệ');
+  const want = {};
+  list.forEach(x => { check_(x[0], String(x[1])); want[x[0] + '\u0001' + x[1]] = true; });
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
   try {
     const sh = sheet_(), last = sh.getLastRow();
     if (last < 2) return true;
     const keys = sh.getRange(2, 1, last - 1, 2).getValues();
-    if (collection === 'payrolls') keys.forEach((k, i) => { if (k[0] === collection && String(k[1]) === id && payrollLockedAt_(sh, i + 2)) throw new Error('Bảng lương ' + id + ' đã khoá – không thể xoá.'); });
+    const hit = i => want[keys[i][0] + '\u0001' + String(keys[i][1])];
+    keys.forEach((k, i) => { if (k[0] === 'payrolls' && hit(i) && payrollLockedAt_(sh, i + 2)) throw new Error('Bảng lương ' + k[1] + ' đã khoá – không thể xoá.'); });
     for (let i = keys.length - 1; i >= 0; i--) {
-      if (keys[i][0] === collection && String(keys[i][1]) === id) sh.deleteRow(i + 2);
+      if (hit(i)) sh.deleteRow(i + 2);
     }
     return true;
   } finally {
@@ -235,6 +244,17 @@ function moveFile_(fileId, dept, position) {
   return true;
 }
 
+/** Chuyển file CV vào thùng rác Drive (khôi phục được trong 30 ngày). Chỉ nhận file nằm trong thư mục "Kho CV". */
+function trashFile_(fileId) {
+  let file;
+  try { file = DriveApp.getFileById(fileId); } catch (e) { return true; } // đã bị xoá tay trên Drive
+  const rootId = rootFolder_().getId();
+  const inRoot = f => { for (let d = 0, it = f.getParents(); d < 4 && it.hasNext(); d++) { const p = it.next(); if (p.getId() === rootId) return true; it = p.getParents(); } return false; };
+  if (!inRoot(file)) throw new Error('File không thuộc thư mục Kho CV – không xoá.');
+  file.setTrashed(true);
+  return true;
+}
+
 /* ---------------- Gửi báo cáo cho Giám đốc ---------------- */
 
 function sendReport_(to, subject, html) {
@@ -329,8 +349,10 @@ function getAll(t) { auth_(t); return getAll_(); }
 function setDoc(t, c, id, json) { auth_(t, true); return setDoc_(c, id, json); }
 function setDocs(t, json) { auth_(t, true); return setDocs_(json); }
 function deleteDoc(t, c, id) { auth_(t, true); return deleteDoc_(c, id); }
+function deleteDocs(t, json) { auth_(t, true); return deleteDocs_(json); }
 function uploadFile(t, b64, name, mime, dept, position) { auth_(t, true); return uploadFile_(b64, name, mime, dept, position); }
 function moveFile(t, id, dept, position) { auth_(t, true); return moveFile_(id, dept, position); }
+function trashFile(t, id) { auth_(t, true); return trashFile_(id); }
 function rootFolderUrl(t) { auth_(t); return rootFolderUrl_(); }
 function sendReport(t, to, subject, html) { auth_(t, true); return sendReport_(to, subject, html); }
 function hasPayrollPin(t) { auth_(t); return hasPayrollPin_(); }
