@@ -231,7 +231,8 @@ const U = {
   /** Đọc ngày dạng dd/mm/yyyy, yyyy-mm-dd, Date hoặc số serial Excel */
   parseAnyDate(v){
     if (v == null || v === '') return '';
-    if (v instanceof Date && !isNaN(v)) return U.iso(v);
+    // Thư viện Excel trả ngày dạng 23:59:30 hôm trước theo giờ VN (lệch múi giờ lịch sử) → làm tròn về ngày gần nhất
+    if (v instanceof Date && !isNaN(v)) return U.iso(U._legacyDate ? v : new Date(v.getTime() + 12 * 3600 * 1000));
     if (typeof v === 'number' && v > 20000 && v < 80000){ const d = new Date(Math.round((v - 25569) * 86400000)); return U.iso(new Date(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate())); }
     const s = String(v).trim();
     let m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(s); if (m) return m[1] + '-' + m[2].padStart(2, '0') + '-' + m[3].padStart(2, '0');
@@ -1717,13 +1718,13 @@ Pages.emps = {
     if (q) list = list.filter(e => U.norm([e.code, e.fullName, e.title, e.phone].join(' ')).includes(q));
     const order = Rec.depts();
     list.sort((a, b) => (order.indexOf(a.dept) - order.indexOf(b.dept)) || String(a.code).localeCompare(String(b.code)));
-    const act = Emp.active();
-    el.innerHTML = '<h2>Hồ sơ nhân sự</h2><div class="kpis">' +
+    const act = Emp.active(), dupN = Dedup.groups().length;
+    el.innerHTML = '<h2>Hồ sơ nhân sự</h2>' + (dupN && Auth.canWrite() ? '<div class="alert warn">Có <b>' + dupN + '</b> nhóm hồ sơ trùng (cùng một người có 2 mã). <a href="javascript:void 0" id="edup2">Lọc & gộp ngay</a> – giữ 1 mã, xoá mã còn lại.</div>' : '') + '<div class="kpis">' +
       '<div class="kpi"><div class="v">' + act.length + '</div><div class="l">Đang làm việc</div></div>' +
       '<div class="kpi warn"><div class="v">' + act.filter(e => e.status === 'thu_viec').length + '</div><div class="l">Thử việc</div></div>' +
       '<div class="kpi ok"><div class="v">' + act.filter(e => e.bhxh && e.bhxh.joined).length + '</div><div class="l">Đã tham gia BHXH</div></div>' +
       '<div class="kpi bad"><div class="v">' + act.filter(e => Emp.missingReq(e).length).length + '</div><div class="l">Thiếu hồ sơ bắt buộc</div></div></div>' +
-      '<div class="toolbar"><input id="eq" placeholder="Tìm mã, tên, chức danh…" value="' + U.esc(p.q || '') + '"><select id="es">' + U.opts([{ v: 'active', t: 'Đang làm việc' }].concat(EMP_STATUS), st, 'Tất cả') + '</select><select id="ed">' + U.opts(Rec.depts(), p.dept, 'Tất cả bộ phận') + '</select><span class="grow"></span><button class="btn danger" id="ebulk" hidden></button><button class="btn" id="exls">Tải Excel</button><button class="btn pri" id="eadd">+ Thêm nhân viên</button></div>' +
+      '<div class="toolbar"><input id="eq" placeholder="Tìm mã, tên, chức danh…" value="' + U.esc(p.q || '') + '"><select id="es">' + U.opts([{ v: 'active', t: 'Đang làm việc' }].concat(EMP_STATUS), st, 'Tất cả') + '</select><select id="ed">' + U.opts(Rec.depts(), p.dept, 'Tất cả bộ phận') + '</select><span class="grow"></span><button class="btn danger" id="ebulk" hidden></button>' + (Auth.canWrite() ? '<button class="btn" id="edup">🔍 Lọc hồ sơ trùng' + (dupN ? ' (' + dupN + ')' : '') + '</button>' : '') + '<button class="btn" id="exls">Tải Excel</button><button class="btn pri" id="eadd">+ Thêm nhân viên</button></div>' +
       UI.table([
         UI.selCol('em'),
         { t: 'Mã', f: e => U.esc(e.code) },
@@ -1746,6 +1747,7 @@ Pages.emps = {
     el.querySelectorAll('[data-e]').forEach(a => a.onclick = () => Emp.edit(DB.get('employees', a.dataset.e)));
     UI.bindActs(el, 'em', id => Emp.edit(DB.get('employees', id)), id => Del.emps([id]));
     UI.bindSel(el, 'em', el.querySelector('#ebulk'), ids => Del.emps(ids));
+    ['#edup', '#edup2'].forEach(q => { const b = el.querySelector(q); if (b) b.onclick = () => Dedup.open(); });
   }
 };
 
@@ -1837,6 +1839,154 @@ const Del = {
     doc.rows.splice(i, 1);
     await DB.save('payrolls', doc);
     return this.done(1, 'dòng lương của ' + r.name);
+  }
+};
+
+/* ---------- Lọc hồ sơ nhân sự trùng: giữ 1 mã, gộp thông tin, xoá mã còn lại ---------- */
+const Dedup = {
+  digits(v){ return String(v || '').replace(/\D/g, ''); },
+  empty(v){ return v == null || v === '' || (typeof v === 'object' && !Array.isArray(v) && !Object.keys(v).length); },
+  /** 2 hồ sơ có thể là 1 người: cùng họ tên, không khác ngày sinh / CCCD */
+  compatible(a, b){ if (a.dob && b.dob && a.dob !== b.dob) return false; const x = this.digits(a.cccd), y = this.digits(b.cccd); return !(x && y && x !== y); },
+  payMonths(e){ return DB.all('payrolls').filter(d => (d.rows || []).some(r => r.empId === e.id)).map(d => d.id).sort(); },
+  filled(e){ return ['gender', 'dob', 'cccd', 'phone', 'email', 'address', 'title', 'startDate'].filter(k => e[k]).length + (e.contracts || []).length * 2 + Object.values(e.docs || {}).filter(Boolean).length; },
+  codeNo(e){ const m = /(\d+)/.exec(e.code || ''); return m ? +m[1] : 99999; },
+  /** Mã nên giữ: có trong bảng lương → nhiều thông tin hơn → mã nhỏ hơn (cũ hơn) */
+  rank(a, b){ return (this.payMonths(b).length - this.payMonths(a).length) || (this.filled(b) - this.filled(a)) || (this.codeNo(a) - this.codeNo(b)); },
+  groups(){
+    const emps = Emp.all(), out = [];
+    U.groupBy(emps, e => U.norm(e.fullName)).forEach(list => {
+      if (list.length < 2) return;
+      const cl = [];
+      list.forEach(e => { const c = cl.find(g => g.every(x => this.compatible(x, e))); if (c) c.push(e); else cl.push([e]); });
+      cl.filter(g => g.length > 1).forEach(g => out.push(g));
+    });
+    U.groupBy(emps.filter(e => this.digits(e.cccd).length >= 9), e => this.digits(e.cccd)).forEach(list => {
+      if (list.length > 1 && !out.some(g => list.every(e => g.includes(e)))) out.push(list);
+    });
+    return out.map(g => g.slice().sort((a, b) => this.rank(a, b)));
+  },
+  /** Trường hay khác nhau giữa 2 bản – cho chọn giá trị giữ lại */
+  FIELDS: [['dept', 'Bộ phận'], ['title', 'Chức danh'], ['status', 'Trạng thái', v => empStatusOf(v).t], ['startDate', 'Ngày vào làm', v => U.fd(v)], ['endDate', 'Ngày nghỉ', v => U.fd(v)]],
+  /** Giá trị mặc định cho trường khác nhau */
+  defaults(g, keep){
+    const pick = {}, newest = g.slice().sort(U.by(e => e.updatedAt || '', true))[0];
+    const cstarts = new Set([].concat(...g.map(e => (e.contracts || []).map(c => c.start))));
+    this.FIELDS.forEach(([k]) => {
+      const vals = g.filter(e => !this.empty(e[k]));
+      if (new Set(vals.map(e => String(e[k]))).size < 2) return;
+      let src = keep;
+      if (k === 'status' || k === 'endDate') src = newest;                                             // trạng thái: theo bản cập nhật gần nhất
+      if (k === 'startDate'){ const m = vals.find(e => cstarts.has(e.startDate)); if (m) src = m; }     // ngày vào làm: khớp ngày bắt đầu hợp đồng
+      if (this.empty(src[k])) src = vals[0];
+      pick[k] = src.id;
+    });
+    return pick;
+  },
+  merge(g, keepId, pick){
+    const keep = g.find(e => e.id === keepId), others = g.filter(e => e.id !== keepId);
+    const k = JSON.parse(JSON.stringify(keep));
+    const fill = (a, b) => { a = Object.assign({}, a); Object.keys(b || {}).forEach(x => { if (this.empty(a[x]) && !this.empty(b[x])) a[x] = b[x]; }); return a; };
+    others.forEach(o => {
+      ['gender', 'dob', 'cccd', 'phone', 'email', 'address', 'title', 'grade', 'edu', 'dept', 'startDate', 'endDate', 'leaveReason', 'candidateId', 'payNote', 'partTime', 'extra168', 'settled'].forEach(f => { if (this.empty(k[f]) && !this.empty(o[f])) k[f] = o[f]; });
+      if (o.note && !String(k.note || '').includes(o.note)) k.note = [k.note, o.note].filter(Boolean).join('\n');
+      k.salary = fill(k.salary, o.salary); k.bhxh = fill(k.bhxh, o.bhxh); k.tax = fill(k.tax, o.tax); k.bank = fill(k.bank, o.bank);
+      k.docs = Object.assign({}, o.docs, k.docs); Object.keys(o.docs || {}).forEach(d => { if (o.docs[d]) k.docs[d] = true; });
+      k.leave = Object.assign({}, o.leave, k.leave);
+      k.contracts = (k.contracts || []).concat((o.contracts || []).filter(c => !(k.contracts || []).some(x => x.start === c.start && x.type === c.type)));
+      if (!k.probation && o.probation) k.probation = o.probation;
+    });
+    Object.keys(pick || {}).forEach(f => { const src = g.find(e => e.id === pick[f]); if (src) k[f] = src[f]; });
+    if (k.status !== 'nghi_viec'){ k.endDate = ''; k.leaveReason = ''; } // đang làm việc thì không có ngày nghỉ
+    k.mergedCodes = [...new Set((k.mergedCodes || []).concat(others.map(o => o.code)))];
+    return { k, others };
+  },
+  /** Ngày vào làm bị lùi 1 ngày do lỗi đọc ô ngày trong file lương T9 (đã sửa) – đối chiếu lại với file */
+  async dateFixes(){
+    if (!IS_GAS) return [];
+    let list = []; try { list = JSON.parse(await gs('pendingImports')) || []; } catch (e) { return []; }
+    const fixes = [];
+    for (const it of list){
+      const bin = atob(it.b64), buf = new Uint8Array(bin.length); for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+      const file = () => new File([buf], it.name, { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      let bad, good;
+      try { U._legacyDate = true; bad = await Imp.parse(file()); } finally { U._legacyDate = false; }
+      good = await Imp.parse(file());
+      good.rows.forEach((r, i) => {
+        const b = bad.rows[i]; if (!b || !b.startDate || b.startDate === r.startDate) return;
+        Emp.all().filter(e => U.norm(e.fullName) === U.norm(r.name) && e.startDate === b.startDate).forEach(e => { if (!fixes.some(f => f.id === e.id)) fixes.push({ id: e.id, code: e.code, name: e.fullName, from: b.startDate, to: r.startDate }); });
+      });
+    }
+    return fixes;
+  },
+  async open(){
+    const groups = this.groups();
+    const m = UI.modal('Lọc hồ sơ nhân sự trùng', '<p class="muted">Đang kiểm tra…</p>', [], { sticky: true });
+    const fixes = await this.dateFixes();
+    const state = groups.map(g => ({ g, on: true, keep: g[0].id, pick: this.defaults(g, g[0]) }));
+    const body = m.querySelector('.body');
+    const draw = () => {
+      body.innerHTML = (fixes.length ? '<div class="alert warn"><label><input type="checkbox" id="ddfix" checked> Sửa <b>' + fixes.length + '</b> ngày vào làm bị lùi 1 ngày do lỗi đọc file lương T9 (VD ' + U.esc(fixes[0].name) + ': ' + U.fd(fixes[0].from) + ' → ' + U.fd(fixes[0].to) + ')</label></div>' : '') +
+        (state.length ? '<p>Tìm thấy <b>' + state.length + '</b> nhóm hồ sơ trùng (cùng họ tên, không khác ngày sinh / CCCD; hoặc trùng CCCD). Mỗi nhóm giữ <b>1 mã</b>, thông tin còn thiếu được lấy từ mã kia (ngày sinh, CCCD, SĐT, hợp đồng, ngân hàng…), sau đó <b>xoá mã còn lại</b>. Bảng lương và ứng viên đang trỏ tới mã bị xoá được chuyển sang mã giữ lại.</p>' +
+          state.map((s, gi) => {
+            const g = s.g, diff = this.FIELDS.filter(([k]) => new Set(g.filter(e => !this.empty(e[k])).map(e => String(e[k]))).size > 1);
+            return '<div class="card" style="margin:8px 0"><label class="b"><input type="checkbox" data-on="' + gi + '"' + (s.on ? ' checked' : '') + '> ' + U.esc(g[0].fullName) + '</label>' +
+              UI.table([
+                { t: 'Giữ mã', f: e => '<label><input type="radio" name="dk' + gi + '" data-keep="' + gi + '" value="' + e.id + '"' + (e.id === s.keep ? ' checked' : '') + '> <b>' + U.esc(e.code) + '</b></label>' + (e.id === s.keep ? ' <span class="tag ok">giữ</span>' : ' <span class="tag bad">xoá</span>') },
+                { t: 'Bộ phận / chức danh', f: e => U.esc(e.dept || '') + '<div class="small muted">' + U.esc(e.title || '') + '</div>' },
+                { t: 'Trạng thái', f: e => UI.tag(empStatusOf(e.status)) },
+                { t: 'Vào làm', f: e => U.fd(e.startDate) },
+                { t: 'Ngày sinh / CCCD', f: e => U.fd(e.dob) + '<div class="small muted">' + U.esc(e.cccd || '') + '</div>' },
+                { t: 'Bảng lương', f: e => this.payMonths(e).map(U.ymLabel).join(', ') || '—' },
+                { t: 'HĐ', n: 1, f: e => (e.contracts || []).length }
+              ], g) +
+              (diff.length ? '<div class="toolbar small" style="margin-top:6px"><span class="muted">Khác nhau – giữ giá trị:</span>' + diff.map(([k, t, fm]) => '<label>' + t + ' <select data-pick="' + gi + ':' + k + '" style="min-width:0">' +
+                g.filter(e => !this.empty(e[k])).filter((e, i, a) => a.findIndex(x => String(x[k]) === String(e[k])) === i).map(e => '<option value="' + e.id + '"' + (s.pick[k] === e.id || (s.pick[k] && String(g.find(x => x.id === s.pick[k])[k]) === String(e[k])) ? ' selected' : '') + '>' + U.esc(fm ? fm(e[k]) : e[k]) + ' (' + U.esc(e.code) + ')</option>').join('') + '</select></label>').join('') + '</div>' : '') + '</div>';
+          }).join('') : '<div class="alert ok">Không có hồ sơ trùng.</div>');
+      body.querySelectorAll('[data-on]').forEach(x => x.onchange = () => { state[+x.dataset.on].on = x.checked; });
+      body.querySelectorAll('[data-keep]').forEach(x => x.onchange = () => { const s = state[+x.dataset.keep]; s.keep = x.value; s.pick = this.defaults(s.g, s.g.find(e => e.id === x.value)); draw(); });
+      body.querySelectorAll('[data-pick]').forEach(x => x.onchange = () => { const [gi, k] = x.dataset.pick.split(':'); state[+gi].pick[k] = x.value; });
+    };
+    draw();
+    const foot = document.createElement('footer'); m.querySelector('.modal').appendChild(foot);
+    foot.innerHTML = '<button class="btn" data-x>Đóng</button>' + (state.length || fixes.length ? '<button class="btn pri" data-go>Gộp & sửa</button>' : '');
+    foot.querySelector('[data-x]').onclick = () => m.close();
+    const go = foot.querySelector('[data-go]'); if (go) go.onclick = async () => {
+      const sel = state.filter(s => s.on), fx = fixes.length && body.querySelector('#ddfix') && body.querySelector('#ddfix').checked ? fixes : [];
+      if (!sel.length && !fx.length) return;
+      if (!await UI.confirm((sel.length ? 'Gộp ' + sel.length + ' nhóm, xoá ' + U.sum(sel, s => s.g.length - 1) + ' mã trùng' : '') + (sel.length && fx.length ? ' và ' : '') + (fx.length ? 'sửa ' + fx.length + ' ngày vào làm' : '') + '?\nNên tải bản sao lưu ở Cài đặt trước nếu cần.')) return;
+      go.disabled = true;
+      try { const r = await this.apply(sel, fx); m.close(); UI.toast('Đã gộp ' + r.groups + ' nhóm, xoá ' + r.removed + ' mã trùng' + (r.dates ? ', sửa ' + r.dates + ' ngày vào làm' : '') + (r.locked ? '. ' + r.locked + ' dòng trong bảng lương đã khoá vẫn giữ mã cũ' : ''), 9000); App.refresh(); }
+      catch (e) { go.disabled = false; UI.toast(e.message || String(e)); }
+    };
+  },
+  async apply(sel, fixes){
+    // 1. Sửa ngày vào làm lệch 1 ngày
+    fixes.forEach(f => { const e = DB.get('employees', f.id); if (!e) return; e.startDate = f.to; if (e.probation && e.probation.start === f.from) e.probation.start = f.to; });
+    const touched = new Map(); fixes.forEach(f => { const e = DB.get('employees', f.id); if (e) touched.set(e.id, e); });
+    // 2. Gộp
+    const remap = {}, removeIds = [];
+    sel.forEach(s => {
+      const g = s.g.map(e => DB.get('employees', e.id)).filter(Boolean);
+      if (g.length < 2) return;
+      const { k, others } = this.merge(g, s.keep, s.pick);
+      touched.set(k.id, k);
+      others.forEach(o => { remap[o.id] = k.id; removeIds.push(o.id); touched.delete(o.id); });
+    });
+    const list = [...touched.values()].map(e => ['employees', e]);
+    let locked = 0;
+    DB.all('payrolls').forEach(d => {
+      if (!(d.rows || []).some(r => remap[r.empId])) return;
+      if (d.locked){ locked += d.rows.filter(r => remap[r.empId]).length; return; }
+      d.rows.forEach(r => { if (remap[r.empId]){ const k = touched.get(remap[r.empId]); r.empId = remap[r.empId]; if (k) r.code = k.code; } });
+      // 2 dòng cùng 1 người trong 1 tháng: giữ dòng đầu
+      const seen = new Set(); d.rows = d.rows.filter(r => { if (seen.has(r.empId)) return false; seen.add(r.empId); return true; });
+      list.push(['payrolls', d]);
+    });
+    Rec.cands().filter(c => remap[c.employeeId]).forEach(c => { c.employeeId = remap[c.employeeId]; list.push(['candidates', c]); });
+    await DB.saveMany(list);
+    await DB.removeMany(removeIds.map(id => ['employees', id]));
+    return { groups: sel.length, removed: removeIds.length, dates: fixes.length, locked };
   }
 };
 
@@ -2982,8 +3132,9 @@ Upl.planEmps = function(res){
     const o = Upl.get(row, res.map);
     if (!o.fullName){ plan.push({ act: 'skip', n, why: 'Thiếu họ tên' }); return; }
     const dob = Upl.date(o.dob), cccd = String(o.cccd || '').replace(/\D/g, '');
+    const same = pool.filter(x => U.norm(x.fullName) === U.norm(o.fullName) && (!dob || !x.dob || x.dob === dob) && !(cccd && x.cccd && String(x.cccd).replace(/\D/g, '') !== cccd));
     let e = (o.code && pool.find(x => String(x.code).toLowerCase() === String(o.code).toLowerCase())) || (cccd && pool.find(x => String(x.cccd || '').replace(/\D/g, '') === cccd)) ||
-      pool.find(x => U.norm(x.fullName) === U.norm(o.fullName) && (!dob || !x.dob || x.dob === dob) && (!o.dept || U.norm(x.dept) === U.norm(o.dept)));
+      (same.length > 1 && o.dept && same.find(x => U.norm(x.dept) === U.norm(o.dept))) || same[0];
     const isNew = !e;
     e = e ? JSON.parse(JSON.stringify(e)) : { id: U.id(), code: String(o.code || '') || U.nextCode(pool, 'AT', 5), status: 'chinh_thuc', docs: {}, contracts: [], salary: {}, bhxh: {}, tax: { method: 'luy_tien', dependents: 0 }, bank: {}, leave: {} };
     if (isNew) pool.push(e); else pool[pool.findIndex(x => x.id === e.id)] = e;

@@ -117,6 +117,20 @@ Menu **Hệ thống → Tải dữ liệu lên**. Mọi file đều được xem
 - **Cơ cấu tính lương** (menu Nhân sự): lưu riêng 2 cơ cấu – T8/2026 (P1/P2/P3) và T9/2026 (ngày công/giờ) – với bảng so sánh, tháng áp dụng, tham số (công chuẩn, giờ chuẩn, hệ số OT/lễ/ca đêm, số công tối thiểu đóng BHXH, KPCĐ, ngưỡng thuế). Mỗi bảng lương lưu kèm bản sao tham số lúc tạo/nhập, nên sửa cơ cấu không làm đổi tháng đã tính; tháng chưa khoá có nút "Áp dụng tham số hiện hành".
 - **Cơ cấu nhân sự & lương:** số người, quỹ lương, lương bình quân theo khối và cấp bậc; thâm niên; biến động vào/nghỉ 12 tháng.
 
+### Lọc hồ sơ trùng
+
+**Hồ sơ nhân sự → 🔍 Lọc hồ sơ trùng.** Khi có trùng, trang cũng hiện cảnh báo kèm số nhóm.
+
+- **Cách nhận ra hồ sơ trùng:** cùng họ tên (không phân biệt dấu, hoa thường) và không khác ngày sinh hay CCCD; hoặc trùng số CCCD.
+- **Mỗi nhóm giữ 1 mã.** Mặc định giữ mã có trong bảng lương, nhiều thông tin hơn, mã cũ hơn; bấm chọn để đổi.
+- **Thông tin còn thiếu** được lấy từ mã kia: ngày sinh, CCCD, SĐT, hợp đồng, ngân hàng, BHXH, giấy tờ. Sau đó mã kia bị xoá.
+- **Trường ghi khác nhau** (bộ phận, chức danh, trạng thái, ngày vào làm, ngày nghỉ) chọn được giá trị giữ lại. Mặc định:
+  - trạng thái lấy theo bản cập nhật gần nhất;
+  - ngày vào làm lấy ngày khớp ngày bắt đầu hợp đồng.
+- **Bảng lương chưa khoá và ứng viên** đang trỏ tới mã bị xoá được chuyển sang mã giữ lại. Tổng lương không đổi.
+- **Ngày vào làm bị lùi 1 ngày** do lỗi đọc file lương T9 (đã sửa) cũng được đối chiếu lại với file và sửa trong cùng bước này.
+- **Tải danh sách nhân sự lên:** người trùng họ tên được cập nhật vào hồ sơ có sẵn, kể cả khi bộ phận ghi khác, nên không tạo trùng nữa.
+
 ### Sửa và xoá dữ liệu
 
 Mỗi dòng ở các mục đều có nút **Sửa** và **Xoá**: hồ sơ nhân sự, yêu cầu tuyển dụng, ứng viên (bảng và thẻ Kanban – nút ✕), phiếu đánh giá phỏng vấn, kết quả thử việc, hợp đồng, Kho CV, việc định kỳ, dòng bảng lương. Trong cửa sổ chi tiết cũng có nút Xoá. Lưu ý:
