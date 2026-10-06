@@ -97,3 +97,17 @@ Có thể **In / Lưu PDF**, **Tải Excel**, hoặc **Gửi email Giám đốc*
 - Dữ liệu nằm ở trang tính **data** của Google Sheet. Không sửa tay trang tính này.
 - **Cài đặt & dữ liệu → Tải bản sao lưu** định kỳ; lưu file ở nơi riêng tư.
 - Căn cứ pháp lý trong web chỉ để tham khảo nhanh. Trước khi xử lý vụ việc cụ thể, cần đối chiếu văn bản hiện hành.
+
+## Đăng nhập & phân quyền
+
+Web mở cho **mọi tài khoản Google** (máy nào cũng vào được link), nhưng **chỉ người có tài khoản của web mới xem / sửa được dữ liệu**: máy chủ Apps Script kiểm tra đăng nhập ở mọi thao tác.
+
+- **Lần đầu mở web:** tạo tài khoản quản trị bằng **mã khởi tạo** (`SETUP_CODE`, đặt trong file `Setup.gs` riêng của dự án Apps Script – không đưa lên GitHub). Mã chỉ dùng được khi web chưa có tài khoản nào.
+- **Quản trị** vào **Cài đặt & dữ liệu → Tài khoản đăng nhập web** để thêm người dùng, đặt lại mật khẩu, khoá / xoá tài khoản. Vai trò:
+  - **Quản trị:** toàn quyền, quản lý tài khoản.
+  - **Nhân viên HCNS:** xem và sửa dữ liệu.
+  - **Chỉ xem:** xem, in phiếu, xuất Excel; không sửa được (VD Ban Giám đốc).
+- Mỗi người tự **đổi mật khẩu** ở menu bên trái. Sai mật khẩu 5 lần bị chặn 15 phút. Phiên đăng nhập giữ 30 ngày trên mỗi máy; khoá tài khoản hoặc đặt lại mật khẩu thì phiên cũ mất hiệu lực ngay.
+- Tài khoản và mật khẩu (đã mã hoá) lưu trong **Thuộc tính tập lệnh** của dự án Apps Script, không nằm trong Google Sheet.
+- Quên mật khẩu quản trị và không còn quản trị nào khác: chủ dự án vào Apps Script → Cài đặt dự án → Thuộc tính tập lệnh, xoá `APP_USERS`, rồi mở web tạo lại quản trị bằng mã khởi tạo.
+- Quyền truy cập khi triển khai: **Thực thi dưới dạng: Tôi**, **Người có quyền truy cập: Bất kỳ ai có tài khoản Google** (`webapp.access = ANYONE` trong `appsscript.json`).

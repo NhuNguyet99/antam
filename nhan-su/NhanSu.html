@@ -474,7 +474,12 @@ const SEED_LEGAL = [
 const COLLECTIONS = ['settings', 'requisitions', 'candidates', 'evaluations', 'employees', 'payrolls', 'legal_tasks', 'cv_files'];
 const IS_GAS = !!(window.google && google.script && google.script.run);
 const LS_KEY = 'antam_nhansu_v1';
-const gs = (fn, ...args) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(rej)[fn](...args));
+const NO_AUTH = new Set(['authStatus', 'login', 'setupAdmin']);
+const gs = (fn, ...args) => new Promise((res, rej) => google.script.run.withSuccessHandler(res).withFailureHandler(e => {
+  const msg = String((e && e.message) || e);
+  if (/^(Error: )?AUTH:/.test(msg) && !NO_AUTH.has(fn) && typeof Auth !== 'undefined') Auth.expired(msg.replace(/^(Error: )?AUTH:\s*/, ''));
+  rej(new Error(msg.replace(/^(Error: )?(AUTH:\s*)?/, '')));
+})[fn](...(NO_AUTH.has(fn) ? args : [typeof Auth !== 'undefined' ? Auth.token : ''].concat(args))));
 
 const DB = {
   data: {},
@@ -543,7 +548,75 @@ const DB = {
       SEED_LEGAL.forEach(t => list.push(['legal_tasks', Object.assign({ id: U.id(), done: {} }, t)]));
       list.push(['settings', { id: 'seeded_legal', at: U.today() }]);
     }
-    if (list.length) await this.saveMany(list);
+    if (list.length){ try { await this.saveMany(list); } catch (e) { console.warn('seed', e); } }
+  }
+};
+
+/* ---------- Đăng nhập (chỉ bản Google Apps Script) ---------- */
+const Auth = {
+  token: '', user: null, KEY: 'antam_nhansu_token',
+  load(){ try { this.token = localStorage.getItem(this.KEY) || sessionStorage.getItem(this.KEY) || ''; } catch (e) { this.token = this.token || ''; } },
+  store(t){ this.token = t || ''; try { if (t) localStorage.setItem(this.KEY, t); else localStorage.removeItem(this.KEY); } catch (e) { try { if (t) sessionStorage.setItem(this.KEY, t); } catch (e2) {} } },
+  roleName(r){ return { admin: 'Quản trị', hr: 'Nhân viên HCNS', view: 'Chỉ xem' }[r] || r; },
+  canWrite(){ return !IS_GAS || (this.user && this.user.role !== 'view'); },
+  /** Trả về true khi đã đăng nhập hợp lệ; nếu chưa thì hiện màn hình đăng nhập và trả về false */
+  async ensure(){
+    if (!IS_GAS) return true;
+    this.load();
+    if (this.token){ try { this.user = JSON.parse(await gs('whoami')); return true; } catch (e) { this.store(''); } }
+    const st = JSON.parse(await gs('authStatus'));
+    this.screen(st.configured ? 'login' : 'setup');
+    return false;
+  },
+  expired(msg){ if (this._expiring) return; this._expiring = true; this.store(''); this.user = null; UI.toast(msg || 'Phiên đăng nhập hết hạn'); setTimeout(() => location.reload(), 1200); },
+  logout(){ this.store(''); location.reload(); },
+  screen(mode){
+    document.getElementById('side').style.display = 'none';
+    const el = document.getElementById('main');
+    const setup = mode === 'setup';
+    el.innerHTML = '<div style="max-width:420px;margin:8vh auto 0"><div class="card"><h2 style="color:var(--brand)">NHÂN SỰ AN TÂM</h2>' +
+      (setup ? '<p>Lần đầu sử dụng: tạo <b>tài khoản quản trị</b>. Cần <b>mã khởi tạo</b> do người cài đặt cung cấp.</p><label class="f">Mã khởi tạo<input id="a_code" autocomplete="off"></label><label class="f">Họ tên<input id="a_name"></label>' : '<p class="muted">Đăng nhập để xem và quản lý dữ liệu nhân sự.</p>') +
+      '<label class="f">Tên đăng nhập<input id="a_u" autocomplete="username" autocapitalize="none"></label><label class="f">Mật khẩu<input id="a_p" type="password" autocomplete="' + (setup ? 'new-password' : 'current-password') + '"></label>' +
+      (setup ? '<label class="f">Nhập lại mật khẩu<input id="a_p2" type="password" autocomplete="new-password"></label>' : '') +
+      '<div class="toolbar" style="margin-top:6px"><button class="btn pri" id="a_go">' + (setup ? 'Tạo tài khoản & vào web' : 'Đăng nhập') + '</button><span id="a_msg" class="small" style="color:var(--bad)"></span></div>' +
+      (setup ? '' : '<p class="small muted">Chưa có tài khoản hoặc quên mật khẩu: liên hệ người quản trị web để được cấp / đặt lại.</p>') + '</div></div>';
+    const go = async () => {
+      const $ = id => el.querySelector(id), msg = $('#a_msg'), btn = $('#a_go');
+      msg.textContent = ''; btn.disabled = true;
+      try {
+        let r;
+        if (setup){ if ($('#a_p').value !== $('#a_p2').value) throw new Error('Hai lần nhập mật khẩu không khớp'); r = JSON.parse(await gs('setupAdmin', $('#a_code').value, $('#a_u').value, $('#a_name').value, $('#a_p').value)); }
+        else r = JSON.parse(await gs('login', $('#a_u').value, $('#a_p').value));
+        this.store(r.token); location.reload();
+      } catch (e) { msg.textContent = e.message; btn.disabled = false; }
+    };
+    el.querySelector('#a_go').onclick = go;
+    el.querySelectorAll('input').forEach(i => i.addEventListener('keydown', e => { if (e.key === 'Enter') go(); }));
+    setTimeout(() => { const f = el.querySelector(setup ? '#a_code' : '#a_u'); if (f) f.focus(); }, 50);
+  },
+  changePwDialog(){
+    UI.modal('Đổi mật khẩu đăng nhập', '<label class="f">Mật khẩu hiện tại<input type="password" id="c_old" autocomplete="current-password"></label><label class="f">Mật khẩu mới (tối thiểu 6 ký tự)<input type="password" id="c_new" autocomplete="new-password"></label><label class="f">Nhập lại mật khẩu mới<input type="password" id="c_new2" autocomplete="new-password"></label>',
+      [{ t: 'Huỷ' }, { t: 'Đổi mật khẩu', cls: 'pri', fn: async w => { const n = w.querySelector('#c_new').value; if (n !== w.querySelector('#c_new2').value) throw new Error('Hai lần nhập không khớp'); const r = JSON.parse(await gs('changePassword', w.querySelector('#c_old').value, n)); this.store(r.token); UI.toast('Đã đổi mật khẩu'); } }], { size: 'sm' });
+  },
+  /** Quản lý tài khoản (quản trị) – hiển thị trong Cài đặt */
+  async usersCard(box){
+    if (!IS_GAS || !this.user || this.user.role !== 'admin'){ box.innerHTML = ''; return; }
+    let list = [];
+    try { list = JSON.parse(await gs('listUsers')); } catch (e) { box.innerHTML = '<div class="alert bad">' + U.esc(e.message) + '</div>'; return; }
+    box.innerHTML = '<div class="card"><h3>Tài khoản đăng nhập web</h3><p class="small muted">Mỗi người dùng 1 tài khoản. <b>Quản trị</b>: toàn quyền và quản lý tài khoản; <b>Nhân viên HCNS</b>: xem & sửa dữ liệu; <b>Chỉ xem</b>: xem, in, xuất Excel (VD Ban Giám đốc). Mật khẩu lưu mã hoá trong dự án Apps Script, không nằm trong Google Sheet.</p>' +
+      UI.table([{ t: 'Tên đăng nhập', f: u => '<b>' + U.esc(u.u) + '</b>' }, { t: 'Họ tên', f: u => U.esc(u.name) }, { t: 'Vai trò', f: u => UI.tag({ t: this.roleName(u.role), c: u.role === 'admin' ? 'brand' : u.role === 'view' ? '' : 'info' }) }, { t: 'Trạng thái', f: u => u.disabled ? '<span class="tag bad">Đã khoá</span>' : '<span class="tag ok">Hoạt động</span>' },
+        { t: '', f: u => '<button class="btn sm" data-ue="' + U.esc(u.u) + '">Sửa / đặt lại mật khẩu</button>' + (u.u !== this.user.u ? ' <button class="btn sm ghost danger" data-ud="' + U.esc(u.u) + '">Xoá</button>' : '') }], list) +
+      '<div class="toolbar" style="margin-top:10px"><button class="btn pri" id="u_add">+ Thêm tài khoản</button></div></div>';
+    const edit = u => {
+      const isNew = !u; u = u || { u: '', name: '', role: 'hr' };
+      UI.modal(isNew ? 'Thêm tài khoản' : 'Sửa tài khoản ' + u.u, '<div class="form" style="grid-template-columns:1fr 1fr"><label class="f">Tên đăng nhập<input id="e_u" value="' + U.esc(u.u) + '"' + (isNew ? '' : ' disabled') + ' autocapitalize="none"></label><label class="f">Họ tên<input id="e_name" value="' + U.esc(u.name) + '"></label>' +
+        '<label class="f">Vai trò<select id="e_role">' + U.opts([{ v: 'admin', t: 'Quản trị' }, { v: 'hr', t: 'Nhân viên HCNS' }, { v: 'view', t: 'Chỉ xem' }], u.role) + '</select></label><label class="f">' + (isNew ? 'Mật khẩu (tối thiểu 6 ký tự)' : 'Mật khẩu mới (để trống nếu không đổi)') + '<input id="e_pw" type="password" autocomplete="new-password"></label>' +
+        (isNew ? '' : '<label class="f"><input type="checkbox" id="e_dis"' + (u.disabled ? ' checked' : '') + '> Khoá tài khoản</label>') + '</div><p class="small muted">Gửi tên đăng nhập và mật khẩu cho người dùng; họ nên tự đổi mật khẩu sau lần đăng nhập đầu (menu bên trái → Đổi mật khẩu).</p>',
+        [{ t: 'Huỷ' }, { t: 'Lưu', cls: 'pri', fn: async w => { await gs('saveUser', JSON.stringify({ u: w.querySelector('#e_u').value, name: w.querySelector('#e_name').value, role: w.querySelector('#e_role').value, password: w.querySelector('#e_pw').value, disabled: !!(w.querySelector('#e_dis') || {}).checked })); UI.toast('Đã lưu tài khoản'); this.usersCard(box); } }], { size: 'sm' });
+    };
+    box.querySelector('#u_add').onclick = () => edit();
+    box.querySelectorAll('[data-ue]').forEach(b => b.onclick = () => edit(list.find(x => x.u === b.dataset.ue)));
+    box.querySelectorAll('[data-ud]').forEach(b => b.onclick = async () => { if (!await UI.confirm('Xoá tài khoản ' + b.dataset.ud + '?')) return; try { await gs('deleteUser', b.dataset.ud); UI.toast('Đã xoá'); this.usersCard(box); } catch (e) { UI.toast(e.message); } });
   }
 };
 
@@ -676,8 +749,11 @@ const App = {
   },
   renderNav(){
     const issues = Legal.issues().filter(i => i.sev === 'bad').length;
-    document.getElementById('nav').innerHTML = NAV.map(([g, items]) => (g ? '<div class="grp">' + g + '</div>' : '') + items.map(([k, t]) =>
-      '<a class="' + (this.page === k ? 'on' : '') + '" href="#/' + k + '">' + t + (k === 'legal' && issues ? '<span class="cnt">' + issues + '</span>' : '') + '</a>').join('')).join('');
+    const ub = IS_GAS && Auth.user ? '<div style="padding:12px 16px;border-top:1px solid var(--line);margin-top:10px"><div class="b">' + U.esc(Auth.user.name) + '</div><div class="small muted">' + U.esc(Auth.user.u) + ' · ' + Auth.roleName(Auth.user.role) + '</div><div class="toolbar" style="margin:6px 0 0"><button class="btn sm" id="nav_pw">Đổi mật khẩu</button><button class="btn sm" id="nav_out">Đăng xuất</button></div></div>' : '';
+    document.getElementById('nav').innerHTML = (Auth.user && Auth.user.role === 'view' ? '<div class="alert info small" style="margin:8px">Tài khoản chỉ xem – không sửa được dữ liệu</div>' : '') + NAV.map(([g, items]) => (g ? '<div class="grp">' + g + '</div>' : '') + items.map(([k, t]) =>
+      '<a class="' + (this.page === k ? 'on' : '') + '" href="#/' + k + '">' + t + (k === 'legal' && issues ? '<span class="cnt">' + issues + '</span>' : '') + '</a>').join('')).join('') + ub;
+    const pw = document.getElementById('nav_pw'); if (pw) pw.onclick = () => Auth.changePwDialog();
+    const out = document.getElementById('nav_out'); if (out) out.onclick = () => Auth.logout();
   },
   render(){
     this.renderNav();
@@ -2468,6 +2544,7 @@ Pages.settings = {
       '<div class="card"><h3>Tiêu chí phiếu đánh giá</h3><div class="grid g2"><label class="f">Phỏng vấn (mỗi dòng: tên tiêu chí | trọng số %)<textarea name="evalCriteria" style="min-height:150px">' + U.esc(s.evalCriteria.map(c => c.name + ' | ' + c.w).join('\n')) + '</textarea></label><label class="f">Thử việc (mỗi dòng 1 tiêu chí)<textarea name="probCriteria" style="min-height:150px">' + U.esc(s.probCriteria.join('\n')) + '</textarea></label></div></div>' +
       '<div class="toolbar"><button class="btn pri" id="ssave">Lưu cài đặt</button></div>' +
       '<div class="card"><h3>Mật khẩu quản lý lương</h3><p class="small muted">Dùng để mở khoá bảng lương đã khoá. ' + (IS_GAS ? 'Lưu dạng mã hoá trong cài đặt của dự án Apps Script, không nằm trong Google Sheet.' : 'Chế độ trình duyệt: chỉ bảo vệ trên máy này.') + ' Quên mật khẩu: người sở hữu dự án vào Apps Script → Cài đặt dự án → Thuộc tính tập lệnh, xoá dòng PAY_PIN rồi đặt lại.</p><button class="btn" id="spin">Đặt / đổi mật khẩu</button></div>' +
+      '<div id="usersbox"></div>' +
       '<div class="card"><h3>Sao lưu & khôi phục</h3><div class="toolbar"><button class="btn" id="bk">Tải bản sao lưu (.json)</button><div id="rs" style="flex:1"></div>' + (IS_GAS ? '' : '<button class="btn danger" id="wipe">Xoá toàn bộ dữ liệu trên trình duyệt này</button>') + '</div>' +
       '<p class="small muted">Chế độ hiện tại: <b>' + (IS_GAS ? 'Google Apps Script – dữ liệu ở Google Sheet, CV ở Google Drive' : 'trình duyệt (localStorage + IndexedDB)') + '</b>. Bản sao lưu chứa lương, số tài khoản ngân hàng – chỉ lưu ở nơi an toàn, không đưa lên kho mã công khai.</p></div>';
     const drawD = () => { el.querySelector('#sdepts').innerHTML = s.depts.map((d, i) => '<div class="toolbar"><input data-dn="' + i + '" value="' + U.esc(d.name) + '" style="min-width:260px"><select data-dc="' + i + '" style="min-width:0">' + U.opts([{ v: 'sx', t: 'sx – sản xuất' }, { v: 'vp', t: 'vp – văn phòng' }], d.calc) + '</select><label class="small muted">Công thường tối đa (T9+) <input data-dm="' + i + '" type="number" value="' + U.esc(d.maxWork || '') + '" style="width:70px;min-width:0"></label><button class="btn sm ghost danger" data-dx="' + i + '">Xoá</button></div>').join('');
@@ -2506,6 +2583,7 @@ Pages.settings = {
       } catch (e) { box.innerHTML = '<div class="alert bad">' + U.esc(e.message) + '</div>'; }
     });
     el.querySelector('#spin').onclick = () => PayLock.setPinDialog();
+    Auth.usersCard(el.querySelector('#usersbox'));
     el.querySelector('#bk').onclick = () => U.dl('nhan-su-an-tam_sao-luu_' + U.today() + '.json', JSON.stringify({ app: 'nhan-su-an-tam', at: new Date().toISOString(), data: DB.data }, null, 1), 'application/json');
     UI.fileDrop(el.querySelector('#rs'), false, '.json', async files => {
       try {
@@ -2522,8 +2600,9 @@ Pages.settings = {
 /* ---------- Khởi động ---------- */
 (async function init(){
   try {
+    if (!await Auth.ensure()) return;
     await DB.load();
-    await AutoSeed.run();
+    if (Auth.canWrite()) await AutoSeed.run();
     if (!location.hash) history.replaceState(null, '', '#/dashboard');
     App.route();
   } catch (e) {

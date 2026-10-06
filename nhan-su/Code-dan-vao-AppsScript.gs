@@ -61,7 +61,7 @@ function sheet_() {
 }
 
 /** Toàn bộ dữ liệu, dạng {collection: [{id, ...}]} */
-function getAll() {
+function getAll_() {
   const sh = sheet_();
   const out = {};
   COLLECTIONS.forEach(c => out[c] = []);
@@ -81,12 +81,12 @@ function check_(collection, id) {
 }
 
 /** Ghi đè (hoặc thêm mới) một bản ghi */
-function setDoc(collection, id, json) {
-  return setDocs(JSON.stringify([[collection, id, json]]));
+function setDoc_(collection, id, json) {
+  return setDocs_(JSON.stringify([[collection, id, json]]));
 }
 
 /** Ghi nhiều bản ghi trong một lần: json = [[collection, id, jsonString], ...] */
-function setDocs(json) {
+function setDocs_(json) {
   const list = JSON.parse(json);
   list.forEach(x => {
     check_(x[0], String(x[1]));
@@ -113,7 +113,7 @@ function setDocs(json) {
   }
 }
 
-function deleteDoc(collection, id) {
+function deleteDoc_(collection, id) {
   check_(collection, id);
   const lock = LockService.getScriptLock();
   lock.waitLock(20000);
@@ -153,32 +153,32 @@ function checkPin_(pin) {
   cache.remove('pin_fails');
 }
 
-function hasPayrollPin() {
+function hasPayrollPin_() {
   return !!PropertiesService.getScriptProperties().getProperty('PAY_PIN');
 }
 
 /** Đặt / đổi mật khẩu quản lý lương (đổi thì phải nhập đúng mật khẩu cũ) */
-function setPayrollPin(oldPin, newPin) {
+function setPayrollPin_(oldPin, newPin) {
   if (String(newPin || '').length < 6) throw new Error('Mật khẩu tối thiểu 6 ký tự.');
-  if (hasPayrollPin()) checkPin_(oldPin);
+  if (hasPayrollPin_()) checkPin_(oldPin);
   const salt = Utilities.getUuid();
   PropertiesService.getScriptProperties().setProperty('PAY_PIN', salt + ':' + pinHash_(salt, newPin));
   return true;
 }
 
 /** Khoá bảng lương: ghi kèm thời điểm, người khoá; từ đó máy chủ từ chối mọi lệnh sửa / xoá */
-function lockPayroll(month, json) {
-  if (!hasPayrollPin()) throw new Error('Hãy đặt mật khẩu quản lý lương trước khi khoá.');
+function lockPayroll_(month, json, by) {
+  if (!hasPayrollPin_()) throw new Error('Hãy đặt mật khẩu quản lý lương trước khi khoá.');
   const doc = JSON.parse(json);
   doc.locked = true;
   doc.lockedAt = new Date().toISOString();
-  doc.lockedBy = Session.getActiveUser().getEmail() || Session.getEffectiveUser().getEmail() || '';
-  setDocs(JSON.stringify([['payrolls', month, JSON.stringify(doc)]]));
+  doc.lockedBy = by || Session.getActiveUser().getEmail() || '';
+  setDocs_(JSON.stringify([['payrolls', month, JSON.stringify(doc)]]));
   return JSON.stringify(doc);
 }
 
 /** Mở khoá bảng lương – cần mật khẩu quản lý lương */
-function unlockPayroll(month, pin) {
+function unlockPayroll_(month, pin) {
   check_('payrolls', month);
   checkPin_(pin);
   const lock = LockService.getScriptLock();
@@ -216,12 +216,12 @@ function sub_(parent, name) {
   return it.hasNext() ? it.next() : parent.createFolder(name);
 }
 
-function rootFolderUrl() {
+function rootFolderUrl_() {
   return rootFolder_().getUrl();
 }
 
 /** Lưu file (base64) vào thư mục Phòng ban › Vị trí. Trả về {id, url}. */
-function uploadFile(base64, name, mime, dept, position) {
+function uploadFile_(base64, name, mime, dept, position) {
   const folder = sub_(sub_(rootFolder_(), dept), position);
   const blob = Utilities.newBlob(Utilities.base64Decode(base64), mime || 'application/octet-stream', String(name || 'cv').slice(0, 200));
   const file = folder.createFile(blob);
@@ -229,7 +229,7 @@ function uploadFile(base64, name, mime, dept, position) {
 }
 
 /** Chuyển file sang thư mục Phòng ban › Vị trí khác */
-function moveFile(fileId, dept, position) {
+function moveFile_(fileId, dept, position) {
   const file = DriveApp.getFileById(fileId);
   file.moveTo(sub_(sub_(rootFolder_(), dept), position));
   return true;
@@ -237,9 +237,104 @@ function moveFile(fileId, dept, position) {
 
 /* ---------------- Gửi báo cáo cho Giám đốc ---------------- */
 
-function sendReport(to, subject, html) {
+function sendReport_(to, subject, html) {
   if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(String(to || ''))) throw new Error('Email người nhận không hợp lệ');
   const blob = Utilities.newBlob(html, 'text/html', 'Bao-cao-nhan-su.html');
   MailApp.sendEmail({ to: to, subject: String(subject || 'Báo cáo nhân sự'), htmlBody: html, attachments: [blob], name: 'Phòng HCNS – Ẩm Thực An Tâm' });
   return true;
 }
+
+/* ================= ĐĂNG NHẬP & PHÂN QUYỀN =================
+ * Web mở cho "Bất kỳ ai có tài khoản Google" nhưng mọi dữ liệu chỉ đọc / ghi được sau khi đăng nhập tài khoản của web.
+ * Tài khoản, mật khẩu (đã mã hoá) lưu trong Thuộc tính tập lệnh (APP_USERS), không nằm trong Google Sheet.
+ * Vai trò: admin (quản trị, quản lý tài khoản), hr (nhân viên HCNS – xem & sửa), view (chỉ xem – VD Ban Giám đốc).
+ * Tài khoản quản trị đầu tiên tạo bằng mã khởi tạo SETUP_CODE (file Setup.gs riêng trong dự án, hoặc thuộc tính SETUP_CODE).
+ */
+const ROLES = ['admin', 'hr', 'view'];
+function props_() { return PropertiesService.getScriptProperties(); }
+function users_() { try { return JSON.parse(props_().getProperty('APP_USERS') || '[]'); } catch (e) { return []; } }
+function saveUsers_(list) { props_().setProperty('APP_USERS', JSON.stringify(list)); }
+function secret_() { let k = props_().getProperty('APP_SECRET'); if (!k) { k = Utilities.getUuid() + Utilities.getUuid(); props_().setProperty('APP_SECRET', k); } return k; }
+function sign_(payload) { return Utilities.base64EncodeWebSafe(Utilities.computeHmacSha256Signature(payload, secret_())); }
+function pub_(u) { return { u: u.u, name: u.name || u.u, role: u.role }; }
+function makeToken_(u) { const p = [u.u, Date.now() + 30 * 86400000, u.ver || 0].join('|'); return Utilities.base64EncodeWebSafe(p) + '.' + sign_(p); }
+/** Kiểm tra phiên đăng nhập; write = true thì chặn tài khoản chỉ xem */
+function auth_(token, write) {
+  const parts = String(token || '').split('.');
+  if (parts.length !== 2) throw new Error('AUTH: Chưa đăng nhập');
+  let p = '';
+  try { p = Utilities.newBlob(Utilities.base64DecodeWebSafe(parts[0])).getDataAsString(); } catch (e) { throw new Error('AUTH: Phiên đăng nhập không hợp lệ'); }
+  if (sign_(p) !== parts[1]) throw new Error('AUTH: Phiên đăng nhập không hợp lệ');
+  const [u, exp, ver] = p.split('|');
+  if (Date.now() > Number(exp)) throw new Error('AUTH: Phiên đăng nhập đã hết hạn – đăng nhập lại');
+  const user = users_().find(x => x.u === u && !x.disabled);
+  if (!user || String(user.ver || 0) !== String(ver)) throw new Error('AUTH: Tài khoản đã bị khoá hoặc đổi mật khẩu – đăng nhập lại');
+  if (write && user.role === 'view') throw new Error('Tài khoản chỉ xem – không được thay đổi dữ liệu');
+  return user;
+}
+function admin_(token) { const u = auth_(token, true); if (u.role !== 'admin') throw new Error('Chỉ tài khoản quản trị được làm việc này'); return u; }
+function normU_(u) { u = String(u || '').trim().toLowerCase(); if (!/^[a-z0-9._@-]{3,40}$/.test(u)) throw new Error('Tên đăng nhập 3–40 ký tự: chữ không dấu, số, . _ - @'); return u; }
+
+function authStatus() { return JSON.stringify({ configured: users_().length > 0 }); }
+
+function setupAdmin(code, u, name, pw) {
+  if (users_().length) throw new Error('Đã có tài khoản quản trị – hãy đăng nhập');
+  const expect = (typeof SETUP_CODE !== 'undefined' ? SETUP_CODE : '') || props_().getProperty('SETUP_CODE') || '';
+  if (!expect) throw new Error('Dự án chưa có mã khởi tạo (SETUP_CODE)');
+  const cache = CacheService.getScriptCache(), f = Number(cache.get('setup_fails') || 0);
+  if (f >= 5) throw new Error('Nhập sai mã quá 5 lần – thử lại sau 15 phút');
+  if (String(code).trim() !== String(expect)) { cache.put('setup_fails', String(f + 1), 900); throw new Error('Mã khởi tạo không đúng'); }
+  if (String(pw || '').length < 6) throw new Error('Mật khẩu tối thiểu 6 ký tự');
+  const salt = Utilities.getUuid(), user = { u: normU_(u), name: String(name || '').trim() || u, role: 'admin', salt, hash: pinHash_(salt, pw), ver: 0 };
+  saveUsers_([user]);
+  return JSON.stringify({ token: makeToken_(user), user: pub_(user) });
+}
+
+function login(u, pw) {
+  u = String(u || '').trim().toLowerCase();
+  const cache = CacheService.getScriptCache(), key = 'login_fail_' + u, f = Number(cache.get(key) || 0);
+  if (f >= 5) throw new Error('Nhập sai quá 5 lần – thử lại sau 15 phút');
+  const user = users_().find(x => x.u === u && !x.disabled);
+  if (!user || pinHash_(user.salt, pw) !== user.hash) { cache.put(key, String(f + 1), 900); throw new Error('Sai tên đăng nhập hoặc mật khẩu'); }
+  cache.remove(key);
+  return JSON.stringify({ token: makeToken_(user), user: pub_(user) });
+}
+function whoami(t) { return JSON.stringify(pub_(auth_(t))); }
+function changePassword(t, oldPw, newPw) {
+  const me = auth_(t), list = users_(), u = list.find(x => x.u === me.u);
+  if (pinHash_(u.salt, oldPw) !== u.hash) throw new Error('Mật khẩu hiện tại không đúng');
+  if (String(newPw || '').length < 6) throw new Error('Mật khẩu tối thiểu 6 ký tự');
+  u.salt = Utilities.getUuid(); u.hash = pinHash_(u.salt, newPw); u.ver = (u.ver || 0) + 1; saveUsers_(list);
+  return JSON.stringify({ token: makeToken_(u), user: pub_(u) });
+}
+function listUsers(t) { admin_(t); return JSON.stringify(users_().map(u => Object.assign(pub_(u), { disabled: !!u.disabled }))); }
+function saveUser(t, json) {
+  const me = admin_(t), d = JSON.parse(json), list = users_(), id = normU_(d.u);
+  if (ROLES.indexOf(d.role) < 0) throw new Error('Vai trò không hợp lệ');
+  let u = list.find(x => x.u === id);
+  if (!u) { if (String(d.password || '').length < 6) throw new Error('Mật khẩu tối thiểu 6 ký tự'); u = { u: id, ver: 0 }; list.push(u); }
+  u.name = String(d.name || '').trim() || id; u.role = d.role; u.disabled = !!d.disabled;
+  if (d.password) { if (String(d.password).length < 6) throw new Error('Mật khẩu tối thiểu 6 ký tự'); u.salt = Utilities.getUuid(); u.hash = pinHash_(u.salt, d.password); u.ver = (u.ver || 0) + 1; }
+  if (!list.some(x => x.role === 'admin' && !x.disabled)) throw new Error('Phải còn ít nhất 1 tài khoản quản trị');
+  if (u.u === me.u && (u.role !== 'admin' || u.disabled)) throw new Error('Không tự hạ quyền / khoá chính mình');
+  saveUsers_(list); return true;
+}
+function deleteUser(t, id) {
+  const me = admin_(t); if (id === me.u) throw new Error('Không xoá được chính mình');
+  saveUsers_(users_().filter(x => x.u !== id)); return true;
+}
+
+/* -------- Các hàm web gọi: đều phải đăng nhập -------- */
+function getAll(t) { auth_(t); return getAll_(); }
+function setDoc(t, c, id, json) { auth_(t, true); return setDoc_(c, id, json); }
+function setDocs(t, json) { auth_(t, true); return setDocs_(json); }
+function deleteDoc(t, c, id) { auth_(t, true); return deleteDoc_(c, id); }
+function uploadFile(t, b64, name, mime, dept, position) { auth_(t, true); return uploadFile_(b64, name, mime, dept, position); }
+function moveFile(t, id, dept, position) { auth_(t, true); return moveFile_(id, dept, position); }
+function rootFolderUrl(t) { auth_(t); return rootFolderUrl_(); }
+function sendReport(t, to, subject, html) { auth_(t, true); return sendReport_(to, subject, html); }
+function hasPayrollPin(t) { auth_(t); return hasPayrollPin_(); }
+function setPayrollPin(t, oldPin, newPin) { auth_(t, true); return setPayrollPin_(oldPin, newPin); }
+function lockPayroll(t, month, json) { const u = auth_(t, true); return lockPayroll_(month, json, u.name || u.u); }
+function unlockPayroll(t, month, pin) { auth_(t, true); return unlockPayroll_(month, pin); }
+function pendingImports(t) { const u = auth_(t); if (u.role === 'view') return '[]'; return typeof pendingImports_ === 'function' ? pendingImports_() : '[]'; }
