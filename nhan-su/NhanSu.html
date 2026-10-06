@@ -2027,7 +2027,7 @@ const Imp = {
     const H = rows[hdr].map(v => U.norm(v));
     const col = (...names) => { for (const nm of names){ const i = H.findIndex(h => h === nm); if (i >= 0) return i; } for (const nm of names){ const i = H.findIndex(h => h && h.startsWith(nm)); if (i >= 0) return i; } return -1; };
     const C = { code: col('ma nv'), name: col('ho va ten', 'ho ten'), title: col('bo phan / chuc danh & bac', 'bo phan / chuc danh', 'chuc danh'), status: col('trang thai'), std: col('cong chuan'), work: col('cong thuc te'), off: col('nghi (off)', 'nghi'), kp: col('khong phep (kp)', 'khong phep'),
-      agreed: col('luong thoa thuan'), base: col('lcb', 'luong co ban'), allow: col('phu cap trach nhiem', 'phu cap'), p1: col('p1'), p2: col('p2'), p3: col('p3'), extra: col('tra them bhxh'), gross: col('tong thu nhap'), insured: col('luong dong bhxh'), back: col('truy thu bhyt'), deduct: col('giam tru gia canh'), tax: col('thue tncn'), adv: col('tam ung'), net: col('thuc lanh'),
+      agreed: col('luong thoa thuan'), base: col('lcb', 'luong co ban'), allow: col('phu cap trach nhiem', 'phu cap'), p1: col('p1'), p2: col('p2'), p3: col('p3'), extra: col('tra them bhxh'), gross: col('tong thu nhap'), insured: col('luong dong bhxh'), back: col('truy thu bhyt'), deduct: col('giam tru gia canh', 'giam tru ban than', 'giam tru'), tax: col('thue tncn'), adv: col('tam ung'), net: col('thuc lanh'),
       note: col('ghi chu / can cu'), start: col('ngay vao lam'), end: col('ngay nghi viec'), taxNote: col('ghi chu thue/bhxh'), other: col('ghi chu khac') };
     if (C.code < 0 || C.name < 0) throw new Error('Thiếu cột Mã NV / Họ và tên');
     let month = '';
@@ -2042,14 +2042,21 @@ const Imp = {
     });
     const s = DB.settings(), out = [];
     let dept = '';
+    const blocks = rows.slice(hdr + 1).filter(r => r && /^kh[oố]i\s*:/i.test(String(r[0] || ''))).length;
+    const guess = t => { const n = U.norm(t); const has = name => s.depts.some(d => d.name === name) ? name : '';
+      if (/kebab/.test(n)) return has('Kebab'); if (/tacos|tortilla|dong goi/.test(n)) return has('Tacos');
+      if (/giao hang|gh xe|lai xe|nvlx|tai xe/.test(n)) return has('Giao hàng'); if (/bao tri|ky thuat|ngay-ck|dem-bt/.test(n)) return has('Kỹ thuật');
+      if (/giam sat|(^|[^a-z])qc([^a-z]|$)|quan ly xuong|topping|san xuat/.test(n)) return has('Quản lý/Giám sát/QC SX'); return has('Văn phòng'); };
     const v = (r, k) => C[k] >= 0 ? r[C[k]] : null;
     const n = (r, k) => U.num(v(r, k));
     rows.slice(hdr + 1).forEach(r => {
       if (!r) return;
       const first = String(r[0] || '');
       if (/^kh[oố]i\s*:/i.test(first)){ dept = this.deptFromBlock(first); return; }
-      const code = String(v(r, 'code') || '').trim(), name = String(v(r, 'name') || '').trim();
-      if (!code || !name || /tong cong/.test(U.norm(first))) return;
+      let code = String(v(r, 'code') || '').trim();
+      const name = String(v(r, 'name') || '').trim();
+      if (!name || /tong cong/.test(U.norm(first)) || /^(tong|cong)/.test(U.norm(name))) return;
+      if (!code){ const ex = Emp.all().find(e => U.norm(e.fullName) === U.norm(name)); code = ex ? ex.code : ''; }
       const tt = String(v(r, 'title') || ''), parts = tt.split(/\s+[—–-]\s+/);
       const note = String(v(r, 'note') || '');
       const endRaw = v(r, 'end'), endIso = U.parseAnyDate(endRaw);
@@ -2059,14 +2066,17 @@ const Imp = {
       const status = /nghi viec/.test(stRaw) || endDate ? 'nghi_viec' : /con thu viec/.test(U.norm(note)) ? 'thu_viec' : 'chinh_thuc';
       const deduct = n(r, 'deduct'), insured = n(r, 'insured');
       out.push({
-        code, name, dept, title: parts[0].trim(), grade: (parts[1] || '').trim(), status, startDate: U.parseAnyDate(v(r, 'start')), endDate, leaveNote,
-        calc: (s.depts.find(d => d.name === dept) || {}).calc || 'vp',
+        code, name, dept: blocks >= 2 ? dept : (guess(tt) || dept || 'Văn phòng'), title: parts[0].trim(), grade: (parts[1] || '').trim(), status, startDate: U.parseAnyDate(v(r, 'start')), endDate, leaveNote,
+        calc: '',
         std: n(r, 'std') || s.stdDays, work: n(r, 'work'), off: n(r, 'off'), kp: n(r, 'kp'), agreed: n(r, 'agreed'), base: n(r, 'base'), allowance: n(r, 'allow'),
         p1: n(r, 'p1'), p2: n(r, 'p2'), p3: n(r, 'p3'), extra: n(r, 'extra'), gross: n(r, 'gross'), insured, back: n(r, 'back'), deduct, tax: n(r, 'tax'), advance: n(r, 'adv'), net: n(r, 'net'),
         method: deduct > 0 ? 'luy_tien' : 'flat10', deps: deduct > s.selfDeduct ? Math.round((deduct - s.selfDeduct) / s.depDeduct) : 0,
         note: note.slice(0, 1500), taxNote: String(v(r, 'taxNote') || ''), otherNote: String(v(r, 'other') || ''), bank: bank[code] || null
       });
     });
+    out.forEach(x => { x.calc = (s.depts.find(d => d.name === x.dept) || {}).calc || 'vp'; });
+    let nextNo = Math.max(0, ...Emp.all().concat(out).map(x => +((/^AT(\d+)$/.exec(x.code || '') || [])[1] || 0)));
+    out.forEach(x => { if (!x.code) { x.code = 'AT' + String(++nextNo).padStart(5, '0'); x.newCode = true; } });
     return { sheet: ws, month, rows: out };
   },
   async apply(res, opt){
@@ -2157,7 +2167,7 @@ Pages.settings = {
         const exist = new Set(Emp.all().map(e => e.code));
         const byD = U.groupBy(res.rows, r => r.dept);
         box.innerHTML = '<div class="alert info">Sheet <b>' + U.esc(res.sheet) + '</b> – ' + (res.month ? U.ymLabel(res.month) : 'không xác định tháng') + ': <b>' + res.rows.length + '</b> nhân viên (' + res.rows.filter(r => !exist.has(r.code)).length + ' mới, ' + res.rows.filter(r => exist.has(r.code)).length + ' cập nhật). ' + [...byD.entries()].map(([k, v]) => U.esc(k) + ': ' + v.length).join(' · ') + '</div>' +
-          UI.table([{ t: 'Mã', f: r => U.esc(r.code) }, { t: 'Họ tên', f: r => U.esc(r.name) }, { t: 'Khối', f: r => U.esc(r.dept) }, { t: 'Chức danh', f: r => U.esc(r.title) }, { t: 'Trạng thái', f: r => UI.tag(empStatusOf(r.status)) }, { t: 'Vào làm', f: r => U.fd(r.startDate) }, { t: 'Lương TT', n: 1, f: r => U.money(r.agreed) }, { t: 'BHXH', f: r => r.insured ? U.money(r.insured) : '' }, { t: 'Thực lãnh', n: 1, f: r => U.money(r.net) }], res.rows, { maxH: 360 }) +
+          UI.table([{ t: 'Mã', f: r => U.esc(r.code) + (r.newCode ? ' <span class="tag warn">mã mới</span>' : '') }, { t: 'Họ tên', f: r => U.esc(r.name) }, { t: 'Khối', f: r => U.esc(r.dept) }, { t: 'Chức danh', f: r => U.esc(r.title) }, { t: 'Trạng thái', f: r => UI.tag(empStatusOf(r.status)) }, { t: 'Vào làm', f: r => U.fd(r.startDate) }, { t: 'Lương TT', n: 1, f: r => U.money(r.agreed) }, { t: 'BHXH', f: r => r.insured ? U.money(r.insured) : '' }, { t: 'Thực lãnh', n: 1, f: r => U.money(r.net) }], res.rows, { maxH: 360 }) +
           '<div class="toolbar" style="margin-top:10px"><label><input type="checkbox" id="impst"> Ghi đè trạng thái/ngày nghỉ của nhân viên đã có</label><span class="grow"></span><button class="btn pri" id="impgo">Nhập ' + res.rows.length + ' nhân viên' + (res.month ? ' + bảng lương ' + U.ymLabel(res.month) : '') + '</button></div>';
         box.querySelector('#impgo').onclick = async () => {
           const r = await Imp.apply(res, { overwriteStatus: box.querySelector('#impst').checked });
