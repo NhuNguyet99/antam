@@ -18,7 +18,7 @@ Chạy trên Google Apps Script giống web Quản trị / web Kho: dữ liệu 
 4. Bấm **+** cạnh "Tệp" → **HTML** → đặt tên đúng là `NhanSu` (không gõ .html). Xoá nội dung mẫu, dán toàn bộ `NhanSu.html`. Bấm lưu (Ctrl+S), đặt tên dự án "Nhân sự An Tâm".
 5. **Triển khai → Tuỳ chọn triển khai mới → Ứng dụng web**
    - Thực thi dưới dạng: **Tôi**
-   - Người có quyền truy cập: **Chỉ mình tôi**, hoặc "Bất kỳ ai có tài khoản Google" nếu cần chia sẻ – khi đó chỉ gửi link cho người được phép xem lương.
+   - Người có quyền truy cập: **Bất kỳ ai** – máy khác mở được ngay, không phải đăng nhập Google. Dữ liệu vẫn được bảo vệ bằng tài khoản đăng nhập riêng của web (mục "Đăng nhập & phân quyền").
 6. Cấp quyền (Google hỏi quyền Sheet, Drive, Gmail để lưu dữ liệu, lưu CV, gửi báo cáo) → nếu hiện "Google chưa xác minh ứng dụng này": **Nâng cao → Đi tới Nhân sự An Tâm → Cho phép**.
 7. Sao chép **URL ứng dụng web** (…/exec). Đó là link web nhân sự.
 
@@ -110,4 +110,7 @@ Web mở cho **mọi tài khoản Google** (máy nào cũng vào được link),
 - Mỗi người tự **đổi mật khẩu** ở menu bên trái. Sai mật khẩu 5 lần bị chặn 15 phút. Phiên đăng nhập giữ 30 ngày trên mỗi máy; khoá tài khoản hoặc đặt lại mật khẩu thì phiên cũ mất hiệu lực ngay.
 - Tài khoản và mật khẩu (đã mã hoá) lưu trong **Thuộc tính tập lệnh** của dự án Apps Script, không nằm trong Google Sheet.
 - Quên mật khẩu quản trị và không còn quản trị nào khác: chủ dự án vào Apps Script → Cài đặt dự án → Thuộc tính tập lệnh, xoá `APP_USERS`, rồi mở web tạo lại quản trị bằng mã khởi tạo.
-- Quyền truy cập khi triển khai: **Thực thi dưới dạng: Tôi**, **Người có quyền truy cập: Bất kỳ ai có tài khoản Google** (`webapp.access = ANYONE` trong `appsscript.json`).
+- Quyền truy cập khi triển khai: **Thực thi dưới dạng: Tôi**, **Người có quyền truy cập: Bất kỳ ai** (`webapp.access = ANYONE_ANONYMOUS` trong `appsscript.json`).
+  - Không chọn "Chỉ mình tôi": máy khác sẽ bị chặn.
+  - Không nên chọn "Bất kỳ ai có tài khoản Google": trình duyệt đăng nhập nhiều tài khoản Google hay báo "Rất tiếc, không thể mở tệp vào lúc này", máy chưa đăng nhập Google phải đăng nhập trước.
+- Máy khác vẫn không vào được: mở bằng cửa sổ ẩn danh hoặc Ctrl+F5; kiểm tra link đúng đuôi `/exec` (link `/dev` chỉ chủ dự án mở được).
