@@ -781,7 +781,7 @@ const NAV = [
   ['Tuyển dụng', [['reqs', 'Yêu cầu tuyển dụng'], ['screen', 'Lọc CV theo MTCV'], ['cands', 'Ứng viên & giai đoạn'], ['interviews', 'Lịch PV & phiếu đánh giá'], ['probation', 'Theo dõi thử việc'], ['cvstore', 'Kho CV']]],
   ['Nhân sự', [['emps', 'Hồ sơ nhân sự'], ['contracts', 'Hợp đồng & thời hạn'], ['legal', 'Tuân thủ pháp luật'], ['payroll', 'Chấm công & bảng lương'], ['paystruct', 'Cơ cấu tính lương'], ['structure', 'Cơ cấu nhân sự & lương']]],
   ['Báo cáo', [['report', 'Báo cáo Giám đốc']]],
-  ['Hệ thống', [['settings', 'Cài đặt & dữ liệu']]]
+  ['Hệ thống', [['upload', 'Tải dữ liệu lên'], ['settings', 'Cài đặt & dữ liệu']]]
 ];
 const App = {
   page: 'dashboard', params: {},
@@ -1039,6 +1039,10 @@ Pages.screen = {
       '<label class="small muted">Trình độ <select id="sedu" style="min-width:0">' + U.opts(EDU, c.edu) + '</select></label>' +
       (r ? '<button class="btn pri" id="ssavecrit">Lưu tiêu chí vào ' + U.esc(r.code) + '</button>' : '') + '</div>' +
       '<p class="small muted" style="margin:6px 0 0">Điểm = 45% từ khoá bắt buộc + 15% từ khoá ưu tiên + 20% số năm kinh nghiệm + 10% trình độ + 10% độ tương đồng nội dung với MTCV. Giới tính / độ tuổi KHÔNG được tính điểm (Điều 8 BLLĐ cấm phân biệt đối xử).</p></div>' +
+      (() => { const em = EmailCV.pending(); return '<div class="card"><div class="toolbar"><h3 style="margin:0">📧 CV nhận qua email</h3><span class="grow"></span>' + (IS_GAS && Auth.canWrite() ? '<button class="btn" id="semail">Lấy CV mới từ email</button>' : '') +
+        (em.length ? '<button class="btn pri" id="semadd">Chấm điểm ' + em.length + ' CV email chưa gắn vị trí theo MTCV này</button>' : '') + '</div>' +
+        '<p class="small muted" style="margin:6px 0 0">Ứng viên gửi CV về email công ty → tự lưu vào Google Sheet "An Tâm – CV nhận qua email" → web tự tạo ứng viên (nguồn "Email"), đoán vị trí theo tiêu đề thư và chấm điểm. CV chưa đoán được vị trí: chọn yêu cầu ở trên rồi bấm chấm điểm, sau đó <b>Gắn vào yêu cầu</b>. ' +
+        (em.length ? '<b>' + em.length + '</b> CV đang chờ gắn vị trí.' : 'Không có CV email nào đang chờ.') + '</p></div>'; })() +
       '<div class="card"><h3>Tải CV ứng viên lên để chấm điểm</h3><div id="scvs"></div><p class="small muted">Hỗ trợ PDF có chữ, Word (.docx), .txt. CV dạng ảnh chụp / PDF scan không đọc được chữ – vẫn lưu được và đánh giá thủ công.</p></div>' +
       '<div class="card"><div class="toolbar"><h3 style="margin:0">Kết quả xếp hạng (' + Screen.items.length + ' CV)</h3><span class="grow"></span>' +
       (Screen.items.length ? '<label class="small muted">Lưu tất cả CV từ <input id="sthr" type="number" value="60" style="width:70px;min-width:0"> điểm</label><button class="btn pri" id="ssaveall">Lưu thành ứng viên</button><button class="btn" id="sclear">Xoá danh sách</button>' : '') + '</div><div id="sres"></div></div>';
@@ -1060,13 +1064,16 @@ Pages.screen = {
       list.forEach(x => { const s = Screen.score(x.cvText || '', c); if (s){ x.score = s.total; x.scoreDetail = { mHit: s.mHit, mMiss: s.mMiss, nHit: s.nHit }; n++; } });
       await DB.saveMany(list.map(x => ['candidates', x])); UI.toast('Đã chấm lại ' + n + '/' + list.length + ' ứng viên có nội dung CV'); App.go('cands', { req: r.id });
     };
+    const sem = el.querySelector('#semail'); if (sem) sem.onclick = async () => { sem.disabled = true; sem.textContent = 'Đang lấy…'; await EmailCV.sync(true); reload(); };
+    const sea = el.querySelector('#semadd'); if (sea) sea.onclick = () => { Screen.addEmailCands(EmailCV.pending()); reload(); };
     UI.fileDrop(el.querySelector('#scvs'), true, '.pdf,.docx,.txt,.doc,.jpg,.jpeg,.png', files => this.addFiles(files, el));
     const sa = el.querySelector('#ssaveall'); if (sa) sa.onclick = async () => {
       const thr = +el.querySelector('#sthr').value || 0;
       const pick = Screen.items.filter(it => !it.saved && it.s && it.s.total >= thr);
       if (!pick.length){ UI.toast('Không có CV nào đạt từ ' + thr + ' điểm'); return; }
       if (!await UI.confirm('Lưu ' + pick.length + ' CV thành ứng viên (giai đoạn "Đạt sàng lọc")?')) return;
-      for (const it of pick) await this.saveItem(it, 'sang_loc');
+      if (pick.some(it => it.candId) && !r){ UI.toast('Chọn yêu cầu tuyển dụng để gắn CV từ email'); return; }
+      for (const it of pick) { if (it.candId) await Screen.linkItem(it, 'sang_loc'); else await this.saveItem(it, 'sang_loc'); }
       UI.toast('Đã lưu ' + pick.length + ' ứng viên'); reload();
     };
     const cl = el.querySelector('#sclear'); if (cl) cl.onclick = () => { Screen.items = []; reload(); };
@@ -1087,15 +1094,17 @@ Pages.screen = {
     const items = Screen.items.slice().sort((a, b) => (b.s ? b.s.total : -1) - (a.s ? a.s.total : -1));
     box.innerHTML = UI.table([
       { t: '#', f: it => items.indexOf(it) + 1 },
-      { t: 'CV / Ứng viên', f: it => '<b>' + U.esc(it.info.fullName || '') + '</b><div class="small muted">' + U.esc(it.file.name) + '</div><div class="small">' + U.esc([it.info.phone, it.info.email].filter(Boolean).join(' · ')) + '</div>' + (it.dup ? '<span class="tag warn">Trùng ứng viên đã có</span>' : '') },
+      { t: 'CV / Ứng viên', f: it => (it.candId ? '<span class="tag info">📧 email</span> ' : '') + '<b>' + U.esc(it.info.fullName || '') + '</b><div class="small muted">' + U.esc(it.file.name) + '</div><div class="small">' + U.esc([it.info.phone, it.info.email].filter(Boolean).join(' · ')) + '</div>' + (it.dup ? '<span class="tag warn">Trùng ứng viên đã có</span>' : '') },
       { t: 'Điểm', n: 1, f: it => it.s ? '<span class="score ' + Rec.scoreCls(it.s.total) + '">' + it.s.total + '</span>' + UI.bar(it.s.total, it.s.total >= 70 ? 'ok' : it.s.total >= 50 ? 'warn' : '') : '<span class="tag">Không đọc được chữ</span>' },
       { t: 'KN / Trình độ', f: it => (it.s ? it.s.years + ' năm' : '—') + '<div class="small muted">' + (EDU.find(e => e.v === it.info.edu) || EDU[0]).t + '</div>' },
       { t: 'Đáp ứng bắt buộc', f: it => it.s ? it.s.mHit.map(k => '<span class="chip ok">' + U.esc(k) + '</span>').join('') + it.s.mMiss.map(k => '<span class="chip bad">thiếu: ' + U.esc(k) + '</span>').join('') : '' },
       { t: 'Ưu tiên có', f: it => it.s ? it.s.nHit.map(k => '<span class="chip">' + U.esc(k) + '</span>').join('') : '' },
-      { t: '', f: it => it.saved ? '<a href="javascript:void 0" data-cand="' + it.saved + '">Đã lưu ✓</a>' : '<button class="btn sm pri" data-save="' + it.id + '">Lưu ứng viên</button> <button class="btn sm" data-view="' + it.id + '">Xem</button> <button class="btn sm ghost" data-drop="' + it.id + '">Bỏ</button>' }
+      { t: '', f: it => it.saved ? '<a href="javascript:void 0" data-cand="' + it.saved + '">Đã lưu ✓</a>' : '<button class="btn sm pri" data-save="' + it.id + '">' + (it.candId ? 'Gắn vào yêu cầu' : 'Lưu ứng viên') + '</button> <button class="btn sm" data-view="' + it.id + '">Xem</button> <button class="btn sm ghost" data-drop="' + it.id + '">Bỏ</button>' }
     ], items, { empty: 'Chưa có CV nào. Chọn yêu cầu tuyển dụng rồi tải CV lên.' });
-    box.querySelectorAll('[data-save]').forEach(b => b.onclick = () => { const it = Screen.items.find(x => x.id === b.dataset.save); Cand.edit(null, { fromScreen: it }); });
-    box.querySelectorAll('[data-view]').forEach(b => b.onclick = () => { const it = Screen.items.find(x => x.id === b.dataset.view); UI.modal(it.file.name, '<pre style="white-space:pre-wrap;font:13px/1.5 inherit">' + U.esc(it.text || '(không có chữ)') + '</pre>', [{ t: 'Mở file gốc', fn: () => { window.open(URL.createObjectURL(it.file), '_blank'); return false; } }, { t: 'Đóng' }]); });
+    box.querySelectorAll('[data-save]').forEach(b => b.onclick = async () => { const it = Screen.items.find(x => x.id === b.dataset.save);
+      if (!it.candId){ Cand.edit(null, { fromScreen: it }); return; }
+      b.disabled = true; try { const c = await Screen.linkItem(it, 'sang_loc'); UI.toast('Đã gắn ' + c.fullName + ' vào ' + DB.get('requisitions', c.reqId).code); this.renderResults(el); } catch (e) { UI.toast(e.message); b.disabled = false; } });
+    box.querySelectorAll('[data-view]').forEach(b => b.onclick = () => { const it = Screen.items.find(x => x.id === b.dataset.view); UI.modal(it.file.name, '<pre style="white-space:pre-wrap;font:13px/1.5 inherit">' + U.esc(it.text || '(không có chữ)') + '</pre>', [{ t: 'Mở file gốc', fn: () => { if (it.candId){ const c = DB.get('candidates', it.candId); Files.open(c && c.cvFile && DB.get('cv_files', c.cvFile.id)); } else window.open(URL.createObjectURL(it.file), '_blank'); return false; } }, { t: 'Đóng' }]); });
     box.querySelectorAll('[data-drop]').forEach(b => b.onclick = () => { Screen.items = Screen.items.filter(x => x.id !== b.dataset.drop); this.renderResults(el); });
     box.querySelectorAll('[data-cand]').forEach(a => a.onclick = () => Cand.edit(DB.get('candidates', a.dataset.cand)));
   },
@@ -1112,6 +1121,90 @@ Pages.screen = {
   }
 };
 Screen.rescoreItems = function(){ this.items.forEach(it => it.s = this.score(it.text, this.crit)); };
+/** Đưa CV đã nhận qua email (ứng viên chưa gắn yêu cầu) vào danh sách chấm điểm theo MTCV đang chọn */
+Screen.addEmailCands = function(list){
+  const have = new Set(this.items.map(it => it.candId).filter(Boolean));
+  list.filter(c => !have.has(c.id)).forEach(c => this.items.push({ id: U.id(), candId: c.id, file: { name: (c.cvFile && c.cvFile.name) || c.fullName }, text: c.cvText || '', info: Object.assign({}, c), s: this.score(c.cvText || '', this.crit), dup: '' }));
+};
+/** Gắn ứng viên (CV từ email) vào yêu cầu đang lọc: cập nhật vị trí, điểm, chuyển file CV sang thư mục vị trí */
+Screen.linkItem = async function(it, stage){
+  const r = DB.get('requisitions', this.reqId), c = DB.get('candidates', it.candId);
+  if (!r) throw new Error('Chọn yêu cầu tuyển dụng trước khi gắn CV');
+  if (!c) throw new Error('Ứng viên không còn trong dữ liệu');
+  Object.assign(c, { reqId: r.id, dept: r.dept, position: r.position });
+  if (it.s){ c.score = it.s.total; c.scoreDetail = { mHit: it.s.mHit, mMiss: it.s.mMiss, nHit: it.s.nHit }; }
+  Cand.pushStage(c, stage || 'sang_loc', 'Gắn vào ' + r.code + ' – ' + (it.s ? it.s.total + ' điểm' : 'chưa chấm'));
+  for (const f of DB.all('cv_files').filter(f => f.candidateId === c.id)) await Files.move(f, r.dept, r.position);
+  await DB.save('candidates', c);
+  await Rec.syncReq(r.id);
+  it.saved = c.id;
+  return c;
+};
+
+/* ---------- CV nhận qua email: Gmail → Google Sheet "An Tâm – CV nhận qua email" → web ---------- */
+const EmailCV = {
+  busy: false, last: null,
+  /** Đoán yêu cầu tuyển dụng từ tiêu đề thư / tên file (VD "Ứng tuyển Nhân viên QC") */
+  guessReq(text){
+    const t = ' ' + U.norm(text) + ' ';
+    let best = null, bl = 0;
+    Rec.reqs().filter(r => !['huy', 'da_du'].includes(r.status)).forEach(r => {
+      const p = U.norm(r.position), core = p.replace(/^(nhan vien|nv|chuyen vien|cong nhan|tho)\s+/, '');
+      [p, core].forEach(k => { if (k.length >= 2 && k.length > bl && new RegExp('[^a-z0-9]' + k.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '[^a-z0-9]').test(t)){ best = r; bl = k.length; } });
+    });
+    return best;
+  },
+  async fileText(fileId, name){
+    const o = JSON.parse(await gs('fileB64', fileId));
+    const bin = atob(o.b64), buf = new Uint8Array(bin.length);
+    for (let i = 0; i < bin.length; i++) buf[i] = bin.charCodeAt(i);
+    return TextX.fromFile(new File([buf], name || o.name, { type: o.mime }));
+  },
+  async importOne(it){
+    const req = this.guessReq([it.subject, it.fileName, String(it.body || '').slice(0, 400)].join(' '));
+    const dept = req ? req.dept : 'Chưa phân loại', pos = req ? req.position : 'CV qua email';
+    const files = [{ id: it.fileId, name: it.fileName, url: it.url }].concat(it.others || []);
+    for (const f of files) await gs('moveFile', f.id, dept, pos);
+    let text = '';
+    try { text = await this.fileText(it.fileId, it.fileName); } catch (e) { console.warn('Không đọc được CV', it.fileName, e); }
+    const info = Screen.info(text, it.fileName);
+    const cid = U.id(), at = it.at && !isNaN(Date.parse(it.at)) ? new Date(it.at).toISOString() : new Date().toISOString();
+    const c = Object.assign({ id: cid, code: U.nextCode(Rec.cands(), 'UV-', 4), reqId: req ? req.id : '', dept: req ? req.dept : '', position: req ? req.position : '', source: 'Email', receivedDate: at.slice(0, 10), stage: 'moi', history: [], emailFrom: it.fromEmail, emailSubject: it.subject }, Cand.fromInfo(info));
+    if (!c.fullName || !text) c.fullName = (it.fromName && !/@/.test(it.fromName) ? it.fromName : '') || c.fullName || it.fromEmail; // CV ảnh / scan: lấy tên người gửi
+    if (!c.email) c.email = it.fromEmail;
+    const s = req && text ? Screen.score(text, Screen.critFromReq(req)) : null;
+    Cand.applyScore(c, { text, s });
+    const dup = Rec.cands().find(x => (c.phone && x.phone === c.phone) || (c.email && x.email && x.email.toLowerCase() === c.email.toLowerCase()));
+    if (dup) c.note = 'Có thể trùng ứng viên ' + dup.code + ' – ' + dup.fullName;
+    const recs = files.map((f, i) => ({ id: U.id(), name: f.name, size: 0, mime: '', dept, position: pos, candidateId: cid, uploadedAt: at, driveId: f.id, url: f.url || 'https://drive.google.com/file/d/' + f.id + '/view', source: 'email' }));
+    c.cvFile = { id: recs[0].id, name: recs[0].name };
+    Cand.pushStage(c, 'moi', 'Nhận CV qua email' + (it.subject ? ': ' + it.subject : '') + (s ? ' – ' + s.total + ' điểm' : ''));
+    await DB.saveMany(recs.map(r => ['cv_files', r]).concat([['candidates', c]]));
+    await gs('emailMarkImported', JSON.stringify([{ row: it.row, msgId: it.msgId, status: 'Đã đưa lên web ' + U.fd(U.today()), pos: req ? Rec.reqLabel(req) : 'Chưa gắn vị trí – lọc ở trang "Lọc CV theo MTCV"', code: c.code }]));
+    return c;
+  },
+  /** Lấy CV mới từ Google Sheet; manual = bấm nút (báo cả khi không có gì) */
+  async sync(manual){
+    if (!IS_GAS || !Auth.canWrite() || this.busy) return 0;
+    this.busy = true;
+    let n = 0, err = 0;
+    try {
+      const list = JSON.parse(await gs('emailInbox') || '[]');
+      for (const it of list){
+        try { await this.importOne(it); n++; }
+        catch (e) { err++; try { await gs('emailMarkImported', JSON.stringify([{ row: it.row, msgId: it.msgId, status: 'Lỗi: ' + (e.message || e) + ' – xoá ô này để thử lại' }])); } catch (e2) { /* bỏ qua */ } }
+      }
+      this.last = new Date();
+      if (n){
+        UI.toast('📧 Đã nhận ' + n + ' CV mới qua email' + (err ? ' (' + err + ' lỗi)' : ''), 7000);
+        if (!document.querySelector('.modal-bg') && ['dashboard', 'cands', 'screen', 'cvstore', 'reqs'].includes(App.page)) App.refresh();
+      } else if (manual) UI.toast(err ? err + ' CV bị lỗi – xem cột "Trạng thái trên web" trong Google Sheet' : 'Không có CV mới trong email');
+    } catch (e) { if (manual) UI.toast('Không lấy được CV từ email: ' + (e.message || e), 7000); }
+    finally { this.busy = false; }
+    return n;
+  },
+  pending(){ return Rec.cands().filter(c => c.source === 'Email' && !c.reqId && !STAGES_OUT.some(s => s.v === c.stage)); }
+};
 
 /* ---------- Ứng viên ---------- */
 const Cand = {
@@ -1275,7 +1368,7 @@ Pages.cands = {
       '<select id="creq">' + U.opts(reqOpts, p.req, 'Tất cả yêu cầu') + '</select>' +
       '<select id="cdept">' + U.opts(Rec.depts(), p.dept, 'Tất cả phòng ban') + '</select>' +
       (view === 'table' ? '<select id="cstage">' + U.opts(ALL_STAGES.map(s => ({ v: s.v, t: s.t })), p.stage, 'Tất cả giai đoạn') + '</select>' : '') +
-      '<span class="grow"></span><button class="btn danger" id="cbulk" hidden></button><button class="btn" id="cview">' + (view === 'kanban' ? 'Xem dạng bảng' : 'Xem dạng bảng Kanban') + '</button><button class="btn" id="cxls">Tải Excel</button><button class="btn pri" id="cadd">+ Thêm ứng viên</button></div><div id="cbody"></div>';
+      '<span class="grow"></span><button class="btn danger" id="cbulk" hidden></button><button class="btn" id="cview">' + (view === 'kanban' ? 'Xem dạng bảng' : 'Xem dạng bảng Kanban') + '</button><button class="btn" id="cxls">Tải Excel</button>' + (IS_GAS && Auth.canWrite() ? '<button class="btn" id="cmail">📧 Lấy CV từ email</button>' : '') + '<button class="btn pri" id="cadd">+ Thêm ứng viên</button></div><div id="cbody"></div>';
     const set = (k, v) => App.go('cands', Object.assign({}, p, { [k]: v }));
     el.querySelector('#cq').onchange = e => set('q', e.target.value);
     el.querySelector('#creq').onchange = e => set('req', e.target.value);
@@ -1284,6 +1377,7 @@ Pages.cands = {
     el.querySelector('#cview').onclick = () => { const v = view === 'kanban' ? 'table' : 'kanban'; try { localStorage.setItem('antam_cand_view', v); } catch (e) {} set('view', v); };
     el.querySelector('#cadd').onclick = () => Cand.edit(null, { reqId: p.req });
     el.querySelector('#cxls').onclick = () => Xls.candidates(list);
+    const cm = el.querySelector('#cmail'); if (cm) cm.onclick = async () => { cm.disabled = true; cm.textContent = 'Đang lấy…'; await EmailCV.sync(true); App.refresh(); };
     const body = el.querySelector('#cbody');
     if (view === 'kanban'){
       const cols = STAGES.map(s => [s, list.filter(c => c.stage === s.v)]).concat([[{ v: 'out', t: 'Loại / dừng' }, list.filter(c => STAGES_OUT.find(s => s.v === c.stage))]]);
@@ -1499,24 +1593,7 @@ Pages.cvstore = {
       const f = DB.get('cv_files', b.dataset.mv);
       UI.modal('Phân loại lại CV', '<div class="form"><label class="f">Phòng ban<select name="dept">' + U.opts(Rec.depts(), f.dept) + '</select></label><label class="f two">Vị trí<input name="position" list="kpl" value="' + U.esc(f.position) + '"><datalist id="kpl">' + [...new Set(Rec.reqs().map(r => r.position))].map(x => '<option value="' + U.esc(x) + '">').join('') + '</datalist></label></div>', [{ t: 'Huỷ' }, { t: 'Lưu', cls: 'pri', fn: async w => { const d = U.formData(w); await Files.move(f, d.dept, d.position); App.refresh(); } }], { size: 'sm' });
     });
-    el.querySelector('#kup').onclick = () => {
-      const m = UI.modal('Lưu CV vào kho', '<div class="form"><label class="f">Phòng ban<select name="dept">' + U.opts(Rec.depts()) + '</select></label><label class="f two">Vị trí<input name="position" list="kpl2"><datalist id="kpl2">' + [...new Set(Rec.reqs().map(r => r.position))].map(x => '<option value="' + U.esc(x) + '">').join('') + '</datalist></label></div><label><input type="checkbox" name="mk" checked> Tạo luôn ứng viên (giai đoạn "Mới nhận CV") cho mỗi file</label><div id="kdrop" style="margin-top:10px"></div><div id="klog" class="small"></div>', [{ t: 'Đóng', fn: () => App.refresh() }], { sticky: true });
-      UI.fileDrop(m.querySelector('#kdrop'), true, '.pdf,.docx,.doc,.txt,.jpg,.jpeg,.png', async fs => {
-        const d = U.formData(m); if (!d.position){ UI.toast('Nhập vị trí trước'); return; }
-        const req = Rec.reqs().find(r => r.position === d.position && r.dept === d.dept);
-        for (const file of fs){
-          m.querySelector('#klog').insertAdjacentHTML('beforeend', '<div>Đang lưu ' + U.esc(file.name) + '…</div>');
-          if (d.mk){
-            const text = await TextX.fromFile(file), info = Screen.info(text, file.name);
-            const c = Object.assign({ id: U.id(), code: U.nextCode(Rec.cands(), 'UV-', 4), reqId: req ? req.id : '', dept: d.dept, position: d.position, receivedDate: U.today(), history: [] }, Cand.fromInfo(info));
-            const s = req ? Screen.score(text, Screen.critFromReq(req)) : null;
-            Cand.applyScore(c, { text, s });
-            await Cand.attachFile(c, file); Cand.pushStage(c, 'moi', 'Lưu vào kho CV'); await DB.save('candidates', c);
-          } else await Files.upload(file, { dept: d.dept, position: d.position });
-        }
-        m.querySelector('#klog').insertAdjacentHTML('beforeend', '<div class="b">Xong ' + fs.length + ' file.</div>');
-      });
-    };
+    el.querySelector('#kup').onclick = () => CvBulk.open();
   }
 };
 </script>
@@ -2733,6 +2810,297 @@ const Imp = {
   }
 };
 
+/* ---------- Dùng chung: nhập file lương, khôi phục sao lưu, tải CV hàng loạt ---------- */
+Imp.mount = function(el){
+    UI.fileDrop(el.querySelector('#impx'), false, '.xlsx,.xls', async files => {
+      const box = el.querySelector('#impres');
+      try {
+        box.innerHTML = '<p>Đang đọc…</p>';
+        const res = await Imp.parse(files[0]);
+        const exist = new Set(Emp.all().map(e => e.code));
+        const byD = U.groupBy(res.rows, r => r.dept);
+        box.innerHTML = '<div class="alert info">Sheet <b>' + U.esc(res.sheet) + '</b> – ' + (res.month ? U.ymLabel(res.month) : 'không xác định tháng') + ': <b>' + res.rows.length + '</b> nhân viên (' + res.rows.filter(r => !exist.has(r.code)).length + ' mới, ' + res.rows.filter(r => exist.has(r.code)).length + ' cập nhật). ' + [...byD.entries()].map(([k, v]) => U.esc(k) + ': ' + v.length).join(' · ') + '</div>' +
+          UI.table([{ t: 'Mã', f: r => U.esc(r.code) + (r.newCode ? ' <span class="tag warn">mã mới</span>' : '') }, { t: 'Họ tên', f: r => U.esc(r.name) }, { t: 'Khối', f: r => U.esc(r.dept) }, { t: 'Chức danh', f: r => U.esc(r.title) }, { t: 'Trạng thái', f: r => UI.tag(empStatusOf(r.status)) }, { t: 'Vào làm', f: r => U.fd(r.startDate) }, { t: 'Lương TT', n: 1, f: r => U.money(r.agreed) }, { t: 'BHXH', f: r => r.insured ? U.money(r.insured) : '' }, { t: 'Thực lãnh', n: 1, f: r => U.money(r.net) }], res.rows, { maxH: 360 }) +
+          '<div class="toolbar" style="margin-top:10px"><label><input type="checkbox" id="impst"> Ghi đè trạng thái/ngày nghỉ của nhân viên đã có</label><span class="grow"></span><button class="btn pri" id="impgo">Nhập ' + res.rows.length + ' nhân viên' + (res.month ? ' + bảng lương ' + U.ymLabel(res.month) : '') + '</button></div>';
+        box.querySelector('#impgo').onclick = async () => {
+          const r = await Imp.apply(res, { overwriteStatus: box.querySelector('#impst').checked });
+          box.innerHTML = '<div class="alert ok">Đã nhập: ' + r.added + ' nhân viên mới, ' + r.updated + ' cập nhật.' + (r.payLocked ? ' Bảng lương ' + U.ymLabel(res.month) + ' đang khoá nên KHÔNG bị ghi đè.' : res.month ? ' Bảng lương ' + U.ymLabel(res.month) + ' đã tạo' + (res.scheme === 'v2' ? ' theo cơ cấu mới (ngày công/giờ, OT, ca đêm, lễ)' : '') + (r.manual ? ' (' + r.manual + ' dòng giữ nguyên một số khoản từ file vì khác công thức chuẩn)' : ' – khớp 100% công thức') + '.' : '') + ' <a href="#/emps">Xem hồ sơ nhân sự</a> · <a href="#/legal">Xem cảnh báo pháp lý</a></div>';
+          App.renderNav();
+        };
+      } catch (e) { box.innerHTML = '<div class="alert bad">' + U.esc(e.message) + '</div>'; }
+    });
+};
+const Backup = {
+  mountRestore(el){
+    UI.fileDrop(el.querySelector('#rs'), false, '.json', async files => {
+      try {
+        const j = JSON.parse(await U.readAsText(files[0])), d = j.data || j;
+        const list = []; COLLECTIONS.forEach(c => (d[c] || []).forEach(x => x && x.id && !DB.lockedPayroll(c, x.id) && list.push([c, x])));
+        if (!await UI.confirm('Khôi phục ' + list.length + ' bản ghi từ file? Bản ghi trùng mã sẽ bị ghi đè.')) return;
+        await DB.saveMany(list); UI.toast('Đã khôi phục ' + list.length + ' bản ghi'); App.refresh();
+      } catch (e) { UI.toast('File không hợp lệ: ' + e.message); }
+    });
+  }
+};
+const CvBulk = {
+  /** Hộp thoại lưu nhiều CV vào Kho CV (tuỳ chọn tạo ứng viên + chấm điểm theo yêu cầu cùng vị trí) */
+  open(preset){
+      preset = preset || {};
+      const reqs = Rec.reqs().filter(r => r.status !== 'huy').sort(U.by(r => r.code));
+      const m = UI.modal('Tải CV từ máy lên Kho CV', '<div class="form"><label class="f full">Theo yêu cầu tuyển dụng (tự điền phòng ban, vị trí và chấm điểm theo MTCV)<select name="kreq">' + U.opts(reqs.map(r => ({ v: r.id, t: Rec.reqLabel(r) })), preset.reqId || '', '— Không gắn yêu cầu —') + '</select></label><label class="f">Phòng ban<select name="dept">' + U.opts(Rec.depts()) + '</select></label><label class="f two">Vị trí<input name="position" list="kpl2"><datalist id="kpl2">' + [...new Set(Rec.reqs().map(r => r.position))].map(x => '<option value="' + U.esc(x) + '">').join('') + '</datalist></label></div><label><input type="checkbox" name="mk" checked> Tạo luôn ứng viên (giai đoạn "Mới nhận CV") cho mỗi file</label><div id="kdrop" style="margin-top:10px"></div><div id="klog" class="small"></div>', [{ t: 'Đóng', fn: () => App.refresh() }], { sticky: true });
+      const kr = m.querySelector('[name=kreq]'), fill = () => { const r = DB.get('requisitions', kr.value); if (!r) return; const ds = m.querySelector('[name=dept]'); if (![...ds.options].some(o => o.value === r.dept)) ds.insertAdjacentHTML('beforeend', '<option>' + U.esc(r.dept) + '</option>'); ds.value = r.dept; m.querySelector('[name=position]').value = r.position; };
+      kr.onchange = fill; fill();
+      UI.fileDrop(m.querySelector('#kdrop'), true, '.pdf,.docx,.doc,.txt,.jpg,.jpeg,.png', async fs => {
+        const d = U.formData(m); if (!d.position){ UI.toast('Nhập vị trí trước'); return; }
+        const req = DB.get('requisitions', d.kreq) || Rec.reqs().find(r => r.position === d.position && r.dept === d.dept);
+        for (const file of fs){
+          m.querySelector('#klog').insertAdjacentHTML('beforeend', '<div>Đang lưu ' + U.esc(file.name) + '…</div>');
+          if (d.mk){
+            const text = await TextX.fromFile(file), info = Screen.info(text, file.name);
+            const c = Object.assign({ id: U.id(), code: U.nextCode(Rec.cands(), 'UV-', 4), reqId: req ? req.id : '', dept: d.dept, position: d.position, receivedDate: U.today(), history: [] }, Cand.fromInfo(info));
+            const s = req ? Screen.score(text, Screen.critFromReq(req)) : null;
+            Cand.applyScore(c, { text, s });
+            if (!c.fullName) c.fullName = file.name.replace(/\.[^.]+$/, '');
+            await Cand.attachFile(c, file); Cand.pushStage(c, 'moi', 'Tải CV từ máy' + (s ? ' – ' + s.total + ' điểm' : '')); await DB.save('candidates', c);
+          } else await Files.upload(file, { dept: d.dept, position: d.position });
+        }
+        m.querySelector('#klog').insertAdjacentHTML('beforeend', '<div class="b">Xong ' + fs.length + ' file.</div>');
+      });
+    
+  }
+};
+
+/* ---------- Tải dữ liệu từ máy lên: danh sách nhân sự, ứng viên (Excel / CSV) ---------- */
+const Upl = {
+  /** Đọc file Excel/CSV: tìm dòng tiêu đề khớp nhiều cột nhất trong mọi sheet */
+  async read(file, fields){
+    if (!window.XLSX) throw new Error('Chưa tải được thư viện Excel (cần Internet)');
+    const wb = XLSX.read(await U.readAsArrayBuffer(file), { type: 'array' });
+    let best = null;
+    wb.SheetNames.filter(sn => !/^(vi du|huong dan)/.test(U.norm(sn))).forEach(sn => {
+      const aoa = XLSX.utils.sheet_to_json(wb.Sheets[sn], { header: 1, raw: true, defval: '' });
+      for (let i = 0; i < Math.min(15, aoa.length); i++){
+        const map = this.map(aoa[i], fields), n = map.filter(f => f.i >= 0).length;
+        const rows = aoa.slice(i + 1).filter(r => r.some(v => String(v).trim() !== ''));
+        if (map.find(f => f.k === 'fullName').i >= 0 && n >= 2 && (!best || n > best.n || (n === best.n && rows.length > best.rows.length))) best = { sheet: sn, n, map, head: aoa[i], rows };
+      }
+    });
+    if (!best) throw new Error('Không tìm thấy dòng tiêu đề có cột "Họ tên". Hãy dùng file mẫu.');
+    return best;
+  },
+  /** Ghép cột theo tên tiêu đề (không dấu, không phân biệt hoa thường) */
+  map(head, fields){
+    const hs = head.map(h => Upl.key(h)), used = new Set();
+    return fields.map(f => {
+      let i = hs.findIndex((h, j) => !used.has(j) && f.al.includes(h));
+      if (i < 0) i = hs.findIndex((h, j) => !used.has(j) && h && f.al.some(a => h.startsWith(a + ' ')));
+      if (i >= 0) used.add(i);
+      return Object.assign({}, f, { i });
+    });
+  },
+  get(row, map){ const o = {}; map.forEach(f => { if (f.i >= 0){ const v = row[f.i]; o[f.k] = typeof v === 'string' ? v.trim() : v; } }); return o; },
+  /** Ngày: số Excel, dd/mm/yyyy, yyyy-mm-dd → yyyy-mm-dd */
+  date(v){
+    if (v === '' || v == null) return '';
+    if (typeof v === 'number'){ if (v > 1900 && v < 2100) return ''; if (v < 1 || v > 80000) return ''; const d = new Date(Math.round((v - 25569) * 86400000)); return d.toISOString().slice(0, 10); }
+    if (v instanceof Date) return v.getFullYear() + '-' + String(v.getMonth() + 1).padStart(2, '0') + '-' + String(v.getDate()).padStart(2, '0');
+    const t = String(v).trim();
+    let m = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{2,4})/.exec(t);
+    if (m){ const y = m[3].length === 2 ? (+m[3] > 50 ? '19' : '20') + m[3] : m[3]; return y + '-' + m[2].padStart(2, '0') + '-' + m[1].padStart(2, '0'); }
+    m = /^(\d{4})[\/.\-](\d{1,2})[\/.\-](\d{1,2})/.exec(t);
+    return m ? m[1] + '-' + m[2].padStart(2, '0') + '-' + m[3].padStart(2, '0') : '';
+  },
+  year(v){ const m = /(19|20)\d{2}/.exec(String(v)); return m ? +m[0] : ''; },
+  yes(v){ return /^(co|x|v|da|yes|y|1|true|dong|da dong|da tham gia|tham gia)$/.test(U.norm(v)); },
+  gender(v){ const n = U.norm(v); return n === 'nam' || n === 'm' || n === 'male' ? 'Nam' : n === 'nu' || n === 'f' || n === 'female' ? 'Nữ' : v ? 'Khác' : ''; },
+  edu(v){ const n = U.norm(v); if (!n) return ''; if (/thac si|tien si|master|phd/.test(n)) return 5; if (/dai hoc|cu nhan|ky su|university|bachelor/.test(n)) return 4; if (/cao dang/.test(n)) return 3; if (/trung cap/.test(n)) return 2; if (/12|thpt|pho thong/.test(n)) return 1; return ''; },
+  empStatus(v){ const n = U.norm(v); if (!n) return ''; if (/thu viec/.test(n)) return 'thu_viec'; if (/nghi viec|da nghi|thoi viec|nghi/.test(n)) return 'nghi_viec'; if (/thai san|tam hoan/.test(n)) return 'tam_hoan'; return 'chinh_thuc'; },
+  ctType(v){ const n = U.norm(v); if (!n) return ''; if (/khong xac dinh|kxd/.test(n)) return 'kxdth'; if (/thu viec/.test(n)) return 'thu_viec'; if (/dich vu|khoan|cong tac vien|ctv/.test(n)) return 'dich_vu'; return 'xdth'; },
+  stage(v){ const n = U.norm(v); if (!n) return ''; const s = ALL_STAGES.find(x => U.norm(x.t) === n) || ALL_STAGES.find(x => U.norm(x.t).includes(n) || n.includes(U.norm(x.t))); return s ? s.v : ''; },
+  driveId(url){ const m = /\/d\/([a-zA-Z0-9_-]{20,})|[?&]id=([a-zA-Z0-9_-]{20,})/.exec(String(url)); return m ? (m[1] || m[2]) : ''; },
+  /** Bộ phận: khớp tên có sẵn trong Cài đặt (không dấu); tên mới sẽ được thêm vào danh sách bộ phận */
+  dept(v, add){ if (!v) return ''; const n = U.norm(v), d = DB.settings().depts.find(x => U.norm(x.name) === n); if (d) return d.name; add.add(String(v).trim()); return String(v).trim(); },
+  key(h){ return U.norm(h).replace(/[\/.\-+#&]/g, ' ').replace(/\s+/g, ' ').trim(); },
+  F(k, t, al, ex){ return { k, t, al: al.concat([t]).map(a => Upl.key(a)), ex: ex == null ? '' : ex }; }
+};
+Upl.EMP = [
+  Upl.F('code', 'Mã NV', ['ma nv', 'ma nhan vien', 'msnv', 'ma so nhan vien', 'ma so nv', 'code'], 'AT00100'),
+  Upl.F('fullName', 'Họ tên', ['ho ten', 'ho va ten', 'ho ten nhan vien', 'ten nhan vien', 'full name', 'name'], 'Nguyễn Văn A'),
+  Upl.F('gender', 'Giới tính', ['gioi tinh', 'phai', 'gender'], 'Nam'),
+  Upl.F('dob', 'Ngày sinh', ['ngay sinh', 'ngay thang nam sinh', 'sinh ngay', 'dob'], '15/03/1995'),
+  Upl.F('cccd', 'Số CCCD', ['so cccd', 'cccd', 'cmnd', 'so cmnd', 'cccd cmnd', 'so cccd cmnd', 'can cuoc cong dan'], '079095000001'),
+  Upl.F('phone', 'Số điện thoại', ['so dien thoai', 'dien thoai', 'sdt', 'dt', 'di dong', 'phone'], '0909123456'),
+  Upl.F('email', 'Email', ['email', 'e mail', 'mail'], 'a@antam.vn'),
+  Upl.F('address', 'Địa chỉ', ['dia chi', 'dia chi thuong tru', 'noi o', 'cho o hien tai', 'address'], 'Q.12, TP.HCM'),
+  Upl.F('dept', 'Bộ phận', ['bo phan', 'phong ban', 'khoi', 'phong', 'department'], 'Sản xuất'),
+  Upl.F('title', 'Chức danh', ['chuc danh', 'chuc vu', 'vi tri', 'vi tri cong viec', 'cong viec', 'title'], 'Thợ chính bếp'),
+  Upl.F('edu', 'Trình độ', ['trinh do', 'hoc van', 'trinh do hoc van'], 'Cao đẳng'),
+  Upl.F('startDate', 'Ngày vào làm', ['ngay vao lam', 'ngay vao', 'ngay bat dau lam viec', 'ngay nhan viec', 'start date'], '01/09/2026'),
+  Upl.F('status', 'Trạng thái', ['trang thai', 'tinh trang', 'tinh trang lam viec'], 'Thử việc'),
+  Upl.F('endDate', 'Ngày nghỉ việc', ['ngay nghi viec', 'ngay nghi', 'ngay thoi viec'], ''),
+  Upl.F('agreed', 'Lương thoả thuận', ['luong thoa thuan', 'muc luong', 'tong luong', 'luong'], 9000000),
+  Upl.F('base', 'Lương cơ bản', ['luong co ban', 'lcb'], 5310000),
+  Upl.F('allowance', 'Phụ cấp chức vụ', ['phu cap chuc vu', 'phu cap trach nhiem', 'phu cap', 'pc'], 0),
+  Upl.F('meal', 'Hỗ trợ cơm', ['ho tro com', 'tien com', 'phu cap com', 'an trua'], 780000),
+  Upl.F('insured', 'Lương đóng BHXH', ['luong dong bhxh', 'muc dong bhxh', 'luong bhxh'], ''),
+  Upl.F('bhxhNo', 'Số sổ BHXH', ['so so bhxh', 'so bhxh', 'ma so bhxh'], ''),
+  Upl.F('bhxhJoined', 'Đã tham gia BHXH', ['da tham gia bhxh', 'tham gia bhxh', 'bhxh', 'da dong bhxh'], 'Chưa'),
+  Upl.F('mst', 'Mã số thuế', ['ma so thue', 'mst', 'ma so thue tncn'], ''),
+  Upl.F('deps', 'Số người phụ thuộc', ['so nguoi phu thuoc', 'nguoi phu thuoc', 'npt'], 0),
+  Upl.F('bankName', 'Ngân hàng', ['ngan hang', 'ten ngan hang'], 'Vietcombank'),
+  Upl.F('bankAcc', 'Số tài khoản', ['so tai khoan', 'stk', 'tai khoan'], ''),
+  Upl.F('ctType', 'Loại HĐ', ['loai hd', 'loai hop dong', 'loai hdld'], 'HĐ thử việc'),
+  Upl.F('ctNo', 'Số HĐ', ['so hd', 'so hop dong', 'so hdld'], ''),
+  Upl.F('ctStart', 'HĐ từ ngày', ['hd tu ngay', 'ngay bat dau hd', 'ngay ky hd', 'ngay hieu luc hd', 'ngay hieu luc'], '01/09/2026'),
+  Upl.F('ctEnd', 'HĐ đến ngày', ['hd den ngay', 'ngay het han hd', 'het han hd', 'ngay het han'], '30/10/2026'),
+  Upl.F('note', 'Ghi chú', ['ghi chu', 'note'], '')
+];
+Upl.CAND = [
+  Upl.F('fullName', 'Họ tên', ['ho ten', 'ho va ten', 'ten ung vien', 'ho ten ung vien', 'full name', 'name'], 'Trần Thị B'),
+  Upl.F('phone', 'Số điện thoại', ['so dien thoai', 'dien thoai', 'sdt', 'dt', 'di dong', 'phone'], '0912345678'),
+  Upl.F('email', 'Email', ['email', 'e mail', 'mail'], 'b@gmail.com'),
+  Upl.F('gender', 'Giới tính', ['gioi tinh', 'phai', 'gender'], 'Nữ'),
+  Upl.F('dob', 'Ngày / năm sinh', ['ngay sinh', 'nam sinh', 'ngay nam sinh', 'ngay thang nam sinh', 'dob'], '1998'),
+  Upl.F('position', 'Vị trí ứng tuyển', ['vi tri ung tuyen', 'vi tri', 'chuc danh ung tuyen', 'chuc danh', 'ung tuyen vi tri'], 'Nhân viên QC'),
+  Upl.F('dept', 'Phòng ban', ['phong ban', 'bo phan', 'khoi', 'phong'], ''),
+  Upl.F('source', 'Nguồn', ['nguon', 'nguon ung vien', 'kenh', 'kenh tuyen dung'], 'TopCV'),
+  Upl.F('receivedDate', 'Ngày nhận CV', ['ngay nhan cv', 'ngay nop cv', 'ngay ung tuyen', 'ngay nhan', 'ngay'], '05/10/2026'),
+  Upl.F('stage', 'Giai đoạn', ['giai doan', 'trang thai', 'tinh trang', 'ket qua'], 'Mới nhận CV'),
+  Upl.F('edu', 'Trình độ', ['trinh do', 'hoc van'], 'Cao đẳng'),
+  Upl.F('major', 'Chuyên ngành', ['chuyen nganh', 'nganh hoc'], 'Công nghệ thực phẩm'),
+  Upl.F('years', 'Số năm kinh nghiệm', ['so nam kinh nghiem', 'kinh nghiem', 'nam kinh nghiem'], 2),
+  Upl.F('address', 'Địa chỉ', ['dia chi', 'noi o'], ''),
+  Upl.F('cvLink', 'Link CV', ['link cv', 'duong dan cv', 'cv', 'link'], ''),
+  Upl.F('note', 'Ghi chú', ['ghi chu', 'note'], '')
+];
+Upl.template = function(fields, name){ Xls.save([['Nhap du lieu', [fields.map(f => f.t)]], ['Vi du (khong nhap)', [fields.map(f => f.t), fields.map(f => f.ex)]]], name); };
+
+/** Nhân sự: lập kế hoạch nhập (thêm / cập nhật / bỏ qua) */
+Upl.planEmps = function(res){
+  const newDepts = new Set(), plan = [], pool = Emp.all().slice();
+  res.rows.forEach((row, n) => {
+    const o = Upl.get(row, res.map);
+    if (!o.fullName){ plan.push({ act: 'skip', n, why: 'Thiếu họ tên' }); return; }
+    const dob = Upl.date(o.dob), cccd = String(o.cccd || '').replace(/\D/g, '');
+    let e = (o.code && pool.find(x => String(x.code).toLowerCase() === String(o.code).toLowerCase())) || (cccd && pool.find(x => String(x.cccd || '').replace(/\D/g, '') === cccd)) ||
+      pool.find(x => U.norm(x.fullName) === U.norm(o.fullName) && (!dob || !x.dob || x.dob === dob) && (!o.dept || U.norm(x.dept) === U.norm(o.dept)));
+    const isNew = !e;
+    e = e ? JSON.parse(JSON.stringify(e)) : { id: U.id(), code: String(o.code || '') || U.nextCode(pool, 'AT', 5), status: 'chinh_thuc', docs: {}, contracts: [], salary: {}, bhxh: {}, tax: { method: 'luy_tien', dependents: 0 }, bank: {}, leave: {} };
+    if (isNew) pool.push(e); else pool[pool.findIndex(x => x.id === e.id)] = e;
+    const put = (k, v) => { if (v !== '' && v != null) e[k] = v; };
+    put('fullName', String(o.fullName)); put('gender', Upl.gender(o.gender)); put('dob', dob); put('cccd', cccd || '');
+    put('phone', o.phone ? String(o.phone).replace(/[^\d+]/g, '').replace(/^(\d{9})$/, '0$1') : ''); put('email', o.email); put('address', o.address);
+    put('dept', Upl.dept(o.dept, newDepts)); put('title', o.title); put('edu', Upl.edu(o.edu)); put('startDate', Upl.date(o.startDate)); put('status', Upl.empStatus(o.status));
+    put('endDate', Upl.date(o.endDate)); put('note', o.note);
+    e.salary = e.salary || {}; ['agreed', 'base', 'allowance', 'meal', 'insured'].forEach(k => { if (o[k] !== '' && o[k] != null) e.salary[k] = U.num(o[k]); });
+    e.bhxh = e.bhxh || {}; if (o.bhxhJoined !== '' && o.bhxhJoined != null) e.bhxh.joined = Upl.yes(o.bhxhJoined); if (o.bhxhNo) { e.bhxh.no = String(o.bhxhNo); if (o.bhxhJoined === undefined) e.bhxh.joined = true; }
+    e.tax = e.tax || {}; if (o.mst) e.tax.mst = String(o.mst); if (o.deps !== '' && o.deps != null) e.tax.dependents = +o.deps || 0;
+    if (e.status === 'thu_viec' && e.tax.method !== 'flat10') e.tax.method = 'flat10';
+    e.bank = e.bank || {}; if (o.bankName) e.bank.name = String(o.bankName); if (o.bankAcc) e.bank.account = String(o.bankAcc).replace(/\s/g, '');
+    const ct = Upl.ctType(o.ctType), cs = Upl.date(o.ctStart), ce = Upl.date(o.ctEnd);
+    if (ct || cs || ce){
+      const type = ct || (e.status === 'thu_viec' ? 'thu_viec' : 'xdth'), start = cs || e.startDate || '';
+      e.contracts = e.contracts || [];
+      if (!e.contracts.some(c => c.start === start && c.type === type)) e.contracts.push({ id: U.id(), no: String(o.ctNo || ''), type, sign: start, start, end: type === 'kxdth' ? '' : ce, salary: e.salary.agreed || 0 });
+    }
+    if (e.status === 'thu_viec' && e.startDate && !(e.probation && e.probation.end)) e.probation = Object.assign({ level: 'cd', start: e.startDate }, e.probation, { end: (e.contracts.find(c => c.type === 'thu_viec') || {}).end || probationEnd(e.startDate, 'cd') });
+    plan.push({ act: isNew ? 'add' : 'upd', n, e });
+  });
+  return { plan, newDepts: [...newDepts] };
+};
+
+/** Ứng viên: lập kế hoạch nhập */
+Upl.planCands = function(res){
+  const newDepts = new Set(), plan = [], pool = Rec.cands().slice();
+  res.rows.forEach((row, n) => {
+    const o = Upl.get(row, res.map);
+    if (!o.fullName){ plan.push({ act: 'skip', n, why: 'Thiếu họ tên' }); return; }
+    const phone = o.phone ? String(o.phone).replace(/[^\d+]/g, '').replace(/^(\d{9})$/, '0$1') : '', email = String(o.email || '').trim().toLowerCase();
+    let c = pool.find(x => (phone && x.phone === phone) || (email && String(x.email || '').toLowerCase() === email));
+    const isNew = !c;
+    const pos = U.norm(o.position || ''), req = pos ? Rec.reqs().filter(r => r.status !== 'huy').find(r => U.norm(r.position) === pos && (!o.dept || U.norm(r.dept) === U.norm(o.dept))) || Rec.reqs().find(r => U.norm(r.position) === pos) : null;
+    c = c ? JSON.parse(JSON.stringify(c)) : { id: U.id(), code: U.nextCode(pool, 'UV-', 4), stage: 'moi', history: [], receivedDate: U.today(), source: 'Khác' };
+    if (isNew) pool.push(c); else pool[pool.findIndex(x => x.id === c.id)] = c;
+    const put = (k, v) => { if (v !== '' && v != null) c[k] = v; };
+    put('fullName', String(o.fullName)); put('phone', phone); put('email', email); put('gender', Upl.gender(o.gender));
+    const d = Upl.date(o.dob); if (d) put('dob', d); put('birthYear', d ? +d.slice(0, 4) : Upl.year(o.dob));
+    if (req){ c.reqId = req.id; c.dept = req.dept; c.position = req.position; } else { put('position', o.position ? String(o.position) : ''); put('dept', Upl.dept(o.dept, newDepts)); }
+    if (o.source) c.source = (SOURCES.find(s => U.norm(s) === U.norm(o.source)) || String(o.source));
+    put('receivedDate', Upl.date(o.receivedDate)); put('edu', Upl.edu(o.edu)); put('major', o.major); put('years', o.years !== '' && o.years != null ? +o.years || 0 : ''); put('address', o.address); put('note', o.note);
+    const st = Upl.stage(o.stage);
+    if (isNew || (st && st !== c.stage)) Cand.pushStage(c, st || c.stage || 'moi', 'Nhập từ file danh sách ứng viên');
+    let file = null;
+    if (o.cvLink && /^https?:\/\//.test(String(o.cvLink)) && !(c.cvFile && DB.get('cv_files', c.cvFile.id) && DB.get('cv_files', c.cvFile.id).url === o.cvLink)){
+      file = { id: U.id(), name: 'CV ' + c.fullName + ' (link)', size: 0, mime: '', dept: c.dept || 'Chưa phân loại', position: c.position || 'Chưa phân loại', candidateId: c.id, uploadedAt: new Date().toISOString(), url: String(o.cvLink), driveId: '', source: 'link' };
+      c.cvFile = { id: file.id, name: file.name };
+    }
+    plan.push({ act: isNew ? 'add' : 'upd', n, c, req, file });
+  });
+  return { plan, newDepts: [...newDepts] };
+};
+
+Upl.addDepts = async function(names){
+  if (!names.length) return;
+  const s = JSON.parse(JSON.stringify(DB.settings()));
+  names.forEach(n => { if (!s.depts.some(d => U.norm(d.name) === U.norm(n))) s.depts.push({ name: n, calc: 'vp' }); });
+  await DB.save('settings', s);
+};
+
+/** Khung nhập: thả file → xem trước → bấm nhập */
+Upl.mount = function(drop, box, kind){
+  const K = kind === 'emp' ? { fields: Upl.EMP, plan: Upl.planEmps, what: 'nhân viên', name: r => r.e && r.e.fullName, info: r => r.e ? [r.e.code, r.e.dept, r.e.title].filter(Boolean).join(' · ') : '' }
+    : { fields: Upl.CAND, plan: Upl.planCands, what: 'ứng viên', name: r => r.c && r.c.fullName, info: r => r.c ? [r.c.code, r.c.position, r.req ? r.req.code : (r.c.position ? 'chưa có yêu cầu tuyển dụng' : '')].filter(Boolean).join(' · ') : '' };
+  UI.fileDrop(drop, false, '.xlsx,.xls,.csv', async files => {
+    try {
+      box.innerHTML = '<p>Đang đọc…</p>';
+      const res = await Upl.read(files[0], K.fields), p = K.plan(res);
+      const got = res.map.filter(f => f.i >= 0).map(f => f.t), skipHead = res.head.filter((h, i) => String(h).trim() && !res.map.some(f => f.i === i));
+      const add = p.plan.filter(x => x.act === 'add').length, upd = p.plan.filter(x => x.act === 'upd').length, sk = p.plan.filter(x => x.act === 'skip').length;
+      box.innerHTML = '<div class="alert info">Sheet <b>' + U.esc(res.sheet) + '</b>: ' + res.rows.length + ' dòng → <b>' + add + '</b> ' + K.what + ' mới, <b>' + upd + '</b> cập nhật (trùng ' + (kind === 'emp' ? 'mã NV / CCCD / họ tên + ngày sinh' : 'SĐT / email') + ')' + (sk ? ', ' + sk + ' dòng bỏ qua' : '') + '.<br>' +
+        '<span class="small">Đã nhận cột: ' + got.map(U.esc).join(', ') + '</span>' + (skipHead.length ? '<br><span class="small muted">Không dùng cột: ' + skipHead.map(U.esc).join(', ') + '</span>' : '') +
+        (p.newDepts.length ? '<br><span class="small">Bộ phận mới sẽ thêm vào Cài đặt: <b>' + p.newDepts.map(U.esc).join(', ') + '</b></span>' : '') + '</div>' +
+        UI.table([{ t: 'Dòng', n: 1, f: r => r.n + 1 }, { t: 'Xử lý', f: r => r.act === 'add' ? '<span class="tag ok">Thêm mới</span>' : r.act === 'upd' ? '<span class="tag info">Cập nhật</span>' : '<span class="tag">Bỏ qua</span>' },
+          { t: 'Họ tên', f: r => U.esc(K.name(r) || '') }, { t: 'Thông tin', f: r => U.esc(r.why || K.info(r)) }], p.plan, { maxH: 320 }) +
+        '<div class="toolbar" style="margin-top:10px"><span class="grow"></span><button class="btn pri" id="' + kind + 'go"' + (add + upd ? '' : ' disabled') + '>Nhập ' + (add + upd) + ' ' + K.what + '</button></div>';
+      box.querySelector('#' + kind + 'go').onclick = async ev => {
+        ev.target.disabled = true;
+        try {
+          await Upl.addDepts(p.newDepts);
+          const ok = p.plan.filter(x => x.act !== 'skip'), list = [];
+          ok.forEach(x => { if (x.e) list.push(['employees', x.e]); if (x.c) list.push(['candidates', x.c]); if (x.file) list.push(['cv_files', x.file]); });
+          await DB.saveMany(list);
+          if (kind === 'cand') for (const r of new Set(ok.map(x => x.c.reqId).filter(Boolean))) await Rec.syncReq(r);
+          box.innerHTML = '<div class="alert ok">Đã nhập ' + add + ' ' + K.what + ' mới, ' + upd + ' cập nhật. <a href="#/' + (kind === 'emp' ? 'emps' : 'cands?view=table') + '">Xem danh sách</a></div>';
+          App.renderNav();
+        } catch (e) { ev.target.disabled = false; UI.toast(e.message || String(e)); }
+      };
+    } catch (e) { box.innerHTML = '<div class="alert bad">' + U.esc(e.message || e) + '</div>'; }
+  });
+};
+
+Pages.upload = {
+  render(el){
+    if (!Auth.canWrite()){ el.innerHTML = '<h2>Tải dữ liệu lên</h2><div class="alert warn">Tài khoản "Chỉ xem" không tải dữ liệu lên được.</div>'; return; }
+    const card = (n, title, desc, inner) => '<div class="card"><h3>' + n + '. ' + title + '</h3><p class="small muted">' + desc + '</p>' + inner + '</div>';
+    el.innerHTML = '<h2>Tải dữ liệu từ máy lên</h2><p class="muted">Chọn hoặc kéo thả file từ máy tính. Web đọc file, cho xem trước rồi mới ghi vào dữ liệu' + (IS_GAS ? ' (Google Sheet / Google Drive)' : '') + '. Dòng trùng được cập nhật, không tạo trùng.</p>' +
+      card(1, 'Danh sách nhân sự (Excel / CSV)', 'Cột nhận được: ' + Upl.EMP.map(f => f.t).join(', ') + '. Chỉ cần có cột <b>Họ tên</b>; tên cột có dấu hay không dấu đều được. Ô trống không xoá dữ liệu đang có. Thiếu Mã NV sẽ tự cấp mã AT…',
+        '<div class="toolbar"><button class="btn" id="utple">Tải file mẫu nhân sự</button></div><div id="uemp"></div><div id="uempres"></div>') +
+      card(2, 'Danh sách ứng viên (Excel / CSV)', 'Cột nhận được: ' + Upl.CAND.map(f => f.t).join(', ') + '. Vị trí trùng tên với yêu cầu tuyển dụng sẽ tự gắn vào yêu cầu đó. "Link CV" (Google Drive, TopCV…) được lưu vào Kho CV để mở nhanh.',
+        '<div class="toolbar"><button class="btn" id="utplc">Tải file mẫu ứng viên</button></div><div id="ucand"></div><div id="ucandres"></div>') +
+      card(3, 'CV ứng viên (nhiều file PDF / Word / ảnh)', 'Lưu vào Kho CV theo phòng ban → vị trí' + (IS_GAS ? ' trên Google Drive' : '') + ', tự tạo ứng viên, đọc họ tên / SĐT / email trong CV và chấm điểm theo MTCV nếu chọn yêu cầu tuyển dụng.',
+        '<div class="toolbar"><button class="btn pri" id="ucv">Chọn CV từ máy…</button><a href="#/screen" class="small">Hoặc lọc & xếp hạng CV trước ở trang Lọc CV theo MTCV</a></div>') +
+      card(4, 'File lương / nhân sự An Tâm (Excel)', 'Theo mẫu file lương của công ty (Lương T8, bảng lương T9…): nhập nhân viên, lương và bảng lương của tháng trong file. Bảng lương đã khoá không bị ghi đè.', '<div id="impx"></div><div id="impres"></div>') +
+      card(5, 'Khôi phục bản sao lưu (.json)', 'File tải từ Cài đặt & dữ liệu → Sao lưu. Bản ghi trùng mã sẽ bị ghi đè (trừ bảng lương đã khoá).', '<div id="rs"></div>');
+    el.querySelector('#utple').onclick = () => Upl.template(Upl.EMP, 'Mau-danh-sach-nhan-su.xlsx');
+    el.querySelector('#utplc').onclick = () => Upl.template(Upl.CAND, 'Mau-danh-sach-ung-vien.xlsx');
+    Upl.mount(el.querySelector('#uemp'), el.querySelector('#uempres'), 'emp');
+    Upl.mount(el.querySelector('#ucand'), el.querySelector('#ucandres'), 'cand');
+    el.querySelector('#ucv').onclick = () => CvBulk.open();
+    Imp.mount(el);
+    Backup.mountRestore(el);
+  }
+};
+
 Pages.settings = {
   render(el){
     const s = JSON.parse(JSON.stringify(DB.settings()));
@@ -2754,6 +3122,7 @@ Pages.settings = {
       '<div class="toolbar"><button class="btn pri" id="ssave">Lưu cài đặt</button></div>' +
       '<div class="card"><h3>Mật khẩu quản lý lương</h3><p class="small muted">Dùng để mở khoá bảng lương đã khoá. ' + (IS_GAS ? 'Lưu dạng mã hoá trong cài đặt của dự án Apps Script, không nằm trong Google Sheet.' : 'Chế độ trình duyệt: chỉ bảo vệ trên máy này.') + ' Quên mật khẩu: người sở hữu dự án vào Apps Script → Cài đặt dự án → Thuộc tính tập lệnh, xoá dòng PAY_PIN rồi đặt lại.</p><button class="btn" id="spin">Đặt / đổi mật khẩu</button></div>' +
       '<div id="usersbox"></div>' +
+      (IS_GAS ? '<div class="card" id="cvmail"><h3>📧 Nhận CV qua email</h3><p class="muted small">Đang tải…</p></div>' : '') +
       '<div class="card"><h3>Sao lưu & khôi phục</h3><div class="toolbar"><button class="btn" id="bk">Tải bản sao lưu (.json)</button><div id="rs" style="flex:1"></div>' + (IS_GAS ? '' : '<button class="btn danger" id="wipe">Xoá toàn bộ dữ liệu trên trình duyệt này</button>') + '</div>' +
       '<p class="small muted">Chế độ hiện tại: <b>' + (IS_GAS ? 'Google Apps Script – dữ liệu ở Google Sheet, CV ở Google Drive' : 'trình duyệt (localStorage + IndexedDB)') + '</b>. Bản sao lưu chứa lương, số tài khoản ngân hàng – chỉ lưu ở nơi an toàn, không đưa lên kho mã công khai.</p></div>';
     const drawD = () => { el.querySelector('#sdepts').innerHTML = s.depts.map((d, i) => '<div class="toolbar"><input data-dn="' + i + '" value="' + U.esc(d.name) + '" style="min-width:260px"><select data-dc="' + i + '" style="min-width:0">' + U.opts([{ v: 'sx', t: 'sx – sản xuất' }, { v: 'vp', t: 'vp – văn phòng' }], d.calc) + '</select><label class="small muted">Công thường tối đa (T9+) <input data-dm="' + i + '" type="number" value="' + U.esc(d.maxWork || '') + '" style="width:70px;min-width:0"></label><button class="btn sm ghost danger" data-dx="' + i + '">Xoá</button></div>').join('');
@@ -2774,34 +3143,20 @@ Pages.settings = {
       s.depts = s.depts.filter(d => d.name);
       await DB.save('settings', s); UI.toast('Đã lưu cài đặt'); App.refresh();
     };
-    UI.fileDrop(el.querySelector('#impx'), false, '.xlsx,.xls', async files => {
-      const box = el.querySelector('#impres');
-      try {
-        box.innerHTML = '<p>Đang đọc…</p>';
-        const res = await Imp.parse(files[0]);
-        const exist = new Set(Emp.all().map(e => e.code));
-        const byD = U.groupBy(res.rows, r => r.dept);
-        box.innerHTML = '<div class="alert info">Sheet <b>' + U.esc(res.sheet) + '</b> – ' + (res.month ? U.ymLabel(res.month) : 'không xác định tháng') + ': <b>' + res.rows.length + '</b> nhân viên (' + res.rows.filter(r => !exist.has(r.code)).length + ' mới, ' + res.rows.filter(r => exist.has(r.code)).length + ' cập nhật). ' + [...byD.entries()].map(([k, v]) => U.esc(k) + ': ' + v.length).join(' · ') + '</div>' +
-          UI.table([{ t: 'Mã', f: r => U.esc(r.code) + (r.newCode ? ' <span class="tag warn">mã mới</span>' : '') }, { t: 'Họ tên', f: r => U.esc(r.name) }, { t: 'Khối', f: r => U.esc(r.dept) }, { t: 'Chức danh', f: r => U.esc(r.title) }, { t: 'Trạng thái', f: r => UI.tag(empStatusOf(r.status)) }, { t: 'Vào làm', f: r => U.fd(r.startDate) }, { t: 'Lương TT', n: 1, f: r => U.money(r.agreed) }, { t: 'BHXH', f: r => r.insured ? U.money(r.insured) : '' }, { t: 'Thực lãnh', n: 1, f: r => U.money(r.net) }], res.rows, { maxH: 360 }) +
-          '<div class="toolbar" style="margin-top:10px"><label><input type="checkbox" id="impst"> Ghi đè trạng thái/ngày nghỉ của nhân viên đã có</label><span class="grow"></span><button class="btn pri" id="impgo">Nhập ' + res.rows.length + ' nhân viên' + (res.month ? ' + bảng lương ' + U.ymLabel(res.month) : '') + '</button></div>';
-        box.querySelector('#impgo').onclick = async () => {
-          const r = await Imp.apply(res, { overwriteStatus: box.querySelector('#impst').checked });
-          box.innerHTML = '<div class="alert ok">Đã nhập: ' + r.added + ' nhân viên mới, ' + r.updated + ' cập nhật.' + (r.payLocked ? ' Bảng lương ' + U.ymLabel(res.month) + ' đang khoá nên KHÔNG bị ghi đè.' : res.month ? ' Bảng lương ' + U.ymLabel(res.month) + ' đã tạo' + (res.scheme === 'v2' ? ' theo cơ cấu mới (ngày công/giờ, OT, ca đêm, lễ)' : '') + (r.manual ? ' (' + r.manual + ' dòng giữ nguyên một số khoản từ file vì khác công thức chuẩn)' : ' – khớp 100% công thức') + '.' : '') + ' <a href="#/emps">Xem hồ sơ nhân sự</a> · <a href="#/legal">Xem cảnh báo pháp lý</a></div>';
-          App.renderNav();
-        };
-      } catch (e) { box.innerHTML = '<div class="alert bad">' + U.esc(e.message) + '</div>'; }
-    });
+    Imp.mount(el);
     el.querySelector('#spin').onclick = () => PayLock.setPinDialog();
     Auth.usersCard(el.querySelector('#usersbox'));
+    const cvm = el.querySelector('#cvmail'); if (cvm) (async () => {
+      let i = {}; try { i = JSON.parse(await gs('cvEmailInfo')); } catch (e) { cvm.querySelector('p').textContent = e.message; return; }
+      cvm.innerHTML = '<h3>📧 Nhận CV qua email</h3>' + (i.configured ? '<p>Google Sheet nhận CV: <a href="' + U.esc(i.url) + '" target="_blank" rel="noopener">An Tâm – CV nhận qua email</a> · ' + i.total + ' thư CV, ' + i.waiting + ' chờ đưa lên web' + (i.ok ? '' : ' <span class="tag bad">không mở được sheet</span>') + '</p>' : '<div class="alert warn">Chưa kết nối Google Sheet nhận CV.</div>') +
+        '<p class="small muted">Bật tự động quét Gmail (1 lần): mở Google Sheet → menu <b>An Tâm CV → Bật tự động nhận CV</b> → cho phép quyền. Sheet có tab <b>Cài đặt</b>: địa chỉ email nhận CV, từ khoá nhận diện thư ứng tuyển, địa chỉ bỏ qua. Web tự lấy CV mới mỗi khi mở và 10 phút/lần.</p>' +
+        (Auth.user && Auth.user.role === 'admin' ? '<div class="toolbar"><input id="cvsid" placeholder="Dán link Google Sheet nhận CV khác (nếu cần)" style="flex:1"><button class="btn" id="cvsset">Kết nối</button></div>' : '') +
+        '<div class="toolbar"><button class="btn pri" id="cvsync">Lấy CV mới từ email ngay</button></div>';
+      const set = cvm.querySelector('#cvsset'); if (set) set.onclick = async () => { try { await gs('setCvEmailSheet', cvm.querySelector('#cvsid').value); UI.toast('Đã kết nối'); App.refresh(); } catch (e) { UI.toast(e.message); } };
+      cvm.querySelector('#cvsync').onclick = () => EmailCV.sync(true);
+    })();
     el.querySelector('#bk').onclick = () => U.dl('nhan-su-an-tam_sao-luu_' + U.today() + '.json', JSON.stringify({ app: 'nhan-su-an-tam', at: new Date().toISOString(), data: DB.data }, null, 1), 'application/json');
-    UI.fileDrop(el.querySelector('#rs'), false, '.json', async files => {
-      try {
-        const j = JSON.parse(await U.readAsText(files[0])), d = j.data || j;
-        const list = []; COLLECTIONS.forEach(c => (d[c] || []).forEach(x => x && x.id && !DB.lockedPayroll(c, x.id) && list.push([c, x])));
-        if (!await UI.confirm('Khôi phục ' + list.length + ' bản ghi từ file? Bản ghi trùng mã sẽ bị ghi đè.')) return;
-        await DB.saveMany(list); UI.toast('Đã khôi phục ' + list.length + ' bản ghi'); App.refresh();
-      } catch (e) { UI.toast('File không hợp lệ: ' + e.message); }
-    });
+    Backup.mountRestore(el);
     const w = el.querySelector('#wipe'); if (w) w.onclick = async () => { if (!await UI.confirm('Xoá toàn bộ dữ liệu nhân sự trên trình duyệt này?')) return; localStorage.removeItem(LS_KEY); location.reload(); };
   }
 };
@@ -2814,6 +3169,7 @@ Pages.settings = {
     if (Auth.canWrite()) await AutoSeed.run();
     if (!location.hash) history.replaceState(null, '', '#/dashboard');
     App.route();
+    if (IS_GAS && Auth.canWrite()){ setTimeout(() => EmailCV.sync(), 1500); setInterval(() => EmailCV.sync(), 10 * 60 * 1000); }
   } catch (e) {
     document.getElementById('main').innerHTML = '<div class="alert bad">Không tải được dữ liệu: ' + U.esc(e.message || e) + '</div>';
   }

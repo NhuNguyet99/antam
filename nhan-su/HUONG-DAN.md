@@ -56,6 +56,45 @@ Tiếp nhận yêu cầu → Duyệt (Đang tuyển) → Lọc CV theo MTCV → 
 - **Theo dõi thử việc:** hạn thử việc tính theo Điều 25 BLLĐ (180 / 60 / 30 ngày / 6 ngày làm việc). Web chặn lương thử việc dưới 85% (Điều 26). Phiếu đánh giá thử việc tạo luôn HĐLĐ chính thức.
 - **Kho CV:** mọi CV lưu trong Google Drive, thư mục **An Tâm – Kho CV › Phòng ban › Vị trí**. Xem theo cây thư mục, tìm kiếm, phân loại lại.
 
+### Nhận CV qua email (tự động)
+
+```
+Ứng viên gửi CV về email → Google Sheet "An Tâm – CV nhận qua email" (+ file CV lên Drive)
+→ web tự tạo ứng viên, đoán vị trí theo tiêu đề thư, đọc CV và chấm điểm theo MTCV
+```
+
+- **Bật một lần:** mở Google Sheet **"An Tâm – CV nhận qua email"** trên Drive → menu **An Tâm CV → Bật tự động nhận CV (15 phút/lần)** → đăng nhập và **cho phép** quyền đọc Gmail, Drive, Sheet. Lần đầu quét lại 30 ngày gần nhất.
+  - Nếu Google báo "ứng dụng chưa được xác minh": bấm **Nâng cao → Đi tới… → Cho phép**.
+- **Hộp thư được quét:** Gmail của tài khoản bấm "Bật".
+  - Email tuyển dụng của công ty là một hộp thư khác: vào hộp thư đó → Cài đặt → **Chuyển tiếp** sang Gmail này.
+  - Sau đó ghi địa chỉ email tuyển dụng vào tab **Cài đặt** của sheet, để chỉ nhận thư gửi tới địa chỉ đó.
+- **Thư nào được nhận:** thư có file PDF, Word hoặc ảnh (ảnh nhỏ như logo, chữ ký được bỏ qua) và có từ khoá ứng tuyển trong tiêu đề, tên file hoặc nội dung ("ứng tuyển", "CV", "hồ sơ", "xin việc"…).
+  - Sửa danh sách từ khoá và địa chỉ cần bỏ qua ở tab **Cài đặt**.
+  - Thư có nhiều file: file CV chính là file tên có "CV / sơ yếu / lý lịch", nếu không có thì lấy file PDF hoặc Word lớn nhất. Các file khác lưu kèm.
+- **Trên web:**
+  - Mỗi lần mở web, 10 phút một lần, hoặc khi bấm **📧 Lấy CV từ email** (trang Ứng viên, Lọc CV, Cài đặt), CV mới thành ứng viên nguồn "Email".
+  - File chuyển vào Kho CV › phòng ban › vị trí.
+  - Sheet ghi lại trạng thái, vị trí và mã ứng viên.
+- **Vị trí:** đoán từ tiêu đề thư hoặc tên file (VD "Ứng tuyển Nhân viên QC"). Đoán được thì chấm điểm ngay theo MTCV.
+  - Không đoán được: vào **Lọc CV theo MTCV**, chọn yêu cầu → **Chấm điểm … CV email chưa gắn vị trí** → xem điểm → **Gắn vào yêu cầu**.
+- **Dòng bị lỗi** (cột "Trạng thái trên web" ghi "Lỗi…"): xoá ô trạng thái để web thử lại.
+
+### Tải dữ liệu từ máy lên
+
+Menu **Hệ thống → Tải dữ liệu lên**. Mọi file đều được xem trước rồi mới ghi; dòng trùng được cập nhật, không tạo trùng:
+
+1. **Danh sách nhân sự (Excel/CSV):**
+   - Bấm **Tải file mẫu** để lấy đủ cột: mã NV, họ tên, ngày sinh, CCCD, bộ phận, chức danh, ngày vào làm, trạng thái, lương, BHXH, MST, ngân hàng, hợp đồng…
+   - Chỉ bắt buộc cột Họ tên. Tên cột có dấu hay không dấu đều được, ô trống không xoá dữ liệu cũ.
+   - Trùng mã NV, CCCD hoặc họ tên + ngày sinh sẽ được cập nhật. Thiếu mã thì web tự cấp mã. Bộ phận mới tự thêm vào Cài đặt.
+2. **Danh sách ứng viên (Excel/CSV):**
+   - Vị trí trùng tên yêu cầu tuyển dụng sẽ tự gắn vào yêu cầu đó.
+   - Trùng SĐT hoặc email thì cập nhật.
+   - Cột **Link CV** được lưu vào Kho CV.
+3. **CV hàng loạt:** chọn yêu cầu tuyển dụng (tự điền phòng ban, vị trí), kéo thả nhiều CV. Web tạo ứng viên, đọc thông tin và chấm điểm theo MTCV.
+4. **File lương / nhân sự An Tâm (Excel):** như mục nhập file lương trong Cài đặt.
+5. **Khôi phục bản sao lưu (.json).**
+
 ## 4. Nhân sự công ty
 
 - **Hồ sơ nhân sự:** thông tin cá nhân, hợp đồng, lương – BHXH – thuế – ngân hàng, giấy tờ hồ sơ (tỷ lệ % đầy đủ), phép năm (12 ngày + thâm niên).

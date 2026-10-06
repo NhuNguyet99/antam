@@ -244,15 +244,129 @@ function moveFile_(fileId, dept, position) {
   return true;
 }
 
+/** File có nằm trong thư mục "Kho CV" (tối đa 4 cấp)? */
+function inCvRoot_(file) {
+  const rootId = rootFolder_().getId();
+  for (let d = 0, it = file.getParents(); d < 4 && it.hasNext(); d++) {
+    const p = it.next();
+    if (p.getId() === rootId) return true;
+    it = p.getParents();
+  }
+  return false;
+}
+
 /** Chuyển file CV vào thùng rác Drive (khôi phục được trong 30 ngày). Chỉ nhận file nằm trong thư mục "Kho CV". */
 function trashFile_(fileId) {
   let file;
   try { file = DriveApp.getFileById(fileId); } catch (e) { return true; } // đã bị xoá tay trên Drive
-  const rootId = rootFolder_().getId();
-  const inRoot = f => { for (let d = 0, it = f.getParents(); d < 4 && it.hasNext(); d++) { const p = it.next(); if (p.getId() === rootId) return true; it = p.getParents(); } return false; };
-  if (!inRoot(file)) throw new Error('File không thuộc thư mục Kho CV – không xoá.');
+  if (!inCvRoot_(file)) throw new Error('File không thuộc thư mục Kho CV – không xoá.');
   file.setTrashed(true);
   return true;
+}
+
+/** Đọc nội dung file CV (base64) để web đọc chữ và chấm điểm. Chỉ file trong "Kho CV", tối đa 15MB. */
+function fileB64_(fileId) {
+  const file = DriveApp.getFileById(fileId);
+  if (!inCvRoot_(file)) throw new Error('File không thuộc thư mục Kho CV.');
+  if (file.getSize() > 15 * 1024 * 1024) throw new Error('File lớn hơn 15MB');
+  const blob = file.getBlob();
+  return JSON.stringify({ name: file.getName(), mime: blob.getContentType(), b64: Utilities.base64Encode(blob.getBytes()) });
+}
+
+/* ---------------- CV nhận qua email ----------------
+ * Script "Nhận CV qua email" (gắn với Google Sheet "An Tâm – CV nhận qua email", file NhanCV-Email.gs)
+ * quét Gmail, lưu file CV lên Drive và ghi mỗi thư 1 dòng. Web đọc các dòng mới, tạo ứng viên rồi ghi lại trạng thái. */
+const CV_TAB = 'CV nhận qua email';
+const CV_COL = { at: 1, name: 2, email: 3, subject: 4, body: 5, file: 6, url: 7, other: 8, msg: 9, fid: 10, fids: 11, st: 12, pos: 13, code: 14, note: 15 };
+
+function cvSheetId_() {
+  return (typeof CV_EMAIL_SHEET_ID !== 'undefined' && CV_EMAIL_SHEET_ID) || PropertiesService.getScriptProperties().getProperty('CV_EMAIL_SHEET_ID') || '';
+}
+
+function cvSheet_() {
+  const id = cvSheetId_();
+  if (!id) return null;
+  return SpreadsheetApp.openById(id).getSheetByName(CV_TAB);
+}
+
+/** Thông tin cho trang Cài đặt */
+function cvEmailInfo_() {
+  const id = cvSheetId_();
+  if (!id) return JSON.stringify({ configured: false });
+  let url = 'https://docs.google.com/spreadsheets/d/' + id + '/edit', waiting = 0, total = 0, ok = true;
+  try {
+    const sh = cvSheet_();
+    if (sh && sh.getLastRow() > 1) {
+      const st = sh.getRange(2, CV_COL.st, sh.getLastRow() - 1, 1).getValues();
+      total = st.length; waiting = st.filter(r => !r[0]).length;
+    }
+  } catch (e) { ok = false; }
+  return JSON.stringify({ configured: true, url, total, waiting, ok });
+}
+
+/** Nhận các dòng CV mới (chưa đưa lên web), đánh dấu "đang xử lý" để 2 máy không nhập trùng */
+function emailInbox_() {
+  const sh = cvSheet_();
+  if (!sh) return '[]';
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const last = sh.getLastRow();
+    if (last < 2) return '[]';
+    const v = sh.getRange(2, 1, last - 1, CV_COL.note).getValues(), now = Date.now(), out = [];
+    for (let i = 0; i < v.length && out.length < 25; i++) {
+      const r = v[i], st = String(r[CV_COL.st - 1] || '');
+      if (!r[CV_COL.fid - 1]) continue;
+      if (st) {
+        const m = /^Đang đưa lên web \((.+)\)$/.exec(st);
+        if (!m || now - Date.parse(m[1]) < 10 * 60000) continue;
+      }
+      sh.getRange(i + 2, CV_COL.st).setValue('Đang đưa lên web (' + new Date().toISOString() + ')');
+      const ids = String(r[CV_COL.fids - 1] || '').split(',').map(x => x.trim()).filter(Boolean);
+      const names = String(r[CV_COL.other - 1] || '').split(' | ');
+      out.push({
+        row: i + 2, at: r[0] instanceof Date ? r[0].toISOString() : String(r[0]),
+        fromName: String(r[1]), fromEmail: String(r[2]), subject: String(r[3]), body: String(r[4]).slice(0, 1500),
+        fileName: String(r[CV_COL.file - 1]), url: String(r[CV_COL.url - 1]), msgId: String(r[CV_COL.msg - 1]), fileId: String(r[CV_COL.fid - 1]),
+        others: ids.map((id, k) => ({ id, name: names[k] || ('File kèm ' + (k + 1)) }))
+      });
+    }
+    SpreadsheetApp.flush();
+    return JSON.stringify(out);
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Ghi kết quả đưa lên web: list = [{row, msgId, status, pos, code}] */
+function emailMarkImported_(json) {
+  const sh = cvSheet_();
+  if (!sh) return false;
+  const list = JSON.parse(json);
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const last = sh.getLastRow();
+    const msgs = last > 1 ? sh.getRange(2, CV_COL.msg, last - 1, 1).getValues().map(r => String(r[0])) : [];
+    list.forEach(x => {
+      let row = +x.row;
+      if (msgs[row - 2] !== String(x.msgId)) row = msgs.indexOf(String(x.msgId)) + 2; // dòng bị chèn / sắp xếp lại
+      if (row < 2) return;
+      sh.getRange(row, CV_COL.st, 1, 3).setValues([[String(x.status || '').slice(0, 300), String(x.pos || ''), String(x.code || '')]]);
+    });
+    return true;
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+/** Quản trị đặt mã Google Sheet nhận CV (dán link hoặc mã) */
+function setCvEmailSheet_(idOrUrl) {
+  const m = /\/d\/([a-zA-Z0-9_-]{20,})/.exec(String(idOrUrl)) || /^([a-zA-Z0-9_-]{20,})$/.exec(String(idOrUrl).trim());
+  if (!m) throw new Error('Link Google Sheet không hợp lệ');
+  SpreadsheetApp.openById(m[1]); // kiểm tra mở được
+  PropertiesService.getScriptProperties().setProperty('CV_EMAIL_SHEET_ID', m[1]);
+  return cvEmailInfo_();
 }
 
 /* ---------------- Gửi báo cáo cho Giám đốc ---------------- */
@@ -353,6 +467,11 @@ function deleteDocs(t, json) { auth_(t, true); return deleteDocs_(json); }
 function uploadFile(t, b64, name, mime, dept, position) { auth_(t, true); return uploadFile_(b64, name, mime, dept, position); }
 function moveFile(t, id, dept, position) { auth_(t, true); return moveFile_(id, dept, position); }
 function trashFile(t, id) { auth_(t, true); return trashFile_(id); }
+function fileB64(t, id) { auth_(t, true); return fileB64_(id); }
+function cvEmailInfo(t) { auth_(t); return cvEmailInfo_(); }
+function emailInbox(t) { auth_(t, true); return emailInbox_(); }
+function emailMarkImported(t, json) { auth_(t, true); return emailMarkImported_(json); }
+function setCvEmailSheet(t, idOrUrl) { admin_(t); return setCvEmailSheet_(idOrUrl); }
 function rootFolderUrl(t) { auth_(t); return rootFolderUrl_(); }
 function sendReport(t, to, subject, html) { auth_(t, true); return sendReport_(to, subject, html); }
 function hasPayrollPin(t) { auth_(t); return hasPayrollPin_(); }
