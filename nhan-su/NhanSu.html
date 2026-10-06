@@ -1,7 +1,6 @@
 <!DOCTYPE html>
 <html lang="vi">
 <head>
-<base target="_top">
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Nhân sự An Tâm</title>
@@ -1132,7 +1131,8 @@ const Cand = {
 
 Pages.cands = {
   render(el, p){
-    const view = p.view || localStorage.getItem('antam_cand_view') || 'kanban';
+    let saved = ''; try { saved = localStorage.getItem('antam_cand_view') || ''; } catch (e) {}
+    const view = p.view || saved || 'kanban';
     const q = U.norm(p.q || '');
     let list = Rec.cands().slice();
     if (p.req) list = list.filter(c => c.reqId === p.req);
@@ -1343,7 +1343,7 @@ Pages.cvstore = {
       (IS_GAS ? '<button class="btn" id="kdrive">Mở thư mục Google Drive</button>' : '') + '<button class="btn pri" id="kup">+ Lưu CV vào kho</button></div>' +
       '<p class="muted small">' + files.length + ' file · CV được lưu theo <b>Phòng ban → Vị trí</b>' + (IS_GAS ? ' trong thư mục Google Drive "An Tâm – Kho CV".' : ' trong trình duyệt này (bản Google Apps Script lưu lên Google Drive).') + '</p>' +
       '<div class="card tree">' + ([...tree.keys()].sort().map(d => { const byPos = U.groupBy(tree.get(d), f => f.position || 'Chưa phân loại'); return '<details open><summary>' + U.esc(d) + ' <span class="muted">(' + tree.get(d).length + ')</span></summary>' +
-        [...byPos.keys()].sort().map(pos => '<details class="lv2"' + (q ? ' open' : '') + '><summary>' + U.esc(pos) + ' <span class="muted">(' + byPos.get(pos).length + ')</span></summary>' + byPos.get(pos).map(f => { const c = DB.get('candidates', f.candidateId); return '<div class="file"><a href="javascript:void 0" data-open="' + f.id + '">' + U.esc(f.name) + '</a><span class="small muted">' + U.fd(f.uploadedAt.slice(0, 10)) + ' · ' + Math.max(1, Math.round((f.size || 0) / 1024)) + ' KB</span>' + (c ? ' <a href="javascript:void 0" data-c="' + c.id + '">' + U.esc(c.fullName) + '</a> ' + UI.tag(stageOf(c.stage)) : '') + '<span class="grow" style="flex:1"></span><button class="btn sm ghost" data-mv="' + f.id + '">Phân loại lại</button></div>'; }).join('') + '</details>').join('') + '</details>'; }).join('') || '<div class="empty">Kho CV trống</div>') + '</div>';
+        [...byPos.keys()].sort().map(pos => '<details class="lv2" open><summary>' + U.esc(pos) + ' <span class="muted">(' + byPos.get(pos).length + ')</span></summary>' + byPos.get(pos).map(f => { const c = DB.get('candidates', f.candidateId); return '<div class="file"><a href="javascript:void 0" data-open="' + f.id + '">' + U.esc(f.name) + '</a><span class="small muted">' + U.fd(f.uploadedAt.slice(0, 10)) + ' · ' + Math.max(1, Math.round((f.size || 0) / 1024)) + ' KB</span>' + (c ? ' <a href="javascript:void 0" data-c="' + c.id + '">' + U.esc(c.fullName) + '</a> ' + UI.tag(stageOf(c.stage)) : '') + '<span class="grow" style="flex:1"></span><button class="btn sm ghost" data-mv="' + f.id + '">Phân loại lại</button></div>'; }).join('') + '</details>').join('') + '</details>'; }).join('') || '<div class="empty">Kho CV trống</div>') + '</div>';
     el.querySelector('#kq').onchange = e => App.go('cvstore', { q: e.target.value });
     el.querySelectorAll('[data-open]').forEach(a => a.onclick = () => Files.open(DB.get('cv_files', a.dataset.open)));
     el.querySelectorAll('[data-c]').forEach(a => a.onclick = () => Cand.edit(DB.get('candidates', a.dataset.c)));
