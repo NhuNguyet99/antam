@@ -86,7 +86,7 @@ Ghi chú:
 Cả hai bản dùng chung một loại file dữ liệu **.json**:
 - Bản online → **Cài đặt & dữ liệu → Tải dữ liệu** ⇒ bản chạy trên máy → **Cài đặt & dữ liệu → Nhập file dữ liệu .json**
   (thay toàn bộ dữ liệu 2 kho trên máy).
-- Bản chạy trên máy → **Tải dữ liệu (.json)** ⇒ dùng để cập nhật **trang xem công khai** (nút ⟳ Cập nhật số liệu).
+- Bản chạy trên máy → **Tải dữ liệu (.json)** ⇒ bản online → **Nhập file dữ liệu .json**.
 
 Chỉ nên nhập phiếu ở **một** bản tại một thời điểm, để số liệu không bị tách làm hai.
 
@@ -115,13 +115,3 @@ và dùng chung cho mọi người được chia sẻ trang (nút *Share* trên 
 Mã nguồn bản online: `online/backend.js` (thay cho server.py, chạy trong trình duyệt) + giao diện chung `static/`.
 Đóng gói lại thành một trang: `python online/build.py` → `online/kho-antam.html`.
 
-### Trang xem công khai (ai có link cũng xem, không cần đăng nhập)
-
-`python online/build.py --view du-lieu.json` tạo `online/kho-antam-xem.html`: cùng giao diện nhưng **chỉ xem**
-(ẩn mọi nút lập/sửa/xóa), số liệu chụp sẵn trong trang nên người xem không cần tài khoản. File này chứa số liệu
-thật nên **không commit** (đã có trong `online/.gitignore`).
-
-Cập nhật số liệu cho trang xem (chủ trang làm):
-1. Web chính → **Cài đặt & dữ liệu** → **Tải dữ liệu** (file .json, đủ 2 kho).
-2. Mở trang xem → nút **⟳ Cập nhật số liệu** (chỉ chủ trang thấy) → chọn file → **Đăng số liệu mới**.
-   Trang tự đăng lại chính nó với số liệu mới; ai mở link sẽ thấy ngay.

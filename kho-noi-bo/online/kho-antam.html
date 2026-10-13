@@ -2613,17 +2613,17 @@ async function viewSettings(main) {
       <p class="hint">Máy đang chạy web phải <b>bật và để mở cửa sổ đen</b> thì nhân viên mới vào được. Mỗi người bấm nút tên ở góc trên phải để ghi tên mình (hiện trong Lịch sử thao tác).<br>
       Mật khẩu: ${S.meta.access.password ? '<b>đang bật</b> – trình duyệt sẽ hỏi; tên đăng nhập gõ gì cũng được.' : '<b>chưa đặt</b> – để đặt, tạo file <code>mat-khau.txt</code> cạnh <code>server.py</code>, gõ mật khẩu ở dòng đầu, rồi tắt và mở lại web.'}</p></div>` : ''}
     <div class="card"><h3>Sao lưu / xuất dữ liệu</h3><div class="toolbar">
-      ${ONLINE ? `<button class="btn" id="ex-backup">⬇ Tải dữ liệu (sao lưu / cập nhật trang xem công khai)</button>
+      ${ONLINE ? `<button class="btn" id="ex-backup">⬇ Tải dữ liệu (.json) để sao lưu</button>
       <button class="btn" id="ex-csv">⬇ Xuất sổ nhập xuất ${esc(W.name)} (CSV mở bằng Excel)</button></div>
       <p class="hint">Dữ liệu được lưu trực tuyến, dùng chung cho mọi người được chia sẻ trang. Nên tải dữ liệu định kỳ để sao lưu.
-      File này cũng dùng để cập nhật <b>trang xem công khai</b>: mở trang xem → bấm <b>⟳ Cập nhật số liệu</b> → chọn file.</p>
+      File này cũng dùng để chuyển dữ liệu sang bản chạy trên máy (nút Nhập file dữ liệu .json ở bản đó).</p>
       <div class="toolbar" style="margin-top:12px"><label class="field">Chuyển dữ liệu từ bản chạy trên máy (file .json "Tải dữ liệu")<input type="file" id="bk-file" accept=".json,application/json"></label>
       <button class="btn" id="bk-go">Nhập file dữ liệu .json (thay toàn bộ dữ liệu 2 kho)</button></div></div>`
       : `<a class="btn" href="/api/export/backup">⬇ Tải bản sao lưu cả 2 kho (.db)</a>
-      <a class="btn" href="/api/export/backup.json">⬇ Tải dữ liệu (.json) – cập nhật trang xem công khai</a>
+      <a class="btn" href="/api/export/backup.json">⬇ Tải dữ liệu (.json)</a>
       <a class="btn" href="/api/export/lines.csv?wh=${S.wh}">⬇ Xuất sổ nhập xuất ${esc(W.name)} (CSV mở bằng Excel)</a></div>
       <p class="hint">Nên sao lưu mỗi cuối ngày. Để khôi phục: tắt web, chép file .db đè vào <code>kho-noi-bo/data/kho.db</code>, chạy lại.
-      File <b>.json</b> dùng để cập nhật <b>trang xem công khai</b> trên claude.ai: mở trang xem → <b>⟳ Cập nhật số liệu</b> → chọn file.</p>
+      File <b>.json</b> dùng để chuyển dữ liệu lên web online (nút Nhập file dữ liệu .json ở web online).</p>
       <div class="toolbar" style="margin-top:12px"><label class="field">Chuyển dữ liệu từ bản online (file .json "Tải dữ liệu")<input type="file" id="bk-file" accept=".json,application/json"></label>
       <button class="btn" id="bk-go">Nhập file dữ liệu .json (thay toàn bộ dữ liệu 2 kho)</button></div></div>`}
     <div class="card"><h3>Thông tin ${esc(W.name)}</h3><div class="grid c3">
