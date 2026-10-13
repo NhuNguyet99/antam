@@ -15,6 +15,9 @@
 window.ANTAM_ONLINE = true;
 
 const Backend = (() => {
+  // Trang xem công khai (build --view): đọc số liệu chụp sẵn trong trang, không ghi được
+  const VIEW = !!window.ANTAM_VIEW;
+  const SKELETON_RESET = (() => { const el = document.head && document.head.querySelector('style'); return el ? el.textContent : ''; })();
   const TYPE_PREFIX = { N: 'PNK', X: 'PXK', D: 'DCK' };
   const TYPE_LABEL = { N: 'Nhập', X: 'Xuất', D: 'Điều chỉnh' };
   const TP_NAME = 'Kho thành phẩm - hàng hóa';
@@ -93,18 +96,20 @@ const Backend = (() => {
   }
 
   /* ---------------------------------------------------------- kho dữ liệu */
+  const READONLY_MSG = 'Đây là trang chỉ xem. Muốn nhập hoặc sửa phiếu, hãy dùng web chính (cần được mời).';
+  const dbx = () => { if (VIEW || !st.db) throw new ApiError(403, VIEW ? READONLY_MSG : 'Chưa kết nối dữ liệu.'); return st.db; };
   const ref = {
-    settings: () => st.db.doc('config/settings'),
-    routes: () => st.db.doc('config/routes'),
-    products: wh => st.db.doc(`kho/${wh}/meta/products`),
-    days: wh => st.db.collection(`kho/${wh}/days`),
-    day: (wh, d) => st.db.doc(`kho/${wh}/days/${d}`),
-    docs: wh => st.db.collection(`kho/${wh}/docs`),
-    doc: (wh, id) => st.db.doc(`kho/${wh}/docs/${id}`),
-    plans: wh => st.db.collection(`kho/${wh}/plans`),
-    planMonth: (wh, ym) => st.db.doc(`kho/${wh}/plans/${ym}`),
-    logs: () => st.db.collection('log'),
-    logDay: d => st.db.doc('log/' + d),
+    settings: () => dbx().doc('config/settings'),
+    routes: () => dbx().doc('config/routes'),
+    products: wh => dbx().doc(`kho/${wh}/meta/products`),
+    days: wh => dbx().collection(`kho/${wh}/days`),
+    day: (wh, d) => dbx().doc(`kho/${wh}/days/${d}`),
+    docs: wh => dbx().collection(`kho/${wh}/docs`),
+    doc: (wh, id) => dbx().doc(`kho/${wh}/docs/${id}`),
+    plans: wh => dbx().collection(`kho/${wh}/plans`),
+    planMonth: (wh, ym) => dbx().doc(`kho/${wh}/plans/${ym}`),
+    logs: () => dbx().collection('log'),
+    logDay: d => dbx().doc('log/' + d),
   };
   function dbError(e) {
     const code = e && e.code;
@@ -114,6 +119,7 @@ const Backend = (() => {
     return new ApiError(503, 'Mất kết nối dữ liệu, hãy thử lại. ' + (e && e.message ? '(' + e.message + ')' : ''));
   }
   async function write(fn) {
+    if (VIEW) throw new ApiError(403, READONLY_MSG);
     st.lastLocal = Date.now();
     try { return await fn(); } catch (e) {
       if (e && e.code === 'unavailable') { await sleep(400 + Math.random() * 600); try { return await fn(); } catch (e2) { throw dbError(e2); } }
@@ -161,7 +167,22 @@ const Backend = (() => {
   }
   function docData(snap) { return snap.exists ? snap.data() : null; }
 
+  function loadSnapshot(snap) {
+    st.settings = snap.settings || {}; st.routes = snap.routes || {};
+    for (const w of WAREHOUSES) {
+      const d = (snap.warehouses || {})[w] || {};
+      st.products[w] = d.products || {}; st.days[w] = d.days || {}; st.docs[w] = d.docs || {}; st.plans[w] = d.plans || {};
+      bump(w);
+    }
+    st.snapshotAt = snap.at || '';
+  }
   async function init() {
+    if (VIEW) {
+      const el = document.getElementById('antam-snapshot');
+      loadSnapshot(JSON.parse(el ? el.textContent : '{}'));
+      st.user = window.claude && window.claude.use ? await window.claude.use('user') : null;
+      return;
+    }
     if (!window.claude || !window.claude.use) throw new Error('Trang này cần mở trên claude.ai để dùng dữ liệu chung.');
     const [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]);
     if (!db) throw new Error('Không mở được kho dữ liệu chung. Hãy đăng nhập claude.ai rồi tải lại trang.');
@@ -177,6 +198,7 @@ const Backend = (() => {
     ]);
   }
   async function setWh(wh) {
+    if (VIEW) { st.wh = wh; st.loaded = true; return; }
     st.whSubs.forEach(u => { try { u(); } catch (e) { /* bỏ qua */ } });
     st.whSubs = [];
     st.wh = wh;
@@ -579,9 +601,17 @@ const Backend = (() => {
     }
     return '﻿' + out.map(r => r.map(csvCell).join(',')).join('\r\n');
   }
-  function exportBackup() {
-    return JSON.stringify({ format: 'kho-antam-backup', version: 1, at: nowStr(), settings: st.settings, routes: st.routes,
-      warehouses: Object.fromEntries(WAREHOUSES.filter(w => st.days[w]).map(w => [w, { products: st.products[w], days: st.days[w], docs: st.docs[w], plans: st.plans[w] }])) }, null, 1);
+  // Toàn bộ dữ liệu 2 kho (đọc mới từ kho dữ liệu): dùng để sao lưu và để cập nhật trang xem công khai
+  async function exportBackup() {
+    const out = { format: 'kho-antam-backup', version: 1, at: nowStr(), settings: st.settings, routes: st.routes, warehouses: {} };
+    const asMap = snap => Object.fromEntries(snap.docs.map(d => [d.id, d.data()]));
+    for (const w of WAREHOUSES) {
+      if (VIEW) { out.warehouses[w] = { products: st.products[w], days: st.days[w], docs: st.docs[w], plans: st.plans[w] }; continue; }
+      const [p, days, docs, plans] = await Promise.all([ref.products(w).get(), ref.days(w).orderBy('date', 'desc').limit(1000).get(),
+        ref.docs(w).orderBy('date', 'desc').limit(500).get(), ref.plans(w).orderBy('ym', 'desc').limit(240).get()]);
+      out.warehouses[w] = { products: (docData(p) || {}).p || {}, days: asMap(days), docs: asMap(docs), plans: asMap(plans) };
+    }
+    return JSON.stringify(out);
   }
 
   /* ---------------------------------------------------------- bộ định tuyến API (giống server.py) */
@@ -592,7 +622,7 @@ const Backend = (() => {
     const res = parts[0], arg = parts[1] ? decodeURIComponent(parts[1]) : null;
     const wh = q.wh || st.wh;
     if (!WAREHOUSES.includes(wh)) throw new ApiError(400, 'Kho không hợp lệ: ' + wh);
-    if (!st.days[wh] && res !== 'meta' && res !== 'settings' && res !== 'routes') throw new ApiError(400, 'Chưa tải dữ liệu kho ' + wh);
+    if (!st.days[wh] && !VIEW && res !== 'meta' && res !== 'settings' && res !== 'routes') throw new ApiError(400, 'Chưa tải dữ liệu kho ' + wh);
 
     if (res === 'meta' && method === 'GET') {
       const s = settings();
@@ -808,6 +838,7 @@ const Backend = (() => {
     }
 
     if (res === 'log' && method === 'GET') {
+      if (VIEW) return [];
       const snap = await ref.logs().orderBy('date', 'desc').limit(31).get();
       const out = [];
       snap.docs.forEach(d => live((d.data() || {}).e).forEach(([id, e]) => out.push(Object.assign({ id }, e))));
@@ -824,7 +855,7 @@ const Backend = (() => {
 
     if (res === 'export' && method === 'GET') {
       if (arg === 'lines.csv') return exportCsv(wh, q.from, q.to);
-      if (arg === 'backup') return exportBackup();
+      if (arg === 'backup') return await exportBackup();
     }
     throw new ApiError(404, 'Không có chức năng này');
   }
@@ -833,7 +864,19 @@ const Backend = (() => {
     init, setWh, handle,
     set who(v) { st.who = v; },
     get myName() { return st.myName || ''; },
-    get canWrite() { return st.canWrite; },
+    get canWrite() { return VIEW ? false : st.canWrite; },
+    get isView() { return VIEW; },
+    get snapshotAt() { return st.snapshotAt || ''; },
+    get skeletonReset() { return SKELETON_RESET; },
+    async canEditPage() { try { return !!(st.user && await st.user.canEdit()); } catch (e) { return false; } },
+    checkSnapshot(text) {
+      let snap;
+      try { snap = JSON.parse(text); } catch (e) { throw new Error('File không đọc được (không phải file dữ liệu tải từ web chính).'); }
+      if (!snap || snap.format !== 'kho-antam-backup' || !snap.warehouses || !snap.warehouses.TP || !snap.warehouses.NVL) {
+        throw new Error('File không đúng: hãy dùng file "Tải dữ liệu" ở mục Cài đặt & dữ liệu của web chính.');
+      }
+      return snap;
+    },
     onRemote(fn) { st.onRemote = fn; },
   };
 })();

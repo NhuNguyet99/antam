@@ -239,3 +239,14 @@ body[data-wh="TP"] #nav [data-only="TP"], body[data-wh="NVL"] #nav [data-only="N
 .print-preview { background: #fff; color: #000; border: 1px solid var(--line); border-radius: 6px; padding: 18px; overflow: auto; max-height: 62vh; }
 .print-preview .doc + .doc { border-top: 2px dashed #b9bec6; margin-top: 18px; padding-top: 18px; }
 #refresh-btn { background: var(--warn-bg); border-color: #f3d79b; color: var(--warn); font-weight: 600; }
+
+/* trang xem công khai: ẩn mọi thao tác ghi */
+.view-badge { display: inline-block; padding: 3px 10px; border-radius: 999px; background: var(--brand-soft); color: var(--brand); font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+body.readonly #nav a[data-route="phieu/moi"], body.readonly #nav a[data-route="cai-dat"], body.readonly #nav a[data-route="lich-su"],
+body.readonly #nav .nav-group.ro-hide, body.readonly a[href*="/moi"], body.readonly .ro-hide,
+body.readonly #btn-save, body.readonly #btn-save-print, body.readonly #btn-copy, body.readonly #btn-del, body.readonly #btn-add, body.readonly #btn-renum,
+body.readonly [data-del], body.readonly #k-save, body.readonly #k-refresh, body.readonly #k-adj, body.readonly #k-del,
+body.readonly #h-save, body.readonly #h-refresh, body.readonly #h-del, body.readonly #kb-save, body.readonly #kb-del,
+body.readonly #ro-save, body.readonly #ro-add, body.readonly #ro-del, body.readonly #p-add, body.readonly #r-add, body.readonly #pf-card,
+body.readonly #user-btn, body.readonly .card > div > .hint { display: none !important; }
+@media (max-width: 560px) { .view-badge { display: none; } }

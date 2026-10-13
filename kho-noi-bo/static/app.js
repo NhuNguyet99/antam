@@ -8,6 +8,8 @@
 const S = { meta: null, dirty: false, skipDirty: false, user: '', wh: 'TP' };
 // Bản online (trang claude.ai, online/backend.js) không có máy chủ: không in trực tiếp, không mở link tải, không dùng #url.
 const ONLINE = !!window.ANTAM_ONLINE;
+// Trang xem công khai: chỉ xem số liệu chụp sẵn (online/build.py --view)
+const VIEW = !!window.ANTAM_VIEW;
 const WH_LABEL = { TP: 'Kho thành phẩm - hàng hóa', NVL: 'Kho nguyên vật liệu' };
 const TYPE_LABEL = { N: 'Nhập', X: 'Xuất', D: 'Điều chỉnh' };
 const TYPE_PREFIX = { N: 'PNK', X: 'PXK', D: 'DCK' };
@@ -525,7 +527,7 @@ async function viewVoucherForm(main, m, q) {
       : { from: 'Bên giao (kho/bộ phận)', to: 'Bên nhận (kho/bộ phận)', giver: 'Người giao', receiver: 'Người nhận' };
   }
   function draw() {
-    setTitle(editing ? `Sửa phiếu ${v.no}` : `Lập phiếu ${TYPE_LABEL[v.type].toLowerCase()} kho`);
+    setTitle(editing ? `${VIEW ? 'Phiếu' : 'Sửa phiếu'} ${v.no}` : `Lập phiếu ${TYPE_LABEL[v.type].toLowerCase()} kho`);
     const L = labels();
     main.innerHTML = `
       <div class="toolbar"><div class="tabs" id="type-tabs">${['N', 'X', 'D'].map(t => `<button data-t="${t}" class="${v.type === t ? 'on' : ''}">${TYPE_PREFIX[t]} · ${TYPE_LABEL[t]}</button>`).join('')}</div>
@@ -1378,6 +1380,7 @@ async function viewProducts(main) {
     });
   }
   function edit(p) {
+    if (VIEW) return;
     const s = S.meta.settings;
     const x = p || { code: '', name: '', unit: '', grp: '', price: 0, supplier: '', note: '', opening_qty: 0, min_qty: null, active: 1 };
     openModal({
@@ -1429,6 +1432,7 @@ async function viewRoutes(main) {
     });
   }
   function edit(r) {
+    if (VIEW) return;
     const x = r || { name: '', code: '', note: '' };
     openModal({
       title: r ? 'Sửa tuyến' : 'Thêm tuyến',
@@ -1466,9 +1470,10 @@ async function viewSettings(main) {
       ${cnt ? `<div class="callout warn small">${esc(W.name)} đã có ${cnt} phiếu trên web. Nếu chọn "Sổ nhập xuất", các phiếu này sẽ bị thay bằng dữ liệu trong file (kho kia không bị ảnh hưởng). Nên tải bản sao lưu trước.</div>` : ''}
     </div>
     <div class="card"><h3>Sao lưu / xuất dữ liệu</h3><div class="toolbar">
-      ${ONLINE ? `<button class="btn" id="ex-backup">⬇ Tải bản sao lưu (.json)</button>
+      ${ONLINE ? `<button class="btn" id="ex-backup">⬇ Tải dữ liệu (sao lưu / cập nhật trang xem công khai)</button>
       <button class="btn" id="ex-csv">⬇ Xuất sổ nhập xuất ${esc(W.name)} (CSV mở bằng Excel)</button></div>
-      <p class="hint">Dữ liệu được lưu trực tuyến, dùng chung cho mọi người được chia sẻ trang. Nên tải bản sao lưu định kỳ.</p></div>`
+      <p class="hint">Dữ liệu được lưu trực tuyến, dùng chung cho mọi người được chia sẻ trang. Nên tải dữ liệu định kỳ để sao lưu.
+      File này cũng dùng để cập nhật <b>trang xem công khai</b>: mở trang xem → bấm <b>⟳ Cập nhật số liệu</b> → chọn file.</p></div>`
       : `<a class="btn" href="/api/export/backup">⬇ Tải bản sao lưu cả 2 kho (.db)</a>
       <a class="btn" href="/api/export/lines.csv?wh=${S.wh}">⬇ Xuất sổ nhập xuất ${esc(W.name)} (CSV mở bằng Excel)</a></div>
       <p class="hint">Nên sao lưu mỗi cuối ngày. Để khôi phục: tắt web, chép file .db đè vào <code>kho-noi-bo/data/kho.db</code>, chạy lại.</p></div>`}
@@ -1559,7 +1564,7 @@ async function viewPlanDaily(main) {
   const depts = S.meta.settings.plan_depts || ['Xưởng', 'Văn phòng'];
   let rows = [];
   let form = { id: null, date: isoDate(), dept: depts[0], product_code: '', qty: null, price: null, need_date: isoDate(), proposer: S.user, note: '' };
-  main.innerHTML = `<div class="card"><h3 id="pf-title">Thêm dòng kế hoạch</h3><div class="grid c4">
+  main.innerHTML = `<div class="card" id="pf-card"><h3 id="pf-title">Thêm dòng kế hoạch</h3><div class="grid c4">
       <label class="field">Ngày đặt<input type="date" id="pf-date"></label>
       <label class="field">Bộ phận<select id="pf-dept">${options(depts, form.dept)}</select></label>
       <label class="field span2">Mặt hàng<div id="pf-prod"></div></label>
@@ -1766,6 +1771,56 @@ async function viewLog(main) {
     </tbody></table></div><p class="hint">500 thao tác gần nhất.</p>` : '<p class="muted">Chưa có thao tác nào.</p>';
 }
 
+/* ============================================================ trang xem công khai */
+// Trang xem tự đăng lại chính nó với số liệu mới: dựng lại mã nguồn từ các khối gốc (không lấy DOM đang chạy).
+function viewPageSource(snapshotText) {
+  const t = id => document.getElementById(id).textContent;
+  const reset = Backend.skeletonReset || ':root{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}';
+  const content = [
+    `<title>${esc(window.ANTAM_TITLE)}</title>`,
+    `<meta name="description" content="${esc(window.ANTAM_DESC)}">`,
+    `<style id="app-style">${t('app-style')}</style>`,
+    window.ANTAM_MARKUP,
+    `<script type="application/json" id="antam-snapshot">${snapshotText.replace(/</g, '\\u003c')}<\/script>`,
+    `<script id="antam-boot">${t('antam-boot')}<\/script>`,
+    `<script src="${window.ANTAM_SHEETJS}"><\/script>`,
+    `<script id="antam-backend">${t('antam-backend')}<\/script>`,
+    `<script id="antam-app">${t('antam-app')}<\/script>`,
+  ].join('\n');
+  return '<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>' +
+    reset + '</style></head><body>' + content + '</body></html>';
+}
+function openSnapshotUpdate() {
+  openModal({
+    title: 'Cập nhật số liệu cho trang xem',
+    saveText: 'Đăng số liệu mới',
+    body: `<ol class="small" style="margin:0 0 12px;padding-left:18px">
+        <li>Mở <b>web chính</b> → <b>Cài đặt &amp; dữ liệu</b> → <b>Tải dữ liệu</b> (file .json).</li>
+        <li>Chọn file đó ở đây rồi bấm <b>Đăng số liệu mới</b>. Mọi người mở link sẽ thấy số liệu mới.</li></ol>
+      <label class="field">File dữ liệu (.json)<input type="file" id="snap-file" accept=".json,application/json"></label>
+      <p class="hint" id="snap-info">Số liệu đang hiển thị: ${esc(Backend.snapshotAt || '—')}</p>`,
+    onSave: async root => {
+      const f = $('#snap-file', root).files[0];
+      if (!f) throw new Error('Chọn file dữ liệu trước');
+      const text = await f.text();
+      const snap = Backend.checkSnapshot(text);
+      const artifact = await claude.use('artifact');
+      if (!artifact) throw new Error('Trang này chưa được phép tự cập nhật.');
+      $('#snap-info', root).textContent = 'Đang đăng số liệu lúc ' + (snap.at || '') + '…';
+      try { await artifact.publish(viewPageSource(text)); }
+      catch (e) {
+        const code = e && e.code;
+        if (code === 'conflict') return true; // trang đang tải lại bản mới nhất
+        if (code === 'not_writer' || code === 'not_granted' || code === 'capability_disabled') throw new Error('Bạn không có quyền cập nhật trang này (chỉ chủ trang).');
+        if (code === 'too_large') throw new Error('Số liệu quá lớn để đăng trong một trang.');
+        throw new Error('Không đăng được: ' + (e && e.message ? e.message : e));
+      }
+      toast('Đã đăng số liệu mới – trang sẽ tải lại');
+      return true;
+    },
+  });
+}
+
 /* ============================================================ khởi động */
 function askUser(force) {
   if (S.user && !force) return;
@@ -1793,12 +1848,18 @@ async function boot() {
       if (!S.user && Backend.myName) { S.user = Backend.myName; store('user', S.user); }
       await Backend.setWh(S.wh);
       Backend.onRemote(() => { const b = $('#refresh-btn'); if (b) b.hidden = false; });
-      if (Backend.canWrite === false) toast('Bạn đang ở chế độ chỉ xem: không lưu được thay đổi.', true);
+      if (VIEW) {
+        document.body.classList.add('readonly');
+        const vb = $('#view-badge');
+        vb.textContent = 'Chỉ xem · số liệu lúc ' + (Backend.snapshotAt ? Backend.snapshotAt.slice(11, 16) + ' ' + vnDate(Backend.snapshotAt.slice(0, 10)) : '—');
+        vb.hidden = false;
+        Backend.canEditPage().then(ok => { if (ok) { const b = $('#snap-btn'); b.hidden = false; b.onclick = openSnapshotUpdate; } });
+      } else if (Backend.canWrite === false) toast('Bạn đang ở chế độ chỉ xem: không lưu được thay đổi.', true);
     }
     await loadMeta();
   } catch (e) { $('#main').innerHTML = `<div class="callout warn">Không kết nối được dữ liệu: ${esc(e.message)}</div>`; return; }
   $('#user-btn').textContent = '👤 ' + (S.user || 'Khách');
   await render();
-  if (!S.user) askUser();
+  if (!S.user && !VIEW) askUser();
 }
 boot();

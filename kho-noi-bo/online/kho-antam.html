@@ -1,7 +1,6 @@
 <title>Kho An Tâm</title>
 <meta name="description" content="Web làm việc nội bộ kho Thành phẩm - Hàng hóa và Nguyên vật liệu">
-<style>
-:root {
+<style id="app-style">:root {
   --bg: #f4f5f7;
   --panel: #ffffff;
   --ink: #1d2433;
@@ -243,6 +242,16 @@ body[data-wh="TP"] #nav [data-only="TP"], body[data-wh="NVL"] #nav [data-only="N
 .print-preview .doc + .doc { border-top: 2px dashed #b9bec6; margin-top: 18px; padding-top: 18px; }
 #refresh-btn { background: var(--warn-bg); border-color: #f3d79b; color: var(--warn); font-weight: 600; }
 
+/* trang xem công khai: ẩn mọi thao tác ghi */
+.view-badge { display: inline-block; padding: 3px 10px; border-radius: 999px; background: var(--brand-soft); color: var(--brand); font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+body.readonly #nav a[data-route="phieu/moi"], body.readonly #nav a[data-route="cai-dat"], body.readonly #nav a[data-route="lich-su"],
+body.readonly #nav .nav-group.ro-hide, body.readonly a[href*="/moi"], body.readonly .ro-hide,
+body.readonly #btn-save, body.readonly #btn-save-print, body.readonly #btn-copy, body.readonly #btn-del, body.readonly #btn-add, body.readonly #btn-renum,
+body.readonly [data-del], body.readonly #k-save, body.readonly #k-refresh, body.readonly #k-adj, body.readonly #k-del,
+body.readonly #h-save, body.readonly #h-refresh, body.readonly #h-del, body.readonly #kb-save, body.readonly #kb-del,
+body.readonly #ro-save, body.readonly #ro-add, body.readonly #ro-del, body.readonly #p-add, body.readonly #r-add, body.readonly #pf-card,
+body.readonly #user-btn, body.readonly .card > div > .hint { display: none !important; }
+@media (max-width: 560px) { .view-badge { display: none; } }
 </style>
 <div id="app">
   <aside id="sidebar">
@@ -279,7 +288,7 @@ body[data-wh="TP"] #nav [data-only="TP"], body[data-wh="NVL"] #nav [data-only="N
       <div class="nav-group">Danh mục</div>
       <a href="#/hang" data-route="hang">Mặt hàng</a>
       <a href="#/tuyen" data-route="tuyen" data-only="TP">Tuyến / nơi nhận</a>
-      <div class="nav-group">Hệ thống</div>
+      <div class="nav-group ro-hide">Hệ thống</div>
       <a href="#/cai-dat" data-route="cai-dat">Cài đặt &amp; dữ liệu</a>
       <a href="#/lich-su" data-route="lich-su">Lịch sử thao tác</a>
     </nav>
@@ -290,6 +299,8 @@ body[data-wh="TP"] #nav [data-only="TP"], body[data-wh="NVL"] #nav [data-only="N
       <span id="wh-badge" class="wh-badge"></span>
       <div id="page-title"></div>
       <div class="spacer"></div>
+      <span id="view-badge" class="view-badge" hidden></span>
+      <button id="snap-btn" class="btn sm" hidden title="Chỉ chủ trang thấy nút này">⟳ Cập nhật số liệu</button>
       <button id="refresh-btn" class="btn sm" hidden title="Người khác vừa thay đổi dữ liệu">↻ Có dữ liệu mới</button>
       <button id="user-btn" class="btn ghost" title="Đổi người dùng"></button>
     </header>
@@ -300,8 +311,7 @@ body[data-wh="TP"] #nav [data-only="TP"], body[data-wh="NVL"] #nav [data-only="N
 <div id="toasts"></div>
 <style id="page-style"></style>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
-<script>
-'use strict';
+<script id="antam-backend">'use strict';
 /* Bản online (trang claude.ai): thay máy chủ Python (server.py) bằng kho dữ liệu dùng chung của trang.
    Giao diện (static/app.js) gọi api(method, path, body) như cũ; ở đây trả lời các API đó từ bộ nhớ,
    đồng bộ trực tiếp với kho dữ liệu chung (ai mở trang cũng thấy cùng dữ liệu).
@@ -318,6 +328,9 @@ body[data-wh="TP"] #nav [data-only="TP"], body[data-wh="NVL"] #nav [data-only="N
 window.ANTAM_ONLINE = true;
 
 const Backend = (() => {
+  // Trang xem công khai (build --view): đọc số liệu chụp sẵn trong trang, không ghi được
+  const VIEW = !!window.ANTAM_VIEW;
+  const SKELETON_RESET = (() => { const el = document.head && document.head.querySelector('style'); return el ? el.textContent : ''; })();
   const TYPE_PREFIX = { N: 'PNK', X: 'PXK', D: 'DCK' };
   const TYPE_LABEL = { N: 'Nhập', X: 'Xuất', D: 'Điều chỉnh' };
   const TP_NAME = 'Kho thành phẩm - hàng hóa';
@@ -396,18 +409,20 @@ const Backend = (() => {
   }
 
   /* ---------------------------------------------------------- kho dữ liệu */
+  const READONLY_MSG = 'Đây là trang chỉ xem. Muốn nhập hoặc sửa phiếu, hãy dùng web chính (cần được mời).';
+  const dbx = () => { if (VIEW || !st.db) throw new ApiError(403, VIEW ? READONLY_MSG : 'Chưa kết nối dữ liệu.'); return st.db; };
   const ref = {
-    settings: () => st.db.doc('config/settings'),
-    routes: () => st.db.doc('config/routes'),
-    products: wh => st.db.doc(`kho/${wh}/meta/products`),
-    days: wh => st.db.collection(`kho/${wh}/days`),
-    day: (wh, d) => st.db.doc(`kho/${wh}/days/${d}`),
-    docs: wh => st.db.collection(`kho/${wh}/docs`),
-    doc: (wh, id) => st.db.doc(`kho/${wh}/docs/${id}`),
-    plans: wh => st.db.collection(`kho/${wh}/plans`),
-    planMonth: (wh, ym) => st.db.doc(`kho/${wh}/plans/${ym}`),
-    logs: () => st.db.collection('log'),
-    logDay: d => st.db.doc('log/' + d),
+    settings: () => dbx().doc('config/settings'),
+    routes: () => dbx().doc('config/routes'),
+    products: wh => dbx().doc(`kho/${wh}/meta/products`),
+    days: wh => dbx().collection(`kho/${wh}/days`),
+    day: (wh, d) => dbx().doc(`kho/${wh}/days/${d}`),
+    docs: wh => dbx().collection(`kho/${wh}/docs`),
+    doc: (wh, id) => dbx().doc(`kho/${wh}/docs/${id}`),
+    plans: wh => dbx().collection(`kho/${wh}/plans`),
+    planMonth: (wh, ym) => dbx().doc(`kho/${wh}/plans/${ym}`),
+    logs: () => dbx().collection('log'),
+    logDay: d => dbx().doc('log/' + d),
   };
   function dbError(e) {
     const code = e && e.code;
@@ -417,6 +432,7 @@ const Backend = (() => {
     return new ApiError(503, 'Mất kết nối dữ liệu, hãy thử lại. ' + (e && e.message ? '(' + e.message + ')' : ''));
   }
   async function write(fn) {
+    if (VIEW) throw new ApiError(403, READONLY_MSG);
     st.lastLocal = Date.now();
     try { return await fn(); } catch (e) {
       if (e && e.code === 'unavailable') { await sleep(400 + Math.random() * 600); try { return await fn(); } catch (e2) { throw dbError(e2); } }
@@ -464,7 +480,22 @@ const Backend = (() => {
   }
   function docData(snap) { return snap.exists ? snap.data() : null; }
 
+  function loadSnapshot(snap) {
+    st.settings = snap.settings || {}; st.routes = snap.routes || {};
+    for (const w of WAREHOUSES) {
+      const d = (snap.warehouses || {})[w] || {};
+      st.products[w] = d.products || {}; st.days[w] = d.days || {}; st.docs[w] = d.docs || {}; st.plans[w] = d.plans || {};
+      bump(w);
+    }
+    st.snapshotAt = snap.at || '';
+  }
   async function init() {
+    if (VIEW) {
+      const el = document.getElementById('antam-snapshot');
+      loadSnapshot(JSON.parse(el ? el.textContent : '{}'));
+      st.user = window.claude && window.claude.use ? await window.claude.use('user') : null;
+      return;
+    }
     if (!window.claude || !window.claude.use) throw new Error('Trang này cần mở trên claude.ai để dùng dữ liệu chung.');
     const [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]);
     if (!db) throw new Error('Không mở được kho dữ liệu chung. Hãy đăng nhập claude.ai rồi tải lại trang.');
@@ -480,6 +511,7 @@ const Backend = (() => {
     ]);
   }
   async function setWh(wh) {
+    if (VIEW) { st.wh = wh; st.loaded = true; return; }
     st.whSubs.forEach(u => { try { u(); } catch (e) { /* bỏ qua */ } });
     st.whSubs = [];
     st.wh = wh;
@@ -882,9 +914,17 @@ const Backend = (() => {
     }
     return '﻿' + out.map(r => r.map(csvCell).join(',')).join('\r\n');
   }
-  function exportBackup() {
-    return JSON.stringify({ format: 'kho-antam-backup', version: 1, at: nowStr(), settings: st.settings, routes: st.routes,
-      warehouses: Object.fromEntries(WAREHOUSES.filter(w => st.days[w]).map(w => [w, { products: st.products[w], days: st.days[w], docs: st.docs[w], plans: st.plans[w] }])) }, null, 1);
+  // Toàn bộ dữ liệu 2 kho (đọc mới từ kho dữ liệu): dùng để sao lưu và để cập nhật trang xem công khai
+  async function exportBackup() {
+    const out = { format: 'kho-antam-backup', version: 1, at: nowStr(), settings: st.settings, routes: st.routes, warehouses: {} };
+    const asMap = snap => Object.fromEntries(snap.docs.map(d => [d.id, d.data()]));
+    for (const w of WAREHOUSES) {
+      if (VIEW) { out.warehouses[w] = { products: st.products[w], days: st.days[w], docs: st.docs[w], plans: st.plans[w] }; continue; }
+      const [p, days, docs, plans] = await Promise.all([ref.products(w).get(), ref.days(w).orderBy('date', 'desc').limit(1000).get(),
+        ref.docs(w).orderBy('date', 'desc').limit(500).get(), ref.plans(w).orderBy('ym', 'desc').limit(240).get()]);
+      out.warehouses[w] = { products: (docData(p) || {}).p || {}, days: asMap(days), docs: asMap(docs), plans: asMap(plans) };
+    }
+    return JSON.stringify(out);
   }
 
   /* ---------------------------------------------------------- bộ định tuyến API (giống server.py) */
@@ -895,7 +935,7 @@ const Backend = (() => {
     const res = parts[0], arg = parts[1] ? decodeURIComponent(parts[1]) : null;
     const wh = q.wh || st.wh;
     if (!WAREHOUSES.includes(wh)) throw new ApiError(400, 'Kho không hợp lệ: ' + wh);
-    if (!st.days[wh] && res !== 'meta' && res !== 'settings' && res !== 'routes') throw new ApiError(400, 'Chưa tải dữ liệu kho ' + wh);
+    if (!st.days[wh] && !VIEW && res !== 'meta' && res !== 'settings' && res !== 'routes') throw new ApiError(400, 'Chưa tải dữ liệu kho ' + wh);
 
     if (res === 'meta' && method === 'GET') {
       const s = settings();
@@ -1111,6 +1151,7 @@ const Backend = (() => {
     }
 
     if (res === 'log' && method === 'GET') {
+      if (VIEW) return [];
       const snap = await ref.logs().orderBy('date', 'desc').limit(31).get();
       const out = [];
       snap.docs.forEach(d => live((d.data() || {}).e).forEach(([id, e]) => out.push(Object.assign({ id }, e))));
@@ -1127,7 +1168,7 @@ const Backend = (() => {
 
     if (res === 'export' && method === 'GET') {
       if (arg === 'lines.csv') return exportCsv(wh, q.from, q.to);
-      if (arg === 'backup') return exportBackup();
+      if (arg === 'backup') return await exportBackup();
     }
     throw new ApiError(404, 'Không có chức năng này');
   }
@@ -1136,14 +1177,24 @@ const Backend = (() => {
     init, setWh, handle,
     set who(v) { st.who = v; },
     get myName() { return st.myName || ''; },
-    get canWrite() { return st.canWrite; },
+    get canWrite() { return VIEW ? false : st.canWrite; },
+    get isView() { return VIEW; },
+    get snapshotAt() { return st.snapshotAt || ''; },
+    get skeletonReset() { return SKELETON_RESET; },
+    async canEditPage() { try { return !!(st.user && await st.user.canEdit()); } catch (e) { return false; } },
+    checkSnapshot(text) {
+      let snap;
+      try { snap = JSON.parse(text); } catch (e) { throw new Error('File không đọc được (không phải file dữ liệu tải từ web chính).'); }
+      if (!snap || snap.format !== 'kho-antam-backup' || !snap.warehouses || !snap.warehouses.TP || !snap.warehouses.NVL) {
+        throw new Error('File không đúng: hãy dùng file "Tải dữ liệu" ở mục Cài đặt & dữ liệu của web chính.');
+      }
+      return snap;
+    },
     onRemote(fn) { st.onRemote = fn; },
   };
 })();
-
 </script>
-<script>
-'use strict';
+<script id="antam-app">'use strict';
 /* Web làm việc nội bộ – Kho Thành phẩm & Hàng hóa An Tâm.
    Mô phỏng quy trình của file Excel: Danh mục hàng, Danh mục tuyến, Sổ Nhập Xuất,
    Phiếu Nhập Xuất, Phiếu Điều chỉnh, Nhập Xuất Tồn, Thẻ kho, Kiểm kê, Bàn giao kho,
@@ -1153,6 +1204,8 @@ const Backend = (() => {
 const S = { meta: null, dirty: false, skipDirty: false, user: '', wh: 'TP' };
 // Bản online (trang claude.ai, online/backend.js) không có máy chủ: không in trực tiếp, không mở link tải, không dùng #url.
 const ONLINE = !!window.ANTAM_ONLINE;
+// Trang xem công khai: chỉ xem số liệu chụp sẵn (online/build.py --view)
+const VIEW = !!window.ANTAM_VIEW;
 const WH_LABEL = { TP: 'Kho thành phẩm - hàng hóa', NVL: 'Kho nguyên vật liệu' };
 const TYPE_LABEL = { N: 'Nhập', X: 'Xuất', D: 'Điều chỉnh' };
 const TYPE_PREFIX = { N: 'PNK', X: 'PXK', D: 'DCK' };
@@ -1670,7 +1723,7 @@ async function viewVoucherForm(main, m, q) {
       : { from: 'Bên giao (kho/bộ phận)', to: 'Bên nhận (kho/bộ phận)', giver: 'Người giao', receiver: 'Người nhận' };
   }
   function draw() {
-    setTitle(editing ? `Sửa phiếu ${v.no}` : `Lập phiếu ${TYPE_LABEL[v.type].toLowerCase()} kho`);
+    setTitle(editing ? `${VIEW ? 'Phiếu' : 'Sửa phiếu'} ${v.no}` : `Lập phiếu ${TYPE_LABEL[v.type].toLowerCase()} kho`);
     const L = labels();
     main.innerHTML = `
       <div class="toolbar"><div class="tabs" id="type-tabs">${['N', 'X', 'D'].map(t => `<button data-t="${t}" class="${v.type === t ? 'on' : ''}">${TYPE_PREFIX[t]} · ${TYPE_LABEL[t]}</button>`).join('')}</div>
@@ -2523,6 +2576,7 @@ async function viewProducts(main) {
     });
   }
   function edit(p) {
+    if (VIEW) return;
     const s = S.meta.settings;
     const x = p || { code: '', name: '', unit: '', grp: '', price: 0, supplier: '', note: '', opening_qty: 0, min_qty: null, active: 1 };
     openModal({
@@ -2574,6 +2628,7 @@ async function viewRoutes(main) {
     });
   }
   function edit(r) {
+    if (VIEW) return;
     const x = r || { name: '', code: '', note: '' };
     openModal({
       title: r ? 'Sửa tuyến' : 'Thêm tuyến',
@@ -2611,9 +2666,10 @@ async function viewSettings(main) {
       ${cnt ? `<div class="callout warn small">${esc(W.name)} đã có ${cnt} phiếu trên web. Nếu chọn "Sổ nhập xuất", các phiếu này sẽ bị thay bằng dữ liệu trong file (kho kia không bị ảnh hưởng). Nên tải bản sao lưu trước.</div>` : ''}
     </div>
     <div class="card"><h3>Sao lưu / xuất dữ liệu</h3><div class="toolbar">
-      ${ONLINE ? `<button class="btn" id="ex-backup">⬇ Tải bản sao lưu (.json)</button>
+      ${ONLINE ? `<button class="btn" id="ex-backup">⬇ Tải dữ liệu (sao lưu / cập nhật trang xem công khai)</button>
       <button class="btn" id="ex-csv">⬇ Xuất sổ nhập xuất ${esc(W.name)} (CSV mở bằng Excel)</button></div>
-      <p class="hint">Dữ liệu được lưu trực tuyến, dùng chung cho mọi người được chia sẻ trang. Nên tải bản sao lưu định kỳ.</p></div>`
+      <p class="hint">Dữ liệu được lưu trực tuyến, dùng chung cho mọi người được chia sẻ trang. Nên tải dữ liệu định kỳ để sao lưu.
+      File này cũng dùng để cập nhật <b>trang xem công khai</b>: mở trang xem → bấm <b>⟳ Cập nhật số liệu</b> → chọn file.</p></div>`
       : `<a class="btn" href="/api/export/backup">⬇ Tải bản sao lưu cả 2 kho (.db)</a>
       <a class="btn" href="/api/export/lines.csv?wh=${S.wh}">⬇ Xuất sổ nhập xuất ${esc(W.name)} (CSV mở bằng Excel)</a></div>
       <p class="hint">Nên sao lưu mỗi cuối ngày. Để khôi phục: tắt web, chép file .db đè vào <code>kho-noi-bo/data/kho.db</code>, chạy lại.</p></div>`}
@@ -2704,7 +2760,7 @@ async function viewPlanDaily(main) {
   const depts = S.meta.settings.plan_depts || ['Xưởng', 'Văn phòng'];
   let rows = [];
   let form = { id: null, date: isoDate(), dept: depts[0], product_code: '', qty: null, price: null, need_date: isoDate(), proposer: S.user, note: '' };
-  main.innerHTML = `<div class="card"><h3 id="pf-title">Thêm dòng kế hoạch</h3><div class="grid c4">
+  main.innerHTML = `<div class="card" id="pf-card"><h3 id="pf-title">Thêm dòng kế hoạch</h3><div class="grid c4">
       <label class="field">Ngày đặt<input type="date" id="pf-date"></label>
       <label class="field">Bộ phận<select id="pf-dept">${options(depts, form.dept)}</select></label>
       <label class="field span2">Mặt hàng<div id="pf-prod"></div></label>
@@ -2911,6 +2967,56 @@ async function viewLog(main) {
     </tbody></table></div><p class="hint">500 thao tác gần nhất.</p>` : '<p class="muted">Chưa có thao tác nào.</p>';
 }
 
+/* ============================================================ trang xem công khai */
+// Trang xem tự đăng lại chính nó với số liệu mới: dựng lại mã nguồn từ các khối gốc (không lấy DOM đang chạy).
+function viewPageSource(snapshotText) {
+  const t = id => document.getElementById(id).textContent;
+  const reset = Backend.skeletonReset || ':root{color-scheme:light}body{margin:0}img{max-width:100%}[hidden]{display:none!important}';
+  const content = [
+    `<title>${esc(window.ANTAM_TITLE)}</title>`,
+    `<meta name="description" content="${esc(window.ANTAM_DESC)}">`,
+    `<style id="app-style">${t('app-style')}</style>`,
+    window.ANTAM_MARKUP,
+    `<script type="application/json" id="antam-snapshot">${snapshotText.replace(/</g, '\\u003c')}<\/script>`,
+    `<script id="antam-boot">${t('antam-boot')}<\/script>`,
+    `<script src="${window.ANTAM_SHEETJS}"><\/script>`,
+    `<script id="antam-backend">${t('antam-backend')}<\/script>`,
+    `<script id="antam-app">${t('antam-app')}<\/script>`,
+  ].join('\n');
+  return '<!doctype html><html><head><meta charset=utf8><meta name=viewport content="width=device-width,initial-scale=1,viewport-fit=cover"><style>' +
+    reset + '</style></head><body>' + content + '</body></html>';
+}
+function openSnapshotUpdate() {
+  openModal({
+    title: 'Cập nhật số liệu cho trang xem',
+    saveText: 'Đăng số liệu mới',
+    body: `<ol class="small" style="margin:0 0 12px;padding-left:18px">
+        <li>Mở <b>web chính</b> → <b>Cài đặt &amp; dữ liệu</b> → <b>Tải dữ liệu</b> (file .json).</li>
+        <li>Chọn file đó ở đây rồi bấm <b>Đăng số liệu mới</b>. Mọi người mở link sẽ thấy số liệu mới.</li></ol>
+      <label class="field">File dữ liệu (.json)<input type="file" id="snap-file" accept=".json,application/json"></label>
+      <p class="hint" id="snap-info">Số liệu đang hiển thị: ${esc(Backend.snapshotAt || '—')}</p>`,
+    onSave: async root => {
+      const f = $('#snap-file', root).files[0];
+      if (!f) throw new Error('Chọn file dữ liệu trước');
+      const text = await f.text();
+      const snap = Backend.checkSnapshot(text);
+      const artifact = await claude.use('artifact');
+      if (!artifact) throw new Error('Trang này chưa được phép tự cập nhật.');
+      $('#snap-info', root).textContent = 'Đang đăng số liệu lúc ' + (snap.at || '') + '…';
+      try { await artifact.publish(viewPageSource(text)); }
+      catch (e) {
+        const code = e && e.code;
+        if (code === 'conflict') return true; // trang đang tải lại bản mới nhất
+        if (code === 'not_writer' || code === 'not_granted' || code === 'capability_disabled') throw new Error('Bạn không có quyền cập nhật trang này (chỉ chủ trang).');
+        if (code === 'too_large') throw new Error('Số liệu quá lớn để đăng trong một trang.');
+        throw new Error('Không đăng được: ' + (e && e.message ? e.message : e));
+      }
+      toast('Đã đăng số liệu mới – trang sẽ tải lại');
+      return true;
+    },
+  });
+}
+
 /* ============================================================ khởi động */
 function askUser(force) {
   if (S.user && !force) return;
@@ -2938,14 +3044,19 @@ async function boot() {
       if (!S.user && Backend.myName) { S.user = Backend.myName; store('user', S.user); }
       await Backend.setWh(S.wh);
       Backend.onRemote(() => { const b = $('#refresh-btn'); if (b) b.hidden = false; });
-      if (Backend.canWrite === false) toast('Bạn đang ở chế độ chỉ xem: không lưu được thay đổi.', true);
+      if (VIEW) {
+        document.body.classList.add('readonly');
+        const vb = $('#view-badge');
+        vb.textContent = 'Chỉ xem · số liệu lúc ' + (Backend.snapshotAt ? Backend.snapshotAt.slice(11, 16) + ' ' + vnDate(Backend.snapshotAt.slice(0, 10)) : '—');
+        vb.hidden = false;
+        Backend.canEditPage().then(ok => { if (ok) { const b = $('#snap-btn'); b.hidden = false; b.onclick = openSnapshotUpdate; } });
+      } else if (Backend.canWrite === false) toast('Bạn đang ở chế độ chỉ xem: không lưu được thay đổi.', true);
     }
     await loadMeta();
   } catch (e) { $('#main').innerHTML = `<div class="callout warn">Không kết nối được dữ liệu: ${esc(e.message)}</div>`; return; }
   $('#user-btn').textContent = '👤 ' + (S.user || 'Khách');
   await render();
-  if (!S.user) askUser();
+  if (!S.user && !VIEW) askUser();
 }
 boot();
-
 </script>
