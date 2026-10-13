@@ -845,6 +845,32 @@ const Backend = (() => {
       return out.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0)).slice(0, 500);
     }
 
+    if (res === 'import-backup' && method === 'POST') {
+      const snap = body || {};
+      if (snap.format !== 'kho-antam-backup' || !snap.warehouses) throw new ApiError(400, "File không đúng: hãy dùng file 'Tải dữ liệu' (.json) của web Kho An Tâm");
+      const summary = {};
+      if (snap.settings && Object.keys(snap.settings).length) { await write(() => ref.settings().set({ s: snap.settings })); st.settings = snap.settings; }
+      await write(() => ref.routes().set({ r: snap.routes || {} })); st.routes = snap.routes || {};
+      for (const w of WAREHOUSES) {
+        const d = snap.warehouses[w];
+        if (!d) continue;
+        // đọc mới danh sách tài liệu hiện có để xóa cả những ngày/tháng chưa tải vào bộ nhớ
+        const asIds = s => s.docs.map(x => x.id);
+        const [oldDays, oldDocs, oldPlans] = await Promise.all([ref.days(w).limit(1000).get(), ref.docs(w).limit(1000).get(), ref.plans(w).limit(1000).get()]).then(r => r.map(asIds));
+        await write(() => ref.products(w).set({ p: d.products || {} }));
+        for (const id of oldDays) if (!(d.days || {})[id]) await write(() => ref.day(w, id).delete());
+        for (const [id, doc] of Object.entries(d.days || {})) await write(() => ref.day(w, id).set(doc));
+        for (const id of oldDocs) if (!(d.docs || {})[id]) await write(() => ref.doc(w, id).delete());
+        for (const [id, doc] of Object.entries(d.docs || {})) await write(() => ref.doc(w, id).set(doc));
+        for (const id of oldPlans) if (!(d.plans || {})[id]) await write(() => ref.planMonth(w, id).delete());
+        for (const [id, doc] of Object.entries(d.plans || {})) await write(() => ref.planMonth(w, id).set(doc));
+        st.products[w] = d.products || {}; st.days[w] = clone(d.days || {}); st.docs[w] = clone(d.docs || {}); st.plans[w] = clone(d.plans || {}); bump(w);
+        summary[w] = { 'Phiếu': vouchers(w).length };
+      }
+      await log('Nhập file dữ liệu .json', '', summary);
+      return summary;
+    }
+
     if (res === 'import' && method === 'POST') {
       if (!body || !body.byteLength) throw new ApiError(400, 'Chưa chọn file');
       const opts = {};

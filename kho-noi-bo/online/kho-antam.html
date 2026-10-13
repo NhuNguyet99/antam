@@ -1163,6 +1163,32 @@ const Backend = (() => {
       return out.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0)).slice(0, 500);
     }
 
+    if (res === 'import-backup' && method === 'POST') {
+      const snap = body || {};
+      if (snap.format !== 'kho-antam-backup' || !snap.warehouses) throw new ApiError(400, "File không đúng: hãy dùng file 'Tải dữ liệu' (.json) của web Kho An Tâm");
+      const summary = {};
+      if (snap.settings && Object.keys(snap.settings).length) { await write(() => ref.settings().set({ s: snap.settings })); st.settings = snap.settings; }
+      await write(() => ref.routes().set({ r: snap.routes || {} })); st.routes = snap.routes || {};
+      for (const w of WAREHOUSES) {
+        const d = snap.warehouses[w];
+        if (!d) continue;
+        // đọc mới danh sách tài liệu hiện có để xóa cả những ngày/tháng chưa tải vào bộ nhớ
+        const asIds = s => s.docs.map(x => x.id);
+        const [oldDays, oldDocs, oldPlans] = await Promise.all([ref.days(w).limit(1000).get(), ref.docs(w).limit(1000).get(), ref.plans(w).limit(1000).get()]).then(r => r.map(asIds));
+        await write(() => ref.products(w).set({ p: d.products || {} }));
+        for (const id of oldDays) if (!(d.days || {})[id]) await write(() => ref.day(w, id).delete());
+        for (const [id, doc] of Object.entries(d.days || {})) await write(() => ref.day(w, id).set(doc));
+        for (const id of oldDocs) if (!(d.docs || {})[id]) await write(() => ref.doc(w, id).delete());
+        for (const [id, doc] of Object.entries(d.docs || {})) await write(() => ref.doc(w, id).set(doc));
+        for (const id of oldPlans) if (!(d.plans || {})[id]) await write(() => ref.planMonth(w, id).delete());
+        for (const [id, doc] of Object.entries(d.plans || {})) await write(() => ref.planMonth(w, id).set(doc));
+        st.products[w] = d.products || {}; st.days[w] = clone(d.days || {}); st.docs[w] = clone(d.docs || {}); st.plans[w] = clone(d.plans || {}); bump(w);
+        summary[w] = { 'Phiếu': vouchers(w).length };
+      }
+      await log('Nhập file dữ liệu .json', '', summary);
+      return summary;
+    }
+
     if (res === 'import' && method === 'POST') {
       if (!body || !body.byteLength) throw new ApiError(400, 'Chưa chọn file');
       const opts = {};
@@ -2690,7 +2716,9 @@ async function viewSettings(main) {
       ${ONLINE ? `<button class="btn" id="ex-backup">⬇ Tải dữ liệu (sao lưu / cập nhật trang xem công khai)</button>
       <button class="btn" id="ex-csv">⬇ Xuất sổ nhập xuất ${esc(W.name)} (CSV mở bằng Excel)</button></div>
       <p class="hint">Dữ liệu được lưu trực tuyến, dùng chung cho mọi người được chia sẻ trang. Nên tải dữ liệu định kỳ để sao lưu.
-      File này cũng dùng để cập nhật <b>trang xem công khai</b>: mở trang xem → bấm <b>⟳ Cập nhật số liệu</b> → chọn file.</p></div>`
+      File này cũng dùng để cập nhật <b>trang xem công khai</b>: mở trang xem → bấm <b>⟳ Cập nhật số liệu</b> → chọn file.</p>
+      <div class="toolbar" style="margin-top:12px"><label class="field">Chuyển dữ liệu từ bản chạy trên máy (file .json "Tải dữ liệu")<input type="file" id="bk-file" accept=".json,application/json"></label>
+      <button class="btn" id="bk-go">Nhập file dữ liệu .json (thay toàn bộ dữ liệu 2 kho)</button></div></div>`
       : `<a class="btn" href="/api/export/backup">⬇ Tải bản sao lưu cả 2 kho (.db)</a>
       <a class="btn" href="/api/export/backup.json">⬇ Tải dữ liệu (.json) – cập nhật trang xem công khai</a>
       <a class="btn" href="/api/export/lines.csv?wh=${S.wh}">⬇ Xuất sổ nhập xuất ${esc(W.name)} (CSV mở bằng Excel)</a></div>
@@ -2722,13 +2750,16 @@ async function viewSettings(main) {
     try { await navigator.clipboard.writeText(btn.dataset.copy); toast('Đã sao chép ' + btn.dataset.copy); }
     catch (e) { toast('Hãy tự bôi đen và sao chép: ' + btn.dataset.copy); }
   });
-  if (!ONLINE) $('#bk-go').onclick = async () => {
+  $('#bk-go').onclick = async () => {
     const file = $('#bk-file').files[0];
     if (!file) return toast('Chọn file .json trước', true);
-    if (!(await ask('Thay TOÀN BỘ dữ liệu 2 kho trên máy này bằng dữ liệu trong file? Nên tải bản sao lưu .db trước.'))) return;
+    if (!(await ask(ONLINE ? 'Thay TOÀN BỘ dữ liệu 2 kho trên web này (mọi người dùng chung) bằng dữ liệu trong file? Nên tải dữ liệu hiện tại để sao lưu trước.'
+      : 'Thay TOÀN BỘ dữ liệu 2 kho trên máy này bằng dữ liệu trong file? Nên tải bản sao lưu .db trước.'))) return;
+    $('#bk-go').disabled = true;
     let snap;
     try { snap = JSON.parse(await file.text()); } catch (e) { return toast('File không đọc được', true); }
     const res = await guard(() => api('POST', '/import-backup', snap));
+    $('#bk-go').disabled = false;
     if (!res) return;
     toast('Đã nhập: ' + Object.entries(res).map(([w, r]) => `${w}: ${r['Phiếu']} phiếu`).join(', '));
     await loadMeta(); render();

@@ -1489,7 +1489,9 @@ async function viewSettings(main) {
       ${ONLINE ? `<button class="btn" id="ex-backup">⬇ Tải dữ liệu (sao lưu / cập nhật trang xem công khai)</button>
       <button class="btn" id="ex-csv">⬇ Xuất sổ nhập xuất ${esc(W.name)} (CSV mở bằng Excel)</button></div>
       <p class="hint">Dữ liệu được lưu trực tuyến, dùng chung cho mọi người được chia sẻ trang. Nên tải dữ liệu định kỳ để sao lưu.
-      File này cũng dùng để cập nhật <b>trang xem công khai</b>: mở trang xem → bấm <b>⟳ Cập nhật số liệu</b> → chọn file.</p></div>`
+      File này cũng dùng để cập nhật <b>trang xem công khai</b>: mở trang xem → bấm <b>⟳ Cập nhật số liệu</b> → chọn file.</p>
+      <div class="toolbar" style="margin-top:12px"><label class="field">Chuyển dữ liệu từ bản chạy trên máy (file .json "Tải dữ liệu")<input type="file" id="bk-file" accept=".json,application/json"></label>
+      <button class="btn" id="bk-go">Nhập file dữ liệu .json (thay toàn bộ dữ liệu 2 kho)</button></div></div>`
       : `<a class="btn" href="/api/export/backup">⬇ Tải bản sao lưu cả 2 kho (.db)</a>
       <a class="btn" href="/api/export/backup.json">⬇ Tải dữ liệu (.json) – cập nhật trang xem công khai</a>
       <a class="btn" href="/api/export/lines.csv?wh=${S.wh}">⬇ Xuất sổ nhập xuất ${esc(W.name)} (CSV mở bằng Excel)</a></div>
@@ -1521,13 +1523,16 @@ async function viewSettings(main) {
     try { await navigator.clipboard.writeText(btn.dataset.copy); toast('Đã sao chép ' + btn.dataset.copy); }
     catch (e) { toast('Hãy tự bôi đen và sao chép: ' + btn.dataset.copy); }
   });
-  if (!ONLINE) $('#bk-go').onclick = async () => {
+  $('#bk-go').onclick = async () => {
     const file = $('#bk-file').files[0];
     if (!file) return toast('Chọn file .json trước', true);
-    if (!(await ask('Thay TOÀN BỘ dữ liệu 2 kho trên máy này bằng dữ liệu trong file? Nên tải bản sao lưu .db trước.'))) return;
+    if (!(await ask(ONLINE ? 'Thay TOÀN BỘ dữ liệu 2 kho trên web này (mọi người dùng chung) bằng dữ liệu trong file? Nên tải dữ liệu hiện tại để sao lưu trước.'
+      : 'Thay TOÀN BỘ dữ liệu 2 kho trên máy này bằng dữ liệu trong file? Nên tải bản sao lưu .db trước.'))) return;
+    $('#bk-go').disabled = true;
     let snap;
     try { snap = JSON.parse(await file.text()); } catch (e) { return toast('File không đọc được', true); }
     const res = await guard(() => api('POST', '/import-backup', snap));
+    $('#bk-go').disabled = false;
     if (!res) return;
     toast('Đã nhập: ' + Object.entries(res).map(([w, r]) => `${w}: ${r['Phiếu']} phiếu`).join(', '));
     await loadMeta(); render();
