@@ -2,9 +2,11 @@
 /* Web làm việc nội bộ – Kho Thành phẩm & Hàng hóa An Tâm.
    Mô phỏng quy trình của file Excel: Danh mục hàng, Danh mục tuyến, Sổ Nhập Xuất,
    Phiếu Nhập Xuất, Phiếu Điều chỉnh, Nhập Xuất Tồn, Thẻ kho, Kiểm kê, Bàn giao kho,
-   SL Kebab hằng ngày, Kê đơn theo tuyến. */
+   SL Kebab hằng ngày, Kê đơn theo tuyến; kho NVL có thêm Kế hoạch mua hàng (KH Ngày/Tuần/Tháng).
+   Web chứa 2 kho: TP (Thành phẩm - Hàng hóa) và NVL (Nguyên vật liệu), dữ liệu tách riêng từng kho. */
 
-const S = { meta: null, dirty: false, skipDirty: false, user: '' };
+const S = { meta: null, dirty: false, skipDirty: false, user: '', wh: 'TP' };
+const WH_LABEL = { TP: 'Kho thành phẩm - hàng hóa', NVL: 'Kho nguyên vật liệu' };
 const TYPE_LABEL = { N: 'Nhập', X: 'Xuất', D: 'Điều chỉnh' };
 const TYPE_PREFIX = { N: 'PNK', X: 'PXK', D: 'DCK' };
 const HANDOVER_REASONS = ['Bàn giao ca', 'Bàn giao thủ kho (nghỉ phép/nghỉ việc)', 'Bàn giao cuối ngày', 'Chuyển kho', 'Khác'];
@@ -59,7 +61,7 @@ function firstOfMonth() { const d = new Date(); return isoDate(new Date(d.getFul
 function debounce(fn, ms = 250) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
 async function api(method, path, body) {
-  const opt = { method, headers: { 'X-User': encodeURIComponent(S.user || '') } };
+  const opt = { method, headers: { 'X-User': encodeURIComponent(S.user || ''), 'X-Wh': S.wh } };
   if (body !== undefined) {
     if (body instanceof ArrayBuffer) { opt.body = body; opt.headers['Content-Type'] = 'application/octet-stream'; }
     else { opt.body = JSON.stringify(body); opt.headers['Content-Type'] = 'application/json'; }
@@ -208,7 +210,7 @@ window.addEventListener('afterprint', () => { $('#print-root').innerHTML = ''; }
 
 function docHead(rightTop, rightSub) {
   const s = S.meta.settings;
-  return `<div class="d-head"><div>Đơn vị: <b>${esc(s.company)}</b><br>Bộ phận: ${esc(s.department)}</div>
+  return `<div class="d-head"><div>Đơn vị: <b>${esc(s.company)}</b><br>Bộ phận: ${esc(S.meta.warehouse.department)}</div>
     <div class="r"><b>${esc(rightTop)}</b><br><i>${esc(rightSub)}</i></div></div>`;
 }
 function signBlock(people) {
@@ -236,7 +238,7 @@ function voucherDoc(v) {
       <th>Điều chỉnh tăng (+)</th><th>Điều chỉnh giảm (−)</th><th>Giá trị điều chỉnh (đ)</th><th>Nguyên nhân / Ghi chú</th></tr></thead>
       <tbody>${body}<tr class="sum"><td colspan="6" class="c">CỘNG</td><td class="n">${fmt(up)}</td><td class="n">${fmt(down)}</td><td class="n">${money(val)}</td><td></td></tr></tbody></table>
       <div class="d-foot">Kèm theo: ${esc(v.doc_ref || 'Biên bản kiểm kê ngày ' + vnDate(v.date))} &nbsp; Số chứng từ kèm theo: ..........</div>
-      ${signBlock([['Người lập phiếu / kiểm duyệt', v.giver], ['Thủ kho', v.receiver], ['Kế toán', '']])}</div>`;
+      ${signBlock((S.meta.warehouse.adj_signers || ['Người lập phiếu', 'Thủ kho', 'Kế toán']).map((r, i) => [r, i === 0 ? v.giver : r === 'Thủ kho' ? v.receiver : '']))}</div>`;
   }
   let tq = 0, tm = 0;
   const body = lines.map((l, i) => {
@@ -288,6 +290,9 @@ const ROUTES = [
   [/^kebab\/(moi|\d+)$/, viewKebab],
   [/^ke-don$/, () => viewDocList('routeorders')],
   [/^ke-don\/(moi|\d+)$/, viewRouteOrders],
+  [/^kh-ngay$/, viewPlanDaily],
+  [/^kh-tuan$/, viewPlanWeekly],
+  [/^kh-thang$/, viewPlanMonthly],
   [/^hang$/, viewProducts],
   [/^tuyen$/, viewRoutes],
   [/^cai-dat$/, viewSettings],
@@ -327,11 +332,28 @@ window.addEventListener('hashchange', () => {
 window.addEventListener('beforeunload', e => { if (S.dirty) { e.preventDefault(); e.returnValue = ''; } });
 function go(hash) { if (location.hash === hash) render(); else location.hash = hash; }
 
-async function loadMeta() { S.meta = await api('GET', '/meta'); }
+async function loadMeta() {
+  S.meta = await api('GET', '/meta');
+  document.body.dataset.wh = S.wh;
+  $$('#wh-switch button').forEach(b => b.classList.toggle('on', b.dataset.wh === S.wh));
+  $('#wh-badge').textContent = S.meta.warehouse.name;
+}
+async function switchWh(wh, keepPage) {
+  if (wh === S.wh) return;
+  if (S.dirty && !confirm('Có thay đổi chưa lưu. Vẫn chuyển kho?')) return;
+  S.dirty = false;
+  S.wh = wh; store('wh', wh);
+  await loadMeta();
+  toast('Đang làm việc: ' + S.meta.warehouse.name);
+  if (keepPage) return;
+  const { path } = parseHash();
+  const only = { 'kebab': 'TP', 'ke-don': 'TP', 'tuyen': 'TP', 'kh-ngay': 'NVL', 'kh-tuan': 'NVL', 'kh-thang': 'NVL' }[path.split('/')[0]];
+  if (/^phieu\/\d+$/.test(path) || /\/\d+$/.test(path) || (only && only !== wh)) go('#/'); else render();
+}
 
 /* ============================================================ Tổng quan */
 async function viewDashboard(main) {
-  setTitle('Tổng quan');
+  setTitle('Tổng quan – ' + S.meta.warehouse.name);
   const t = isoDate();
   const [today, nxt, recent] = await Promise.all([
     api('GET', `/vouchers?from=${t}&to=${t}`), api('GET', `/report/nxt?from=${t}&to=${t}`), api('GET', '/vouchers?limit=12')]);
@@ -342,8 +364,8 @@ async function viewDashboard(main) {
   const value = nxt.reduce((a, r) => a + (r.value || 0), 0);
   const empty = !S.meta.products.length;
   main.innerHTML = `
-    ${empty ? `<div class="callout"><b>Bắt đầu:</b> chưa có danh mục hàng. Vào <a href="#/cai-dat">Cài đặt &amp; dữ liệu</a> để
-      <b>nhập dữ liệu từ file Excel</b> đang dùng (Danh mục hàng, Danh mục tuyến, Sổ Nhập Xuất), hoặc thêm tay ở <a href="#/hang">Danh mục › Mặt hàng</a>.</div>` : ''}
+    ${empty ? `<div class="callout"><b>Bắt đầu với ${esc(S.meta.warehouse.name)}:</b> chưa có danh mục hàng. Vào <a href="#/cai-dat">Cài đặt &amp; dữ liệu</a> để
+      <b>nhập dữ liệu từ file Excel</b> của kho này (Danh mục hàng, Sổ Nhập Xuất${S.wh === 'NVL' ? ', KH Ngày' : ', Danh mục tuyến'}), hoặc thêm tay ở <a href="#/hang">Danh mục › Mặt hàng</a>.</div>` : ''}
     <div class="quick">
       <a class="btn primary" href="#/phieu/moi?type=N">+ Phiếu nhập kho</a>
       <a class="btn primary" href="#/phieu/moi?type=X">+ Phiếu xuất kho</a>
@@ -351,6 +373,7 @@ async function viewDashboard(main) {
       <button class="btn" id="print-today">🖨 In tất cả phiếu hôm nay</button>
       <a class="btn" href="#/kiem-ke/moi">Kiểm kê</a>
       <a class="btn" href="#/ban-giao/moi">Bàn giao kho</a>
+      ${S.wh === 'NVL' ? '<a class="btn" href="#/kh-ngay">Kế hoạch mua hàng</a>' : ''}
     </div>
     <div class="kpis">
       <div class="kpi"><div class="k-label">Phiếu nhập hôm nay</div><div class="k-val">${cnt.N}</div></div>
@@ -376,12 +399,10 @@ async function viewDashboard(main) {
 
 /* ============================================================ Lập / sửa phiếu */
 function newVoucher(type) {
-  const base = { id: null, type, date: isoDate(), no: '', route: '', from_party: '', to_party: '', giver: '', receiver: '',
+  const base = { id: null, wh: S.wh, type, date: isoDate(), no: '', route: '', from_party: '', to_party: '', giver: '', receiver: '',
     reason: '', bill_count: '', doc_ref: '', note: '', lines: [] };
-  const last = store('lastVoucher_' + type) || {};
-  if (type === 'N') Object.assign(base, { from_party: 'Xưởng', to_party: 'Kho tổng', reason: 'Nhập kho từ bộ phận sản xuất' });
-  if (type === 'X') Object.assign(base, { from_party: 'Kho tổng', to_party: 'Đóng đơn- giao hàng', reason: '' });
-  if (type === 'D') Object.assign(base, { from_party: 'Kho tổng', reason: 'Điều chỉnh về theo số kiểm kê thực tế' });
+  const last = store('lastVoucher_' + S.wh + '_' + type) || {};
+  Object.assign(base, (S.meta.warehouse.defaults || {})[type] || {});
   base.giver = last.giver || ''; base.receiver = last.receiver || '';
   return base;
 }
@@ -391,11 +412,13 @@ async function viewVoucherForm(main, m, q) {
   let v;
   if (editing) {
     v = await api('GET', '/vouchers/' + editing);
+    if (v.wh !== S.wh) await switchWh(v.wh, true);
   } else {
     v = newVoucher(TYPE_PREFIX[q.type] ? q.type : 'N');
     if (q.draft) {
       const d = store('voucherDraft');
-      if (d) { Object.assign(v, d); localStorage.removeItem('voucherDraft'); }
+      if (d && (!d.wh || d.wh === S.wh)) Object.assign(v, d);
+      localStorage.removeItem('voucherDraft');
     }
   }
   v.lines = (v.lines || []).map(l => ({ product_code: l.product_code, qty: l.qty, price: l.price, note: l.note || '' }));
@@ -403,7 +426,8 @@ async function viewVoucherForm(main, m, q) {
   let autoNo = !editing;
   let routeAutoReason = !editing;
   let stock = {};
-  const routes = S.meta.routes;
+  const useRoutes = !!S.meta.warehouse.routes;
+  const routes = useRoutes ? S.meta.routes : [];
 
   function labels() {
     return v.type === 'D'
@@ -418,7 +442,7 @@ async function viewVoucherForm(main, m, q) {
         <div class="grow"></div>${editing ? `<span class="muted small">Tạo: ${esc(v.created_at || '')} · Sửa: ${esc(v.updated_at || '')}</span>` : ''}</div>
       <div class="card"><div class="grid c4">
         <label class="field">Ngày<input type="date" id="f-date" value="${esc(v.date)}"></label>
-        ${v.type === 'X' ? `<label class="field">Tuyến giao hàng<select id="f-route">${options(routes.map(r => [r.name, `${r.name} (${r.code})`]), v.route, '— Chọn tuyến —')}</select></label>` : ''}
+        ${v.type === 'X' && useRoutes ? `<label class="field">Tuyến giao hàng<select id="f-route">${options(routes.map(r => [r.name, `${r.name} (${r.code})`]), v.route, '— Chọn tuyến —')}</select></label>` : ''}
         <label class="field">Số phiếu<div style="display:flex;gap:6px"><input id="f-no" value="${esc(v.no)}" style="flex:1"><button class="btn sm" id="btn-renum" title="Cấp số tiếp theo theo ngày/tuyến">Cấp số mới</button></div></label>
         ${v.type === 'X' ? `<label class="field">Số lượng bill / phiếu xuất<input id="f-bill" value="${esc(v.bill_count)}"></label>` : ''}
         <label class="field">${L.from}<input id="f-from" list="dl-parties" value="${esc(v.from_party)}"></label>
@@ -429,7 +453,7 @@ async function viewVoucherForm(main, m, q) {
         <label class="field span2">Chứng từ gốc kèm theo<input id="f-docref" value="${esc(v.doc_ref)}" placeholder="${v.type === 'D' ? 'VD: Biên bản kiểm kê ngày …' : 'VD: đơn hàng, hóa đơn…'}"></label>
       </div>
       ${datalist('dl-parties', S.meta.parties)}${datalist('dl-people', S.meta.people)}
-      <p class="hint">Số phiếu tự cấp: ${TYPE_PREFIX[v.type]}-ngàytháng-STT${v.type === 'X' ? '-mã tuyến' : ''}. STT đánh liên tục trong ngày, riêng cho từng loại phiếu.</p></div>
+      <p class="hint">${esc(S.meta.warehouse.name)} · Số phiếu tự cấp: ${TYPE_PREFIX[v.type]}-ngàytháng-STT${v.type === 'X' && useRoutes ? '-mã tuyến' : ''}. STT đánh liên tục trong ngày, riêng cho từng loại phiếu và từng kho.</p></div>
       <div class="card"><h3>Mặt hàng</h3>
         <div class="table-wrap"><table class="data lines-table"><thead>${v.type === 'D'
           ? '<tr><th style="width:34px">#</th><th style="min-width:280px">Mặt hàng</th><th>ĐVT</th><th class="num">Tồn sổ</th><th class="num" style="width:110px">Tồn thực tế</th><th class="num" style="width:120px">SL điều chỉnh (+/−)</th><th class="num" style="width:110px">Đơn giá</th><th class="num">Giá trị</th><th style="min-width:160px">Nguyên nhân / Ghi chú</th><th></th></tr>'
@@ -494,7 +518,7 @@ async function viewVoucherForm(main, m, q) {
         if (await guard(() => api('DELETE', '/vouchers/' + editing))) { S.dirty = false; toast('Đã xóa phiếu ' + v.no); go('#/phieu'); }
       };
       $('#btn-copy').onclick = () => {
-        store('voucherDraft', { type: v.type, route: v.route, from_party: v.from_party, to_party: v.to_party, giver: v.giver,
+        store('voucherDraft', { wh: S.wh, type: v.type, route: v.route, from_party: v.from_party, to_party: v.to_party, giver: v.giver,
           receiver: v.receiver, reason: v.reason, lines: v.lines });
         S.dirty = false; go(`#/phieu/moi?type=${v.type}&draft=1`);
       };
@@ -595,7 +619,7 @@ async function viewVoucherForm(main, m, q) {
   async function save(andPrint) {
     if (v.lines.some(l => l.product_code && (l.qty === null || isNaN(l.qty)))) return toast('Có dòng chưa nhập số lượng', true);
     if (v.lines.some(l => !l.product_code && l.qty)) return toast('Có dòng có số lượng nhưng chưa chọn mặt hàng', true);
-    if (v.type === 'X' && !v.route && !confirm('Phiếu xuất chưa chọn tuyến. Vẫn lưu?')) return;
+    if (v.type === 'X' && useRoutes && !v.route && !confirm('Phiếu xuất chưa chọn tuyến. Vẫn lưu?')) return;
     if (v.type !== 'D') {
       const over = v.lines.filter(l => l.product_code && v.type === 'X' && (stock[l.product_code] || 0) - (Number(l.qty) || 0) < 0);
       if (over.length && !confirm(`${over.length} mặt hàng xuất vượt tồn sổ sách (sẽ bị tồn âm). Vẫn lưu?`)) return;
@@ -606,7 +630,7 @@ async function viewVoucherForm(main, m, q) {
     const res = await guard(() => editing ? api('PUT', '/vouchers/' + editing, body) : api('POST', '/vouchers', body));
     if (!res) return;
     S.dirty = false;
-    store('lastVoucher_' + v.type, { giver: v.giver, receiver: v.receiver });
+    store('lastVoucher_' + S.wh + '_' + v.type, { giver: v.giver, receiver: v.receiver });
     toast(`Đã lưu phiếu ${res.no}`);
     loadMeta();
     if (andPrint) printHtml(voucherDoc(res));
@@ -693,7 +717,7 @@ async function viewLedger(main) {
     const p = new URLSearchParams({ from: f.from, to: f.to, type: f.type });
     let rows = await guard(() => api('GET', '/lines?' + p)) || [];
     if (f.q) rows = rows.filter(r => matches(f.q, [r.no, r.product_code, r.name, r.note, r.reason, r.giver, r.receiver, r.to_party].join(' ')));
-    $('#l-csv').href = '/api/export/lines.csv?' + new URLSearchParams({ from: f.from, to: f.to });
+    $('#l-csv').href = '/api/export/lines.csv?' + new URLSearchParams({ wh: S.wh, from: f.from, to: f.to });
     const sum = { N: 0, X: 0, D: 0 };
     rows.forEach(r => { sum[r.type] += 1; });
     $('#l-sum').innerHTML = `<div class="kpi"><div class="k-label">Số dòng</div><div class="k-val">${rows.length}</div></div>
@@ -789,13 +813,13 @@ async function viewNXT(main, m, q) {
 /* ============================================================ Thẻ kho */
 async function viewStockCard(main, m, q) {
   setTitle('Thẻ kho');
-  const f = { code: q.code || store('cardCode') || '', from: q.from || firstOfMonth(), to: q.to || isoDate() };
+  const f = { code: q.code || store('cardCode_' + S.wh) || '', from: q.from || firstOfMonth(), to: q.to || isoDate() };
   main.innerHTML = `<div class="toolbar">
       <label class="field grow" style="min-width:320px">Mặt hàng<div id="c-prod"></div></label>
       <label class="field">Từ ngày<input type="date" id="c-from" value="${f.from}"></label>
       <label class="field">Đến ngày<input type="date" id="c-to" value="${f.to}"></label>
       <button class="btn" id="c-print">🖨 In thẻ kho</button></div><div id="c-body"></div>`;
-  $('#c-prod').appendChild(productCombo(f.code, p => { f.code = p ? p.code : ''; store('cardCode', f.code); load(); }, { includeInactive: true }));
+  $('#c-prod').appendChild(productCombo(f.code, p => { f.code = p ? p.code : ''; store('cardCode_' + S.wh, f.code); load(); }, { includeInactive: true }));
   let data = null;
   async function load() {
     if (!f.code) { $('#c-body').innerHTML = '<p class="muted">Chọn một mặt hàng để xem thẻ kho.</p>'; return; }
@@ -861,7 +885,9 @@ async function viewDocList(kind) {
 }
 async function loadDoc(kind, idPart) {
   if (idPart === 'moi') return { id: null, kind, date: isoDate(), title: '', data: {} };
-  return api('GET', '/docs/' + idPart);
+  const doc = await api('GET', '/docs/' + idPart);
+  if (doc.wh && doc.wh !== S.wh) await switchWh(doc.wh, true);
+  return doc;
 }
 async function saveDoc(doc) {
   const body = { kind: doc.kind, date: doc.date, title: doc.title, data: doc.data };
@@ -1011,7 +1037,7 @@ async function viewStocktake(main, m) {
     if (!rows.length) return toast('Không có dòng chênh lệch để điều chỉnh', true);
     if (S.dirty && !confirm('Biên bản chưa lưu. Vẫn tạo phiếu điều chỉnh? (nên Lưu trước)')) return;
     store('voucherDraft', {
-      type: 'D', date: doc.date, from_party: 'Kho tổng', giver: d.counter, receiver: d.keeper,
+      wh: S.wh, type: 'D', date: doc.date, from_party: S.meta.warehouse.name, giver: d.counter, receiver: d.keeper,
       reason: 'Điều chỉnh về theo số kiểm kê thực tế', doc_ref: 'Biên bản kiểm kê ngày ' + vnDate(doc.date),
       lines: rows.map(r => ({ product_code: r.code, qty: calc(r).diff, price: r.price || 0, note: r.cause || '' })),
     });
@@ -1025,8 +1051,7 @@ async function viewStocktake(main, m) {
 async function viewHandover(main, m) {
   const doc = await loadDoc('handover', m[1]);
   const d = doc.data;
-  const s = S.meta.settings;
-  Object.assign(d, Object.assign({ warehouse: s.warehouse, giver_name: S.user, giver_title: '', receiver_name: '', receiver_title: '', witness: '',
+  Object.assign(d, Object.assign({ warehouse: S.meta.warehouse.name, giver_name: S.user, giver_title: '', receiver_name: '', receiver_title: '', witness: '',
     reason: 'Bàn giao ca', scope: 'Tất cả', conclusion: '', rows: [] }, d));
   setTitle('Biên bản bàn giao hàng tồn kho');
   const groups = Array.from(new Set(S.meta.products.map(p => p.grp).filter(Boolean)));
@@ -1332,59 +1357,306 @@ async function viewRoutes(main) {
 async function viewSettings(main) {
   setTitle('Cài đặt & dữ liệu');
   const s = S.meta.settings;
+  const W = S.meta.warehouse;
   const lines = a => (a || []).join('\n');
+  const cnt = S.meta.counts[S.wh] || 0;
   main.innerHTML = `
-    <div class="card"><h3>Nhập dữ liệu từ file Excel đang dùng</h3>
-      <p class="small">Chọn file Excel quản lý kho (.xlsx) có các sheet <b>Danh mục hàng</b>, <b>Danh mục tuyến</b>, <b>Sổ Nhập Xuất</b>.
-      Web sẽ lấy danh mục, số dư ban đầu / tồn tối thiểu (sheet Nhập Xuất Tồn) và toàn bộ dòng sổ nhập xuất, gom theo Số phiếu thành từng phiếu.</p>
+    <div class="card"><h3>Nhập dữ liệu từ file Excel vào <span class="wh-badge">${esc(W.name)}</span></h3>
+      <p class="small">Chọn file Excel quản lý <b>${esc(W.name)}</b> (.xlsx). Web lấy: <b>Danh mục hàng</b>, số dư ban đầu / tồn tối thiểu (sheet Nhập Xuất Tồn),
+      toàn bộ <b>Sổ Nhập Xuất</b> (gom theo Số phiếu)${S.wh === 'NVL' ? ' và <b>KH Ngày</b> (kế hoạch mua hàng)' : ' và <b>Danh mục tuyến</b>'}.
+      Muốn nhập file của kho kia, bấm chuyển kho ở góc trên bên trái trước.</p>
       <div class="toolbar"><input type="file" id="imp-file" accept=".xlsx">
         <label class="check"><input type="checkbox" id="imp-p" checked> Danh mục hàng</label>
-        <label class="check"><input type="checkbox" id="imp-r" checked> Danh mục tuyến</label>
-        <label class="check"><input type="checkbox" id="imp-l" checked> Sổ nhập xuất (thay thế toàn bộ phiếu hiện có)</label>
+        ${S.wh === 'TP' ? '<label class="check"><input type="checkbox" id="imp-r" checked> Danh mục tuyến</label>' : ''}
+        ${S.wh === 'NVL' ? '<label class="check"><input type="checkbox" id="imp-k" checked> KH Ngày (thay toàn bộ kế hoạch)</label>' : ''}
+        <label class="check"><input type="checkbox" id="imp-l" checked> Sổ nhập xuất (thay toàn bộ phiếu của kho này)</label>
         <button class="btn primary" id="imp-go">Nhập dữ liệu</button></div>
       <div id="imp-result"></div>
-      ${S.meta.counts.vouchers ? `<div class="callout warn small">Hiện đã có ${S.meta.counts.vouchers} phiếu trên web. Nếu chọn "Sổ nhập xuất", các phiếu này sẽ bị thay bằng dữ liệu trong file. Nên tải bản sao lưu trước.</div>` : ''}
+      ${cnt ? `<div class="callout warn small">${esc(W.name)} đã có ${cnt} phiếu trên web. Nếu chọn "Sổ nhập xuất", các phiếu này sẽ bị thay bằng dữ liệu trong file (kho kia không bị ảnh hưởng). Nên tải bản sao lưu trước.</div>` : ''}
     </div>
     <div class="card"><h3>Sao lưu / xuất dữ liệu</h3><div class="toolbar">
-      <a class="btn" href="/api/export/backup">⬇ Tải bản sao lưu (.db)</a>
-      <a class="btn" href="/api/export/lines.csv">⬇ Xuất toàn bộ sổ nhập xuất (CSV mở bằng Excel)</a></div>
+      <a class="btn" href="/api/export/backup">⬇ Tải bản sao lưu cả 2 kho (.db)</a>
+      <a class="btn" href="/api/export/lines.csv?wh=${S.wh}">⬇ Xuất sổ nhập xuất ${esc(W.name)} (CSV mở bằng Excel)</a></div>
       <p class="hint">Nên sao lưu mỗi cuối ngày. Để khôi phục: tắt web, chép file .db đè vào <code>kho-noi-bo/data/kho.db</code>, chạy lại.</p></div>
-    <div class="card"><h3>Thông tin in trên phiếu</h3><div class="grid c3">
+    <div class="card"><h3>Thông tin ${esc(W.name)}</h3><div class="grid c3">
+      <label class="field">Tên kho (ghi trên phiếu, bàn giao, điều chỉnh)<input id="w-name" value="${esc(W.name)}"></label>
+      <label class="field">Bộ phận (dòng "Bộ phận:" trên phiếu in)<input id="w-dept" value="${esc(W.department)}"></label>
+      <label class="field">Bên giao / bên nhận gợi ý (mỗi dòng một mục)<textarea id="w-parties" rows="6">${esc(lines(W.parties))}</textarea></label>
+    </div></div>
+    <div class="card"><h3>Chung cho cả 2 kho</h3><div class="grid c3">
       <label class="field">Đơn vị<input id="s-company" value="${esc(s.company)}"></label>
-      <label class="field">Bộ phận<input id="s-dept" value="${esc(s.department)}"></label>
-      <label class="field">Tên kho (bàn giao)<input id="s-wh" value="${esc(s.warehouse)}"></label>
       <label class="field">Khổ giấy in<select id="s-paper">${options(['A4', 'A5'], s.paper)}</select></label>
       <label class="field">Ngưỡng lệch kiểm kê mặc định (%)<input id="s-thr" class="num" value="${fmt((s.stocktake_threshold || 0) * 100)}"></label>
       <label class="field">Loại túi Kebab (số cái/túi, cách nhau dấu phẩy)<input id="s-kebab" value="${esc((s.kebab_sizes || []).join(', '))}"></label>
-    </div></div>
-    <div class="card"><h3>Danh sách gợi ý (mỗi dòng một mục)</h3><div class="grid c4">
-      <label class="field">Bên giao / bên nhận<textarea id="s-parties" rows="8">${esc(lines(s.parties))}</textarea></label>
-      <label class="field">Nhân viên<textarea id="s-staff" rows="8">${esc(lines(s.staff))}</textarea></label>
-      <label class="field">Nhóm hàng<textarea id="s-groups" rows="8">${esc(lines(s.groups))}</textarea></label>
-      <label class="field">Đơn vị tính<textarea id="s-units" rows="8">${esc(lines(s.units))}</textarea></label>
+      <label class="field">Bộ phận đặt hàng (kế hoạch mua, cách nhau dấu phẩy)<input id="s-depts" value="${esc((s.plan_depts || []).join(', '))}"></label>
+    </div><div class="grid c3" style="margin-top:12px">
+      <label class="field">Nhân viên<textarea id="s-staff" rows="7">${esc(lines(s.staff))}</textarea></label>
+      <label class="field">Nhóm hàng<textarea id="s-groups" rows="7">${esc(lines(s.groups))}</textarea></label>
+      <label class="field">Đơn vị tính<textarea id="s-units" rows="7">${esc(lines(s.units))}</textarea></label>
     </div><div style="margin-top:12px"><button class="btn primary" id="s-save">💾 Lưu cài đặt</button></div></div>`;
   $('#imp-go').onclick = async () => {
     const file = $('#imp-file').files[0];
     if (!file) return toast('Chọn file .xlsx trước', true);
     const ledger = $('#imp-l').checked;
-    if (ledger && S.meta.counts.vouchers && !confirm(`Thay toàn bộ ${S.meta.counts.vouchers} phiếu hiện có bằng dữ liệu trong file?`)) return;
+    if (ledger && cnt && !confirm(`Thay toàn bộ ${cnt} phiếu của ${W.name} bằng dữ liệu trong file?`)) return;
     $('#imp-go').disabled = true; $('#imp-result').innerHTML = '<p class="muted">Đang nhập…</p>';
     const buf = await file.arrayBuffer();
-    const p = new URLSearchParams({ products: $('#imp-p').checked ? 1 : 0, routes: $('#imp-r').checked ? 1 : 0, ledger: ledger ? 1 : 0, replace_ledger: 1 });
+    const chk = id => ($(id) && $(id).checked ? 1 : 0);
+    const p = new URLSearchParams({ products: chk('#imp-p'), routes: chk('#imp-r'), plans: chk('#imp-k'), ledger: ledger ? 1 : 0, replace_ledger: 1 });
     const res = await guard(() => api('POST', '/import?' + p, buf));
     $('#imp-go').disabled = false;
     if (!res) { $('#imp-result').innerHTML = ''; return; }
-    $('#imp-result').innerHTML = `<div class="callout">Đã nhập: ${Object.entries(res).map(([k, v]) => `<b>${esc(k)}</b>: ${fmt(v)}`).join(' · ')}</div>`;
+    $('#imp-result').innerHTML = `<div class="callout">Đã nhập vào ${esc(W.name)}: ${Object.entries(res).map(([k, v]) => `<b>${esc(k)}</b>: ${fmt(v)}`).join(' · ')}</div>`;
     await loadMeta();
   };
   $('#s-save').onclick = async () => {
     const arr = id => $(id).value.split('\n').map(x => x.trim()).filter(Boolean);
     const thr = parseNum($('#s-thr').value);
-    const body = { company: $('#s-company').value, department: $('#s-dept').value, warehouse: $('#s-wh').value, paper: $('#s-paper').value,
+    const body = { company: $('#s-company').value, paper: $('#s-paper').value,
       stocktake_threshold: thr && !isNaN(thr) ? thr / 100 : 0, kebab_sizes: $('#s-kebab').value.split(',').map(x => parseInt(x, 10)).filter(x => x > 0),
-      parties: arr('#s-parties'), staff: arr('#s-staff'), groups: arr('#s-groups'), units: arr('#s-units') };
+      plan_depts: $('#s-depts').value.split(',').map(x => x.trim()).filter(Boolean),
+      staff: arr('#s-staff'), groups: arr('#s-groups'), units: arr('#s-units'),
+      warehouses: { [S.wh]: { name: $('#w-name').value.trim() || W.name, department: $('#w-dept').value, parties: arr('#w-parties') } } };
     if (await guard(() => api('PUT', '/settings', body))) { toast('Đã lưu cài đặt'); await loadMeta(); }
   };
+}
+
+/* ============================================================ Kế hoạch mua hàng (kho NVL) */
+// Tuần trong tháng: tính từ Thứ 2 đến Chủ nhật, cắt theo tháng (giống công thức sheet KH Ngày)
+function weekOfMonth(iso) {
+  const d = new Date(iso + 'T00:00:00');
+  const first = new Date(d.getFullYear(), d.getMonth(), 1);
+  const wd = (first.getDay() + 6) % 7; // Thứ 2 = 0
+  return Math.floor((d.getDate() - 1 + wd) / 7) + 1;
+}
+function monthWeeks(year, month) {
+  const first = new Date(year, month - 1, 1), last = new Date(year, month, 0);
+  const wd = (first.getDay() + 6) % 7;
+  const out = [];
+  for (let w = 1; w <= 6; w++) {
+    const start = new Date(year, month - 1, 1 - wd + 7 * (w - 1));
+    if (start > last) break;
+    const s = start < first ? first : start;
+    const e0 = new Date(start); e0.setDate(e0.getDate() + 6);
+    const e = e0 > last ? last : e0;
+    const z = n => String(n).padStart(2, '0');
+    out.push({ w, label: `Tuần ${w}: ${z(s.getDate())}/${z(s.getMonth() + 1)} - ${z(e.getDate())}/${z(e.getMonth() + 1)}` });
+  }
+  return out;
+}
+function monthPicker(state) {
+  const y0 = new Date().getFullYear();
+  return `<label class="field">Tháng<select id="pm-m">${options(Array.from({ length: 12 }, (_, i) => [i + 1, 'Tháng ' + (i + 1)]), state.month)}</select></label>
+    <label class="field">Năm<select id="pm-y">${options([y0 - 1, y0, y0 + 1], state.year)}</select></label>`;
+}
+function monthRange(y, m) { const z = n => String(n).padStart(2, '0'); return [`${y}-${z(m)}-01`, `${y}-${z(m)}-${z(new Date(y, m, 0).getDate())}`]; }
+function planState() {
+  const t = new Date();
+  return Object.assign({ year: t.getFullYear(), month: t.getMonth() + 1 }, store('planMonth') || {});
+}
+
+async function viewPlanDaily(main) {
+  setTitle('Kế hoạch mua hàng theo ngày');
+  const st = Object.assign(planState(), { q: '' });
+  const depts = S.meta.settings.plan_depts || ['Xưởng', 'Văn phòng'];
+  let rows = [];
+  let form = { id: null, date: isoDate(), dept: depts[0], product_code: '', qty: null, price: null, need_date: isoDate(), proposer: S.user, note: '' };
+  main.innerHTML = `<div class="card"><h3 id="pf-title">Thêm dòng kế hoạch</h3><div class="grid c4">
+      <label class="field">Ngày đặt<input type="date" id="pf-date"></label>
+      <label class="field">Bộ phận<select id="pf-dept">${options(depts, form.dept)}</select></label>
+      <label class="field span2">Mặt hàng<div id="pf-prod"></div></label>
+      <label class="field">Số lượng<input id="pf-qty" class="num" inputmode="decimal"></label>
+      <label class="field">Đơn giá (đ) – tự lấy theo danh mục, gõ đè được<input id="pf-price" class="num" inputmode="decimal"></label>
+      <label class="field">Ngày cần hàng<input type="date" id="pf-need"></label>
+      <label class="field">Người đề xuất<input id="pf-prop" list="dl-people"></label>
+      <label class="field span2">Ghi chú<input id="pf-note"></label>
+      <div class="field span2" style="justify-content:flex-end;flex-direction:row;gap:8px;align-items:flex-end">
+        <button class="btn primary" id="pf-save">+ Thêm vào kế hoạch</button><button class="btn" id="pf-cancel" style="display:none">Hủy sửa</button></div>
+    </div>${datalist('dl-people', S.meta.people)}<p class="hint" id="pf-amt"></p></div>
+    <div class="toolbar">${monthPicker(st)}<label class="field grow">Tìm<input id="pm-q"></label>
+      <button class="btn" id="pm-print">🖨 In danh sách</button></div>
+    <div id="pm-list"></div>`;
+  const combo = productCombo('', p => { form.product_code = p ? p.code : ''; if (p) { form.price = p.price || 0; $('#pf-price').value = fmt(form.price); } amt(); });
+  $('#pf-prod').appendChild(combo);
+  function fill() {
+    $('#pf-date').value = form.date; $('#pf-dept').value = form.dept; $('#pf-qty').value = form.qty === null ? '' : fmt(form.qty);
+    $('#pf-price').value = form.price === null ? '' : fmt(form.price); $('#pf-need').value = form.need_date || ''; $('#pf-prop').value = form.proposer || '';
+    $('#pf-note').value = form.note || '';
+    const p = productByCode(form.product_code);
+    $('input', combo).value = p ? `${p.code} | ${p.name}` : '';
+    $('#pf-title').textContent = form.id ? 'Sửa dòng kế hoạch' : 'Thêm dòng kế hoạch';
+    $('#pf-save').textContent = form.id ? '💾 Lưu thay đổi' : '+ Thêm vào kế hoạch';
+    $('#pf-cancel').style.display = form.id ? '' : 'none';
+    amt();
+  }
+  function amt() {
+    const q = parseNum($('#pf-qty').value), pr = parseNum($('#pf-price').value);
+    $('#pf-amt').textContent = q && pr ? 'Thành tiền: ' + money(q * pr) + ' đ' : '';
+  }
+  $('#pf-qty').oninput = amt; $('#pf-price').oninput = amt;
+  $('#pf-cancel').onclick = () => { form = Object.assign(form, { id: null, product_code: '', qty: null, price: null, note: '' }); fill(); };
+  $('#pf-save').onclick = async () => {
+    const qty = parseNum($('#pf-qty').value), price = parseNum($('#pf-price').value);
+    if (!form.product_code) return toast('Chọn mặt hàng', true);
+    if (!qty || isNaN(qty)) return toast('Nhập số lượng', true);
+    const body = { id: form.id, date: $('#pf-date').value, dept: $('#pf-dept').value, product_code: form.product_code, qty, price: isNaN(price) ? 0 : (price || 0),
+      need_date: $('#pf-need').value, proposer: $('#pf-prop').value, note: $('#pf-note').value };
+    if (!(await guard(() => api('POST', '/plans', body)))) return;
+    toast(form.id ? 'Đã lưu' : 'Đã thêm vào kế hoạch');
+    form = Object.assign(form, { id: null, date: body.date, dept: body.dept, need_date: body.need_date, proposer: body.proposer, product_code: '', qty: null, price: null, note: '' });
+    fill(); combo.focusInput(); load();
+  };
+  async function load() {
+    const [f, t] = monthRange(st.year, st.month);
+    rows = await guard(() => api('GET', `/plans?from=${f}&to=${t}`)) || [];
+    draw();
+  }
+  function filtered() { return rows.filter(r => !st.q || matches(st.q, [r.product_code, r.name, r.dept, r.proposer, r.note].join(' '))); }
+  function draw() {
+    const list = filtered();
+    const total = list.reduce((a, r) => a + r.qty * r.price, 0);
+    $('#pm-list').innerHTML = list.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Ngày đặt</th><th>Bộ phận</th><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th>
+      <th class="num">Số lượng</th><th class="num">Đơn giá</th><th class="num">Thành tiền</th><th>Ngày cần hàng</th><th>Người đề xuất</th><th>Ghi chú</th><th>Tuần</th><th></th></tr></thead><tbody>
+      ${list.map(r => `<tr class="clickable" data-id="${r.id}"><td class="nowrap">${vnDate(r.date)}</td><td>${esc(r.dept)}</td><td>${esc(r.product_code)}</td><td class="nm">${esc(r.name)}</td><td>${esc(r.unit)}</td>
+        <td class="num">${fmt(r.qty)}</td><td class="num">${fmtBlank0(r.price)}</td><td class="num">${fmtBlank0(Math.round(r.qty * r.price))}</td>
+        <td class="nowrap">${vnDate(r.need_date)}</td><td class="small">${esc(r.proposer)}</td><td class="small">${esc(r.note)}</td><td class="center">${weekOfMonth(r.date)}</td>
+        <td><button class="btn sm danger" data-del="${r.id}">Xóa</button></td></tr>`).join('')}
+      </tbody><tfoot><tr><td colspan="7">Cộng ${list.length} dòng</td><td class="num">${money(total)}</td><td colspan="5"></td></tr></tfoot></table></div>
+      <p class="hint">Bấm vào dòng để sửa. Tổng hợp theo tuần/tháng ở mục KH mua theo tuần / tháng.</p>` : '<p class="muted">Chưa có kế hoạch trong tháng này.</p>';
+    $$('#pm-list tr[data-id]').forEach(tr => tr.onclick = e => {
+      if (e.target.closest('button')) return;
+      const r = rows.find(x => x.id === +tr.dataset.id);
+      form = { id: r.id, date: r.date, dept: r.dept, product_code: r.product_code, qty: r.qty, price: r.price, need_date: r.need_date, proposer: r.proposer, note: r.note };
+      fill(); window.scrollTo({ top: 0, behavior: 'smooth' });
+    });
+    $$('#pm-list [data-del]').forEach(b => b.onclick = async () => {
+      if (!confirm('Xóa dòng kế hoạch này?')) return;
+      if (await guard(() => api('DELETE', '/plans/' + b.dataset.del))) load();
+    });
+  }
+  const upd = () => { st.month = +$('#pm-m').value; st.year = +$('#pm-y').value; store('planMonth', { year: st.year, month: st.month }); load(); };
+  $('#pm-m').onchange = upd; $('#pm-y').onchange = upd;
+  $('#pm-q').oninput = debounce(() => { st.q = $('#pm-q').value; draw(); }, 200);
+  $('#pm-print').onclick = () => {
+    const list = filtered().slice().reverse();
+    printHtml(`<div class="doc landscape">${docHead('', '')}<div class="d-title">Kế hoạch mua hàng theo ngày</div><div class="d-sub">Tháng ${st.month}/${st.year}</div>
+      <table class="t"><thead><tr><th>STT</th><th>Ngày đặt</th><th>Bộ phận</th><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th><th>Số lượng</th><th>Đơn giá (đ)</th><th>Thành tiền (đ)</th><th>Ngày cần hàng</th><th>Người đề xuất</th><th>Ghi chú</th></tr></thead>
+      <tbody>${list.map((r, i) => `<tr><td class="c">${i + 1}</td><td class="c">${vnDate(r.date)}</td><td>${esc(r.dept)}</td><td>${esc(r.product_code)}</td><td>${esc(r.name)}</td><td class="c">${esc(r.unit)}</td>
+        <td class="n">${fmt(r.qty)}</td><td class="n">${fmtBlank0(r.price)}</td><td class="n">${fmtBlank0(Math.round(r.qty * r.price))}</td><td class="c">${vnDate(r.need_date)}</td><td>${esc(r.proposer)}</td><td>${esc(r.note)}</td></tr>`).join('')}
+      <tr class="sum"><td colspan="8" class="c">TỔNG CỘNG</td><td class="n">${money(list.reduce((a, r) => a + r.qty * r.price, 0))}</td><td colspan="3"></td></tr></tbody></table>
+      ${signBlock([['Người lập (Thủ kho)', S.user], ['Kế toán', ''], ['Giám đốc duyệt', '']])}</div>`, 'landscape');
+  };
+  fill();
+  await load();
+}
+
+async function viewPlanWeekly(main) {
+  setTitle('Kế hoạch mua hàng theo tuần');
+  const st = Object.assign(planState(), { all: false });
+  main.innerHTML = `<div class="toolbar">${monthPicker(st)}<label class="check"><input type="checkbox" id="pw-all"> Hiện cả mã không có kế hoạch</label>
+    <div class="grow"></div><button class="btn" id="pw-print">🖨 In</button></div>
+    <p class="hint">Tự tổng hợp từ KH mua theo ngày. Tuần tính từ Thứ 2 đến Chủ nhật, cắt theo tháng.</p><div id="pw-list"></div>`;
+  let data = null;
+  async function load() {
+    const [f, t] = monthRange(st.year, st.month);
+    const rows = await guard(() => api('GET', `/plans?from=${f}&to=${t}`)) || [];
+    const weeks = monthWeeks(st.year, st.month);
+    const per = {};
+    rows.forEach(r => {
+      const p = per[r.product_code] = per[r.product_code] || { qty: {}, amt: {}, tq: 0, ta: 0 };
+      const w = weekOfMonth(r.date);
+      p.qty[w] = (p.qty[w] || 0) + r.qty; p.amt[w] = (p.amt[w] || 0) + r.qty * r.price;
+      p.tq += r.qty; p.ta += r.qty * r.price;
+    });
+    data = { weeks, per };
+    draw();
+  }
+  function list() {
+    return S.meta.products.map(p => Object.assign({ p }, data.per[p.code] || { qty: {}, amt: {}, tq: 0, ta: 0 })).filter(r => st.all || r.tq);
+  }
+  function draw() {
+    const { weeks } = data;
+    const items = list();
+    const wt = w => items.reduce((a, r) => a + (r.amt[w] || 0), 0);
+    $('#pw-list').innerHTML = `<div class="table-wrap"><table class="data"><thead>
+      <tr><th rowspan="2">Mã hàng</th><th rowspan="2">Tên hàng</th><th rowspan="2">ĐVT</th><th rowspan="2">Nhóm hàng</th>${weeks.map(w => `<th colspan="2" class="center">${esc(w.label)}</th>`).join('')}<th colspan="2" class="center">TỔNG THÁNG</th></tr>
+      <tr>${weeks.map(() => '<th class="num">Số lượng</th><th class="num">Thành tiền</th>').join('')}<th class="num">Số lượng</th><th class="num">Thành tiền</th></tr></thead><tbody>
+      <tr><td colspan="4"><b>TỔNG TIỀN THEO TUẦN</b></td>${weeks.map(w => `<td></td><td class="num"><b>${money(wt(w.w))}</b></td>`).join('')}<td></td><td class="num"><b>${money(items.reduce((a, r) => a + r.ta, 0))}</b></td></tr>
+      ${items.map(r => `<tr><td>${esc(r.p.code)}</td><td class="nm">${esc(r.p.name)}</td><td>${esc(r.p.unit)}</td><td class="small">${esc(r.p.grp)}</td>
+        ${weeks.map(w => `<td class="num">${fmtBlank0(r.qty[w.w])}</td><td class="num">${fmtBlank0(Math.round(r.amt[w.w] || 0))}</td>`).join('')}
+        <td class="num"><b>${fmtBlank0(r.tq)}</b></td><td class="num"><b>${fmtBlank0(Math.round(r.ta))}</b></td></tr>`).join('')}
+      </tbody></table></div>${items.length ? '' : '<p class="muted">Chưa có kế hoạch trong tháng này.</p>'}`;
+  }
+  const upd = () => { st.month = +$('#pm-m').value; st.year = +$('#pm-y').value; store('planMonth', { year: st.year, month: st.month }); load(); };
+  $('#pm-m').onchange = upd; $('#pm-y').onchange = upd;
+  $('#pw-all').onchange = () => { st.all = $('#pw-all').checked; draw(); };
+  $('#pw-print').onclick = () => {
+    const { weeks } = data;
+    const items = list();
+    printHtml(`<div class="doc landscape">${docHead('', '')}<div class="d-title">Kế hoạch mua hàng theo tuần</div><div class="d-sub">Tháng ${st.month}/${st.year}</div>
+      <table class="t" style="font-size:9.5pt"><thead><tr><th rowspan="2">Mã hàng</th><th rowspan="2">Tên hàng</th><th rowspan="2">ĐVT</th>${weeks.map(w => `<th colspan="2">${esc(w.label)}</th>`).join('')}<th colspan="2">TỔNG THÁNG</th></tr>
+      <tr>${weeks.map(() => '<th>SL</th><th>Thành tiền</th>').join('')}<th>SL</th><th>Thành tiền</th></tr></thead><tbody>
+      ${items.map(r => `<tr><td>${esc(r.p.code)}</td><td>${esc(r.p.name)}</td><td class="c">${esc(r.p.unit)}</td>${weeks.map(w => `<td class="n">${fmtBlank0(r.qty[w.w])}</td><td class="n">${fmtBlank0(Math.round(r.amt[w.w] || 0))}</td>`).join('')}
+        <td class="n">${fmtBlank0(r.tq)}</td><td class="n">${fmtBlank0(Math.round(r.ta))}</td></tr>`).join('')}
+      <tr class="sum"><td colspan="3" class="c">TỔNG TIỀN</td>${weeks.map(w => `<td></td><td class="n">${money(items.reduce((a, r) => a + (r.amt[w.w] || 0), 0))}</td>`).join('')}<td></td><td class="n">${money(items.reduce((a, r) => a + r.ta, 0))}</td></tr>
+      </tbody></table>${signBlock([['Người lập (Thủ kho)', S.user], ['Kế toán', ''], ['Giám đốc duyệt', '']])}</div>`, 'landscape');
+  };
+  await load();
+}
+
+async function viewPlanMonthly(main) {
+  setTitle('Kế hoạch mua hàng tháng');
+  const st = Object.assign(planState(), { all: false });
+  const depts = S.meta.settings.plan_depts || ['Xưởng', 'Văn phòng'];
+  main.innerHTML = `<div class="toolbar">${monthPicker(st)}<label class="check"><input type="checkbox" id="pt-all"> Hiện cả mã không có kế hoạch</label>
+    <div class="grow"></div><button class="btn primary" id="pt-print">🖨 In kế hoạch tháng (gửi Kế toán)</button></div>
+    <div id="pt-kpi" class="kpis"></div><div id="pt-list"></div>`;
+  let items = [], deptAmt = {};
+  async function load() {
+    const [f, t] = monthRange(st.year, st.month);
+    const rows = await guard(() => api('GET', `/plans?from=${f}&to=${t}`)) || [];
+    const per = {};
+    rows.forEach(r => {
+      const p = per[r.product_code] = per[r.product_code] || { dept: {}, tq: 0, ta: 0 };
+      p.dept[r.dept] = (p.dept[r.dept] || 0) + r.qty;
+      p.tq += r.qty; p.ta += r.qty * r.price;
+    });
+    deptAmt = {};
+    rows.forEach(r => { deptAmt[r.dept] = (deptAmt[r.dept] || 0) + r.qty * r.price; });
+    items = S.meta.products.map(p => Object.assign({ p }, per[p.code] || { dept: {}, tq: 0, ta: 0 }));
+    $('#pt-kpi').innerHTML = depts.map(d => `<div class="kpi"><div class="k-label">Tổng tiền ${esc(d)}</div><div class="k-val">${money(deptAmt[d] || 0)}</div></div>`).join('') +
+      `<div class="kpi"><div class="k-label">Tổng cộng tháng ${st.month}/${st.year}</div><div class="k-val">${money(rows.reduce((a, r) => a + r.qty * r.price, 0))}</div></div>`;
+    draw();
+  }
+  const shown = () => items.filter(r => st.all || r.tq);
+  const avg = r => (r.tq ? r.ta / r.tq : (r.p.price || 0));
+  function draw() {
+    const list = shown();
+    $('#pt-list').innerHTML = `<div class="table-wrap"><table class="data"><thead><tr><th>STT</th><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th><th>Nhóm hàng</th>
+      ${depts.map(d => `<th class="num">SL ${esc(d)}</th>`).join('')}<th class="num">Tổng số lượng</th><th class="num">Đơn giá BQ</th><th class="num">Thành tiền</th><th>Nhà cung cấp</th></tr></thead><tbody>
+      ${list.map((r, i) => `<tr><td>${i + 1}</td><td>${esc(r.p.code)}</td><td>${esc(r.p.name)}</td><td>${esc(r.p.unit)}</td><td class="small">${esc(r.p.grp)}</td>
+        ${depts.map(d => `<td class="num">${fmtBlank0(r.dept[d])}</td>`).join('')}<td class="num"><b>${fmtBlank0(r.tq)}</b></td><td class="num">${fmtBlank0(Math.round(avg(r)))}</td>
+        <td class="num">${fmtBlank0(Math.round(r.ta))}</td><td class="small">${esc(r.p.supplier)}</td></tr>`).join('')}
+      </tbody><tfoot><tr><td colspan="${7 + depts.length}">TỔNG CỘNG</td><td class="num">${money(list.reduce((a, r) => a + r.ta, 0))}</td><td></td></tr></tfoot></table></div>
+      ${list.length ? '' : '<p class="muted">Chưa có kế hoạch trong tháng này.</p>'}`;
+  }
+  const upd = () => { st.month = +$('#pm-m').value; st.year = +$('#pm-y').value; store('planMonth', { year: st.year, month: st.month }); load(); };
+  $('#pm-m').onchange = upd; $('#pm-y').onchange = upd;
+  $('#pt-all').onchange = () => { st.all = $('#pt-all').checked; draw(); };
+  $('#pt-print').onclick = () => {
+    const list = shown();
+    const z = n => String(n).padStart(2, '0');
+    printHtml(`<div class="doc landscape">${docHead('', '')}<div class="d-title">Kế hoạch mua hàng tháng</div><div class="d-sub">Tháng ${z(st.month)}/${st.year}</div>
+      <div class="d-info" style="display:flex;justify-content:space-between"><div>Bộ phận lập: <b>Kho</b></div><div>Gửi: <b>Phòng Kế toán</b></div></div>
+      <table class="t"><thead><tr><th>STT</th><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th><th>Nhóm hàng</th>${depts.map(d => `<th>SL ${esc(d)}</th>`).join('')}<th>Tổng số lượng</th><th>Đơn giá BQ (đ)</th><th>Thành tiền (đ)</th><th>Nhà cung cấp</th><th>Ghi chú</th></tr></thead>
+      <tbody>${list.map((r, i) => `<tr><td class="c">${i + 1}</td><td>${esc(r.p.code)}</td><td>${esc(r.p.name)}</td><td class="c">${esc(r.p.unit)}</td><td>${esc(r.p.grp)}</td>
+        ${depts.map(d => `<td class="n">${fmtBlank0(r.dept[d])}</td>`).join('')}<td class="n">${fmtBlank0(r.tq)}</td><td class="n">${fmtBlank0(Math.round(avg(r)))}</td><td class="n">${fmtBlank0(Math.round(r.ta))}</td><td>${esc(r.p.supplier)}</td><td></td></tr>`).join('')}
+      <tr class="sum"><td colspan="${7 + depts.length}" class="c">TỔNG CỘNG</td><td class="n">${money(list.reduce((a, r) => a + r.ta, 0))}</td><td colspan="2"></td></tr></tbody></table>
+      <div class="d-foot">${depts.map(d => `Tổng tiền ${esc(d)}: <b>${money(deptAmt[d] || 0)}</b>`).join(' &nbsp;·&nbsp; ')}</div>
+      <div class="d-date-right">Ngày ..... tháng ${st.month} năm ${st.year}</div>
+      ${signBlock([['Người lập (Thủ kho)', S.user], ['Kế toán', ''], ['Giám đốc duyệt', '']])}</div>`, 'landscape');
+  };
+  await load();
 }
 
 /* ============================================================ Lịch sử */
@@ -1408,6 +1680,8 @@ function askUser(force) {
 }
 async function boot() {
   S.user = store('user') || '';
+  S.wh = store('wh') === 'NVL' ? 'NVL' : 'TP';
+  $$('#wh-switch button').forEach(b => b.onclick = () => switchWh(b.dataset.wh));
   $('#menu-btn').onclick = () => document.body.classList.toggle('nav-open');
   $('#user-btn').textContent = '👤 ' + (S.user || 'Khách');
   $('#user-btn').onclick = () => askUser(true);

@@ -213,3 +213,24 @@ table.data tr.row-warn td { background: var(--warn-bg); }
   #app, #toasts { display: none !important; }
   #print-root { display: block; }
 }
+
+/* =================================================== 2 kho */
+.wh-switch { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin: 0 4px 10px; }
+.wh-switch button {
+  border: 1px solid #2c4a40; background: transparent; color: #cfe0da; border-radius: 8px; padding: 7px 6px;
+  font: inherit; font-weight: 600; cursor: pointer; line-height: 1.2;
+}
+.wh-switch button small { font-weight: 400; opacity: .8; }
+.wh-switch button:hover { background: rgba(255,255,255,.06); }
+.wh-switch button.on { background: var(--brand); border-color: var(--brand); color: #fff; }
+.wh-badge { display: inline-block; padding: 3px 10px; border-radius: 999px; background: var(--brand); color: #fff; font-size: 12.5px; font-weight: 600; white-space: nowrap; }
+body[data-wh="NVL"] { --brand: #1f5fa6; --brand-soft: #e3edf9; }
+body[data-wh="NVL"] #sidebar { background: #142236; }
+body[data-wh="NVL"] #nav a:hover { background: #1f3350; }
+body[data-wh="NVL"] .wh-switch button { border-color: #2c4565; }
+body[data-wh="NVL"] .callout { border-color: #b7cdea; }
+body[data-wh="NVL"] input:focus, body[data-wh="NVL"] select:focus, body[data-wh="NVL"] textarea:focus { outline-color: #a9c5ea; }
+body[data-wh="NVL"] .btn.primary:hover { background: #184d88; }
+#nav [data-only] { display: none; }
+body[data-wh="TP"] #nav [data-only="TP"], body[data-wh="NVL"] #nav [data-only="NVL"] { display: block; }
+@media (max-width: 560px) { .wh-badge { display: none; } }

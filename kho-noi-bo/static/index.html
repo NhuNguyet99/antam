@@ -13,8 +13,12 @@
       <div class="brand-mark">AT</div>
       <div>
         <div class="brand-name">Kho An Tâm</div>
-        <div class="brand-sub">Thành phẩm &amp; Hàng hóa</div>
+        <div class="brand-sub">Web làm việc nội bộ</div>
       </div>
+    </div>
+    <div class="wh-switch" id="wh-switch" role="tablist" aria-label="Chọn kho">
+      <button data-wh="TP" title="Kho thành phẩm - hàng hóa">Thành phẩm<br><small>Hàng hóa</small></button>
+      <button data-wh="NVL" title="Kho nguyên vật liệu">Nguyên<br><small>vật liệu</small></button>
     </div>
     <nav id="nav">
       <a href="#/" data-route="">Tổng quan</a>
@@ -22,18 +26,22 @@
       <a href="#/phieu/moi?type=N" data-route="phieu/moi">Lập phiếu</a>
       <a href="#/phieu" data-route="phieu">Danh sách phiếu</a>
       <a href="#/so-nx" data-route="so-nx">Sổ nhập – xuất</a>
+      <div class="nav-group" data-only="NVL">Kế hoạch mua hàng</div>
+      <a href="#/kh-ngay" data-route="kh-ngay" data-only="NVL">KH mua theo ngày</a>
+      <a href="#/kh-tuan" data-route="kh-tuan" data-only="NVL">KH mua theo tuần</a>
+      <a href="#/kh-thang" data-route="kh-thang" data-only="NVL">KH mua theo tháng</a>
       <div class="nav-group">Báo cáo</div>
       <a href="#/nxt" data-route="nxt">Nhập – Xuất – Tồn</a>
       <a href="#/the-kho" data-route="the-kho">Thẻ kho</a>
       <div class="nav-group">Biên bản</div>
       <a href="#/kiem-ke" data-route="kiem-ke">Kiểm kê kho</a>
       <a href="#/ban-giao" data-route="ban-giao">Bàn giao kho</a>
-      <div class="nav-group">Sổ phụ</div>
-      <a href="#/kebab" data-route="kebab">SL Kebab hằng ngày</a>
-      <a href="#/ke-don" data-route="ke-don">Kê đơn theo tuyến</a>
+      <div class="nav-group" data-only="TP">Sổ phụ</div>
+      <a href="#/kebab" data-route="kebab" data-only="TP">SL Kebab hằng ngày</a>
+      <a href="#/ke-don" data-route="ke-don" data-only="TP">Kê đơn theo tuyến</a>
       <div class="nav-group">Danh mục</div>
       <a href="#/hang" data-route="hang">Mặt hàng</a>
-      <a href="#/tuyen" data-route="tuyen">Tuyến / nơi nhận</a>
+      <a href="#/tuyen" data-route="tuyen" data-only="TP">Tuyến / nơi nhận</a>
       <div class="nav-group">Hệ thống</div>
       <a href="#/cai-dat" data-route="cai-dat">Cài đặt &amp; dữ liệu</a>
       <a href="#/lich-su" data-route="lich-su">Lịch sử thao tác</a>
@@ -42,6 +50,7 @@
   <div id="content">
     <header id="topbar">
       <button id="menu-btn" class="btn ghost" aria-label="Mở menu">☰</button>
+      <span id="wh-badge" class="wh-badge"></span>
       <div id="page-title"></div>
       <div class="spacer"></div>
       <button id="user-btn" class="btn ghost" title="Đổi người dùng"></button>

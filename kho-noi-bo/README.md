@@ -1,8 +1,16 @@
-# Web làm việc nội bộ – Kho Thành phẩm & Hàng hóa An Tâm
+# Web làm việc nội bộ – Kho An Tâm (2 kho)
 
-Web nội bộ thay cho file Excel quản lý kho (các sheet *Danh mục hàng, Danh mục tuyến, Sổ Nhập Xuất,
-Phiếu Nhập Xuất, Phiếu Điều chỉnh, Nhập Xuất Tồn, Thẻ kho, Kiểm kê, Bàn giao kho, SL Kebab hàng ngày*),
-giữ nguyên quy trình và mẫu phiếu đang dùng, nhưng nhiều người nhập cùng lúc được, có lưu lịch sử sửa/xóa.
+Web nội bộ thay cho 2 file Excel quản lý kho, giữ nguyên quy trình và mẫu phiếu đang dùng, nhiều người nhập cùng lúc
+được, có lưu lịch sử sửa/xóa. Web chứa **2 kho**, chuyển qua lại bằng nút ở góc trên bên trái (mỗi kho một màu):
+
+| Kho | Màu | Chức năng riêng |
+|---|---|---|
+| **Kho thành phẩm - hàng hóa** (trước đây ghi "Kho tổng") | xanh lá | Tuyến giao hàng (số PXK có mã tuyến), SL Kebab hằng ngày, Kê đơn theo tuyến |
+| **Kho nguyên vật liệu** | xanh dương | Kế hoạch mua hàng theo Ngày / Tuần / Tháng (sheet KH Ngày, KH Tuần, KH Tháng) |
+
+Hai kho dùng chung: Lập phiếu nhập/xuất/điều chỉnh, Danh sách phiếu, Sổ nhập – xuất, Nhập – Xuất – Tồn, Thẻ kho,
+Kiểm kê, Bàn giao kho, Danh mục mặt hàng. Danh mục, phiếu, số phiếu, tồn kho, biên bản **tách riêng từng kho**
+(cùng số PNK-0810-01 có thể tồn tại ở cả 2 kho).
 
 ## Cài đặt và chạy
 
@@ -26,10 +34,19 @@ Toàn bộ dữ liệu nằm trong **một file `data/kho.db`** – nên để w
 
 ## Bắt đầu: chuyển dữ liệu từ Excel sang
 
-1. Vào **Cài đặt & dữ liệu › Nhập dữ liệu từ file Excel**, chọn file Excel kho đang dùng (.xlsx).
-2. Web đọc: *Danh mục hàng* (mã, tên, ĐVT, nhóm, đơn giá, NCC), *Danh mục tuyến*, cột *Số dư ban đầu / Tồn tối thiểu*
-   ở sheet *Nhập Xuất Tồn*, và toàn bộ dòng *Sổ Nhập Xuất* (gom các dòng cùng Số phiếu thành một phiếu).
-3. Kiểm tra lại ở **Báo cáo › Nhập – Xuất – Tồn** – số liệu phải khớp với sheet Nhập Xuất Tồn của Excel.
+Làm lần lượt cho từng kho:
+
+1. Bấm chọn kho ở góc trên bên trái (**Thành phẩm – Hàng hóa** hoặc **Nguyên vật liệu**).
+2. Vào **Cài đặt & dữ liệu › Nhập dữ liệu từ file Excel**, chọn file Excel của đúng kho đó (.xlsx).
+   Nếu chọn nhầm file của kho kia, web sẽ báo và không nhập.
+3. Web đọc: *Danh mục hàng* (mã, tên, ĐVT, nhóm, đơn giá, NCC), cột *Số dư ban đầu / Tồn tối thiểu* ở sheet
+   *Nhập Xuất Tồn*, toàn bộ dòng *Sổ Nhập Xuất* (gom các dòng cùng Số phiếu thành một phiếu), cộng thêm
+   *Danh mục tuyến* (kho TP) hoặc *KH Ngày* (kho NVL). Chữ "Kho tổng" trong file kho TP tự đổi thành
+   "Kho thành phẩm - hàng hóa".
+4. Kiểm tra lại ở **Báo cáo › Nhập – Xuất – Tồn** – số liệu phải khớp với sheet Nhập Xuất Tồn của Excel.
+
+Nếu trước đây đã dùng bản web 1 kho, khi chạy bản mới dữ liệu cũ tự chuyển vào **Kho thành phẩm - hàng hóa**
+(và "Kho tổng" được đổi tên) – không mất gì.
 
 ## Quy trình hằng ngày (giống file Excel)
 
@@ -45,17 +62,22 @@ Toàn bộ dữ liệu nằm trong **một file `data/kho.db`** – nên để w
 | Kiểm kê | **Kiểm kê kho** › nhập số đếm › **Tạo phiếu điều chỉnh (DCK)** từ chênh lệch; có *In phiếu đếm (ẩn tồn sổ)* để đếm mù | Sheet Kiểm kê + Phiếu Điều chỉnh |
 | Bàn giao ca / thủ kho | **Bàn giao kho** | Sheet Bàn giao kho |
 | Sản lượng kebab | **SL Kebab hằng ngày** | Sheet SL Kebab hàng ngày |
-| Kê đơn theo tuyến | **Kê đơn theo tuyến** | Sheet1 |
+| Kê đơn theo tuyến (kho TP) | **Kê đơn theo tuyến** | Sheet1 |
+| Đặt hàng mua NVL (kho NVL) | **KH mua theo ngày** – nhập ngày đặt, bộ phận, mặt hàng, SL, đơn giá (tự lấy, gõ đè được), ngày cần hàng | Sheet KH Ngày |
+| Tổng hợp mua theo tuần (kho NVL) | **KH mua theo tuần** – tuần tính Thứ 2 → Chủ nhật, cắt theo tháng | Sheet KH Tuần |
+| Kế hoạch mua tháng gửi Kế toán (kho NVL) | **KH mua theo tháng** – SL Xưởng / Văn phòng, đơn giá BQ, thành tiền; in có chữ ký Thủ kho, Kế toán, Giám đốc | Sheet KH Tháng |
 
 Ghi chú:
 
-- Số phiếu được **cấp tự động** theo ngày (và tuyến với phiếu xuất), STT chạy liên tục trong ngày riêng cho từng loại phiếu.
+- Số phiếu được **cấp tự động** theo ngày (và tuyến với phiếu xuất kho TP), STT chạy liên tục trong ngày riêng cho từng
+  loại phiếu và từng kho.
   Có thể sửa tay; web báo lỗi nếu trùng số.
 - Ô chọn mặt hàng **tìm không dấu**: gõ `tortila 25` hoặc `thit kebab` rồi Enter. Cột *Tồn* hiện tồn sổ trước → sau phiếu,
   báo đỏ nếu xuất vượt tồn.
 - Tồn kho = Số dư ban đầu + Nhập − Xuất + Điều chỉnh (điều chỉnh mang dấu +/−), giống công thức Excel.
 - Mọi thao tác lập / sửa / xóa đều ghi ở **Lịch sử thao tác** (ai, lúc nào, trước – sau).
-- Khổ giấy in (A4/A5), tên đơn vị, danh sách nhân viên, bên giao/nhận… chỉnh ở **Cài đặt & dữ liệu**.
+- Tên kho, dòng "Bộ phận" in trên phiếu, danh sách bên giao/nhận chỉnh riêng từng kho ở **Cài đặt & dữ liệu**;
+  khổ giấy (A4/A5), tên đơn vị, nhân viên… dùng chung.
 
 ## Sao lưu
 
