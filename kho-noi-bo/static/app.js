@@ -850,13 +850,17 @@ async function viewLedger(main) {
 /* ============================================================ Nhập – Xuất – Tồn */
 async function viewNXT(main, m, q) {
   setTitle('Báo cáo Nhập – Xuất – Tồn');
-  const f = { from: q.from || isoDate(), to: q.to || isoDate(), grp: '', moved: false, warn: false, q: '' };
+  const STOCK_FILTERS = [['', 'Tất cả mã'], ['in', 'Còn tồn trong kho (tồn > 0)'], ['zero', 'Hết hàng (tồn = 0)'], ['neg', 'Tồn âm (< 0)']];
+  const f = { from: q.from || isoDate(), to: q.to || isoDate(), grp: '', moved: false, warn: false, q: '', stock: store('nxtStock') || '' };
   const groups = Array.from(new Set(S.meta.products.map(p => p.grp).filter(Boolean)));
+  const EPS = 1e-9;
+  const stockOk = r => !f.stock || (f.stock === 'in' ? r.close > EPS : f.stock === 'zero' ? Math.abs(r.close) <= EPS : r.close < -EPS);
   main.innerHTML = `<div class="toolbar">
       <label class="field">Từ ngày<input type="date" id="n-from" value="${f.from}"></label>
       <label class="field">Đến ngày<input type="date" id="n-to" value="${f.to}"></label>
       <button class="btn" data-range="today">Hôm nay</button><button class="btn" data-range="week">7 ngày</button><button class="btn" data-range="month">Tháng này</button>
       <label class="field">Nhóm hàng<select id="n-grp">${options(groups, '', 'Tất cả')}</select></label>
+      <label class="field">Tồn cuối kỳ<select id="n-stock">${options(STOCK_FILTERS, f.stock)}</select></label>
       <label class="field grow">Tìm<input id="n-q"></label>
     </div>
     <div class="toolbar"><label class="check"><input type="checkbox" id="n-moved"> Chỉ mã có phát sinh</label>
@@ -870,19 +874,21 @@ async function viewNXT(main, m, q) {
     draw();
   }
   function filtered() {
-    return data.filter(r => (!f.grp || r.grp === f.grp) && (!f.moved || r.moved) && (!f.warn || r.warn) && (!f.q || matches(f.q, r.code + ' ' + r.name)));
+    return data.filter(r => (!f.grp || r.grp === f.grp) && stockOk(r) && (!f.moved || r.moved) && (!f.warn || r.warn) && (!f.q || matches(f.q, r.code + ' ' + r.name)));
   }
   function draw() {
     const rows = filtered();
     const neg = data.filter(r => r.warn === 'Tồn âm').length, low = data.filter(r => r.warn === 'Dưới tồn tối thiểu').length;
+    const inStock = data.filter(r => r.close > EPS).length;
     $('#n-kpi').innerHTML = `<div class="kpi"><div class="k-label">${f.from === f.to ? 'Xem ngày ' + vnDate(f.from) : 'Kỳ ' + vnDate(f.from) + ' – ' + vnDate(f.to)}</div><div class="k-val">${rows.length} mã</div></div>
+      <div class="kpi"><div class="k-label">Mã còn tồn trong kho</div><div class="k-val">${inStock}<span class="small muted"> / ${data.length}</span></div></div>
       <div class="kpi ${neg ? 'bad' : ''}"><div class="k-label">Số mã tồn âm</div><div class="k-val">${neg}</div></div>
       <div class="kpi ${low ? 'warn' : ''}"><div class="k-label">Mã dưới tồn tối thiểu</div><div class="k-val">${low}</div></div>
       <div class="kpi"><div class="k-label">Tổng giá trị tồn cuối kỳ (đ)</div><div class="k-val">${money(rows.reduce((a, r) => a + r.value, 0))}</div></div>`;
     $('#n-list').innerHTML = `<div class="table-wrap"><table class="data"><thead><tr><th>STT</th><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th><th>Nhóm</th>
       <th class="num">Tồn tối thiểu</th><th class="num">Tồn đầu kỳ</th><th class="num">Nhập trong kỳ</th><th class="num">Xuất trong kỳ</th><th class="num">Điều chỉnh</th>
       <th class="num">Tồn cuối kỳ</th><th class="num">Đơn giá</th><th class="num">Giá trị tồn</th><th>Cảnh báo</th></tr></thead><tbody>
-      ${rows.map((r, i) => `<tr class="clickable ${r.warn === 'Tồn âm' ? 'row-bad' : r.warn ? 'row-warn' : ''}" data-code="${esc(r.code)}"><td>${i + 1}</td><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td>${esc(r.unit)}</td><td class="small">${esc(r.grp)}</td>
+      ${rows.map((r, i) => `<tr class="clickable ${r.warn === 'Tồn âm' ? 'row-bad' : r.warn ? 'row-warn' : ''}" data-code="${esc(r.code)}"><td>${i + 1}</td><td>${esc(r.code)}</td><td class="nm">${esc(r.name)}</td><td>${esc(r.unit)}</td><td class="small">${esc(r.grp)}</td>
         <td class="num">${r.min_qty === null ? '' : fmt(r.min_qty)}</td><td class="num">${fmt(r.open)}</td><td class="num">${fmtBlank0(r.in)}</td><td class="num">${fmtBlank0(r.out)}</td>
         <td class="num">${fmtBlank0(r.adj)}</td><td class="num"><b class="${r.close < 0 ? 'neg' : ''}">${fmt(r.close)}</b></td><td class="num">${fmtBlank0(r.price)}</td>
         <td class="num">${fmtBlank0(Math.round(r.value))}</td><td>${r.warn ? `<span class="badge ${r.warn === 'Tồn âm' ? 'bad' : 'warn'}">${esc(r.warn)}</span>` : ''}</td></tr>`).join('')}
@@ -901,11 +907,12 @@ async function viewNXT(main, m, q) {
   $('#n-grp').onchange = () => { f.grp = $('#n-grp').value; draw(); };
   $('#n-moved').onchange = () => { f.moved = $('#n-moved').checked; draw(); };
   $('#n-warn').onchange = () => { f.warn = $('#n-warn').checked; draw(); };
+  $('#n-stock').onchange = () => { f.stock = $('#n-stock').value; store('nxtStock', f.stock); draw(); };
   $('#n-q').oninput = debounce(() => { f.q = $('#n-q').value; draw(); }, 200);
   $('#n-print').onclick = () => {
     const rows = filtered();
     printHtml(`<div class="doc landscape">${docHead('', '')}
-      <div class="d-title">Báo cáo nhập – xuất – tồn kho</div><div class="d-sub">${f.from === f.to ? 'Ngày ' + vnDate(f.from) : 'Từ ngày ' + vnDate(f.from) + ' đến ngày ' + vnDate(f.to)}</div>
+      <div class="d-title">Báo cáo nhập – xuất – tồn kho</div><div class="d-sub">${f.from === f.to ? 'Ngày ' + vnDate(f.from) : 'Từ ngày ' + vnDate(f.from) + ' đến ngày ' + vnDate(f.to)}${f.stock ? ' · ' + esc(STOCK_FILTERS.find(x => x[0] === f.stock)[1]) : ''}${f.grp ? ' · Nhóm: ' + esc(f.grp) : ''}</div>
       <table class="t"><thead><tr><th>STT</th><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th><th>Tồn đầu kỳ</th><th>Nhập</th><th>Xuất</th><th>Điều chỉnh</th><th>Tồn cuối kỳ</th><th>Đơn giá</th><th>Giá trị tồn</th><th>Cảnh báo</th></tr></thead>
       <tbody>${rows.map((r, i) => `<tr><td class="c">${i + 1}</td><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td class="c">${esc(r.unit)}</td><td class="n">${fmt(r.open)}</td>
         <td class="n">${fmtBlank0(r.in)}</td><td class="n">${fmtBlank0(r.out)}</td><td class="n">${fmtBlank0(r.adj)}</td><td class="n"><b>${fmt(r.close)}</b></td>
