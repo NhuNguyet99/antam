@@ -79,6 +79,15 @@ Ghi chú:
 - Tên kho, dòng "Bộ phận" in trên phiếu, danh sách bên giao/nhận chỉnh riêng từng kho ở **Cài đặt & dữ liệu**;
   khổ giấy (A4/A5), tên đơn vị, nhân viên… dùng chung.
 
+## Chuyển dữ liệu giữa bản online và bản chạy trên máy
+
+Cả hai bản dùng chung một loại file dữ liệu **.json**:
+- Bản online → **Cài đặt & dữ liệu → Tải dữ liệu** ⇒ bản chạy trên máy → **Cài đặt & dữ liệu → Nhập file dữ liệu .json**
+  (thay toàn bộ dữ liệu 2 kho trên máy).
+- Bản chạy trên máy → **Tải dữ liệu (.json)** ⇒ dùng để cập nhật **trang xem công khai** (nút ⟳ Cập nhật số liệu).
+
+Chỉ nên nhập phiếu ở **một** bản tại một thời điểm, để số liệu không bị tách làm hai.
+
 ## Sao lưu
 
 **Cài đặt & dữ liệu › Tải bản sao lưu (.db)** – nên làm cuối mỗi ngày. Khôi phục: tắt web, chép file sao lưu

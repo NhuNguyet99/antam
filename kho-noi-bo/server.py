@@ -613,6 +613,102 @@ def _safe_num(v, default=0.0):
         return default
 
 
+# ---------------------------------------------------------------- file dữ liệu .json (dùng chung với bản online)
+
+def export_backup_json(con):
+    """Toàn bộ dữ liệu 2 kho theo định dạng 'kho-antam-backup' của bản online:
+    dùng để chuyển dữ liệu qua lại và để cập nhật trang xem công khai."""
+    s = get_settings(con)
+    out = {"format": "kho-antam-backup", "version": 1, "at": now_str(),
+           "settings": {k: v for k, v in s.items() if k in DEFAULT_SETTINGS},
+           "routes": {str(r["id"]): {"name": r["name"], "code": r["code"], "note": r["note"] or "", "sort": r["sort"] or 0}
+                      for r in con.execute("SELECT * FROM routes")},
+           "warehouses": {}}
+    for wh in WAREHOUSE_CODES:
+        products = {r["code"]: {"name": r["name"], "unit": r["unit"] or "", "grp": r["grp"] or "", "price": r["price"] or 0,
+                                "supplier": r["supplier"] or "", "note": r["note"] or "", "opening_qty": r["opening_qty"] or 0,
+                                "min_qty": r["min_qty"], "active": r["active"], "sort": r["sort"] or 0}
+                    for r in con.execute("SELECT * FROM products WHERE wh=?", (wh,))}
+        days = {}
+        lines = {}
+        for l in con.execute("SELECT l.* FROM voucher_lines l JOIN vouchers v ON v.id=l.voucher_id WHERE v.wh=? ORDER BY l.line_no, l.id", (wh,)):
+            lines.setdefault(l["voucher_id"], []).append({"c": l["product_code"], "q": l["qty"] or 0, "p": l["price"] or 0, "n": l["note"] or ""})
+        for v in con.execute("SELECT * FROM vouchers WHERE wh=?", (wh,)):
+            rec = {k: (v[k] or "") for k in ("no", "type", "date", "route", "from_party", "to_party", "giver", "receiver", "reason",
+                                              "bill_count", "doc_ref", "note", "created_at", "updated_at")}
+            rec["lines"] = lines.get(v["id"], [])
+            days.setdefault(v["date"], {"date": v["date"], "v": {}})["v"][str(v["id"])] = rec
+        docs = {str(d["id"]): {"kind": d["kind"], "date": d["date"], "title": d["title"] or "", "data": json.loads(d["data"] or "{}"),
+                               "created_at": d["created_at"], "updated_at": d["updated_at"]}
+                for d in con.execute("SELECT * FROM docs WHERE wh=?", (wh,))}
+        plans = {}
+        for r in con.execute("SELECT * FROM plans WHERE wh=?", (wh,)):
+            ym = r["date"][:7]
+            plans.setdefault(ym, {"ym": ym, "p": {}})["p"][str(r["id"])] = {
+                k: r[k] for k in ("date", "dept", "product_code", "qty", "price", "need_date", "proposer", "note", "created_at", "updated_at")}
+        out["warehouses"][wh] = {"products": products, "days": days, "docs": docs, "plans": plans}
+    return out
+
+
+def import_backup_json(con, snap, who=""):
+    """Thay TOÀN BỘ dữ liệu bằng file .json tải từ bản online (hoặc từ chính bản này)."""
+    if not isinstance(snap, dict) or snap.get("format") != "kho-antam-backup" or not isinstance(snap.get("warehouses"), dict):
+        raise ApiError(400, "File không đúng: hãy dùng file 'Tải dữ liệu' (.json) của web Kho An Tâm")
+    live = lambda m: [(k, v) for k, v in (m or {}).items() if v is not None]
+    for t in ("voucher_lines", "vouchers", "products", "routes", "docs", "plans"):
+        con.execute("DELETE FROM %s" % t)
+    for k, v in (snap.get("settings") or {}).items():
+        if k in DEFAULT_SETTINGS:
+            con.execute("INSERT OR REPLACE INTO settings(key, value) VALUES (?,?)", (k, json.dumps(v, ensure_ascii=False)))
+    for _, r in live(snap.get("routes")):
+        con.execute("INSERT INTO routes(name, code, note, sort) VALUES (?,?,?,?)", (text(r.get("name")), text(r.get("code")), text(r.get("note")), r.get("sort") or 0))
+    summary = {}
+    for wh, d in snap["warehouses"].items():
+        if wh not in WAREHOUSE_CODES or not isinstance(d, dict):
+            continue
+        for code, p in live(d.get("products")):
+            con.execute("INSERT INTO products(wh, code, name, unit, grp, price, supplier, note, opening_qty, min_qty, active, sort) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?,?,?)",
+                        (wh, code, text(p.get("name")) or code, text(p.get("unit")), text(p.get("grp")), _safe_num(p.get("price")),
+                         text(p.get("supplier")), text(p.get("note")), _safe_num(p.get("opening_qty")), _safe_num(p.get("min_qty"), None),
+                         0 if p.get("active") in (0, False) else 1, p.get("sort") or 0))
+        nv = nl = 0
+        vlist = []
+        for day, doc in live(d.get("days")):
+            for _, v in live((doc or {}).get("v")):
+                vlist.append(v)
+        vlist.sort(key=lambda v: (v.get("date") or "", v.get("created_at") or ""))
+        for v in vlist:
+            cur = con.execute("INSERT INTO vouchers(wh, no, type, date, route, from_party, to_party, giver, receiver, reason, bill_count, "
+                              "doc_ref, note, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                              (wh,) + tuple(text(v.get(k)) for k in ("no", "type", "date", "route", "from_party", "to_party", "giver",
+                                                                     "receiver", "reason", "bill_count", "doc_ref", "note", "created_at", "updated_at")))
+            for i, l in enumerate(v.get("lines") or []):
+                code = text(l.get("c"))
+                if not con.execute("SELECT 1 FROM products WHERE wh=? AND code=?", (wh, code)).fetchone():
+                    con.execute("INSERT INTO products(wh, code, name) VALUES (?,?,?)", (wh, code, code))
+                con.execute("INSERT INTO voucher_lines(voucher_id, line_no, product_code, qty, price, note) VALUES (?,?,?,?,?,?)",
+                            (cur.lastrowid, i + 1, code, _safe_num(l.get("q")), _safe_num(l.get("p")), text(l.get("n"))))
+                nl += 1
+            nv += 1
+        for _, doc in live(d.get("docs")):
+            con.execute("INSERT INTO docs(wh, kind, date, title, data, created_at, updated_at) VALUES (?,?,?,?,?,?,?)",
+                        (wh, text(doc.get("kind")), text(doc.get("date")), text(doc.get("title")),
+                         json.dumps(doc.get("data") or {}, ensure_ascii=False), text(doc.get("created_at")), text(doc.get("updated_at"))))
+        np_ = 0
+        for _, month in live(d.get("plans")):
+            for _, r in live((month or {}).get("p")):
+                con.execute("INSERT INTO plans(wh, date, dept, product_code, qty, price, need_date, proposer, note, created_at, updated_at) "
+                            "VALUES (?,?,?,?,?,?,?,?,?,?,?)",
+                            (wh, text(r.get("date")), text(r.get("dept")), text(r.get("product_code")), _safe_num(r.get("qty")),
+                             _safe_num(r.get("price")), text(r.get("need_date")), text(r.get("proposer")), text(r.get("note")),
+                             text(r.get("created_at")), text(r.get("updated_at"))))
+                np_ += 1
+        summary[wh] = {"Phiếu": nv, "Dòng hàng": nl, "Dòng kế hoạch": np_}
+    write_log(con, who, "Nhập file dữ liệu .json", "", summary)
+    return summary
+
+
 def _date_range(q):
     cond, params = [], []
     if q.get("from"):
@@ -1001,6 +1097,9 @@ class Handler(BaseHTTPRequestHandler):
         if res == "log" and method == "GET":
             return rows(con.execute("SELECT * FROM log ORDER BY id DESC LIMIT 500"))
 
+        if res == "import-backup" and method == "POST":
+            return import_backup_json(con, self.read_json(), who)
+
         if res == "import" and method == "POST":
             blob = self.read_body()
             if not blob:
@@ -1013,6 +1112,10 @@ class Handler(BaseHTTPRequestHandler):
                 raise ApiError(400, str(e))
 
         if res == "export" and method == "GET":
+            if arg == "backup.json":
+                body = json.dumps(export_backup_json(con), ensure_ascii=False).encode("utf-8")
+                self.send_bytes(body, "application/json", "kho-antam-du-lieu-%s.json" % date.today().strftime("%Y%m%d"))
+                return None
             if arg == "lines.csv":
                 buf = io.StringIO()
                 w = csv.writer(buf)

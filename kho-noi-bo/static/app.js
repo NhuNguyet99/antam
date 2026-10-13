@@ -1485,8 +1485,12 @@ async function viewSettings(main) {
       <p class="hint">Dữ liệu được lưu trực tuyến, dùng chung cho mọi người được chia sẻ trang. Nên tải dữ liệu định kỳ để sao lưu.
       File này cũng dùng để cập nhật <b>trang xem công khai</b>: mở trang xem → bấm <b>⟳ Cập nhật số liệu</b> → chọn file.</p></div>`
       : `<a class="btn" href="/api/export/backup">⬇ Tải bản sao lưu cả 2 kho (.db)</a>
+      <a class="btn" href="/api/export/backup.json">⬇ Tải dữ liệu (.json) – cập nhật trang xem công khai</a>
       <a class="btn" href="/api/export/lines.csv?wh=${S.wh}">⬇ Xuất sổ nhập xuất ${esc(W.name)} (CSV mở bằng Excel)</a></div>
-      <p class="hint">Nên sao lưu mỗi cuối ngày. Để khôi phục: tắt web, chép file .db đè vào <code>kho-noi-bo/data/kho.db</code>, chạy lại.</p></div>`}
+      <p class="hint">Nên sao lưu mỗi cuối ngày. Để khôi phục: tắt web, chép file .db đè vào <code>kho-noi-bo/data/kho.db</code>, chạy lại.
+      File <b>.json</b> dùng để cập nhật <b>trang xem công khai</b> trên claude.ai: mở trang xem → <b>⟳ Cập nhật số liệu</b> → chọn file.</p>
+      <div class="toolbar" style="margin-top:12px"><label class="field">Chuyển dữ liệu từ bản online (file .json "Tải dữ liệu")<input type="file" id="bk-file" accept=".json,application/json"></label>
+      <button class="btn" id="bk-go">Nhập file dữ liệu .json (thay toàn bộ dữ liệu 2 kho)</button></div></div>`}
     <div class="card"><h3>Thông tin ${esc(W.name)}</h3><div class="grid c3">
       <label class="field">Tên kho (ghi trên phiếu, bàn giao, điều chỉnh)<input id="w-name" value="${esc(W.name)}"></label>
       <label class="field">Bộ phận (dòng "Bộ phận:" trên phiếu in)<input id="w-dept" value="${esc(W.department)}"></label>
@@ -1507,6 +1511,17 @@ async function viewSettings(main) {
     $('#ex-backup').onclick = () => guard(async () => saveTextFile(`kho-antam-sao-luu-${isoDate()}.json`, await api('GET', '/export/backup')));
     $('#ex-csv').onclick = () => guard(async () => saveTextFile(`so-nhap-xuat-${S.wh.toLowerCase()}.csv`, await api('GET', '/export/lines.csv')));
   }
+  if (!ONLINE) $('#bk-go').onclick = async () => {
+    const file = $('#bk-file').files[0];
+    if (!file) return toast('Chọn file .json trước', true);
+    if (!(await ask('Thay TOÀN BỘ dữ liệu 2 kho trên máy này bằng dữ liệu trong file? Nên tải bản sao lưu .db trước.'))) return;
+    let snap;
+    try { snap = JSON.parse(await file.text()); } catch (e) { return toast('File không đọc được', true); }
+    const res = await guard(() => api('POST', '/import-backup', snap));
+    if (!res) return;
+    toast('Đã nhập: ' + Object.entries(res).map(([w, r]) => `${w}: ${r['Phiếu']} phiếu`).join(', '));
+    await loadMeta(); render();
+  };
   $('#imp-go').onclick = async () => {
     const file = $('#imp-file').files[0];
     if (!file) return toast('Chọn file .xlsx trước', true);
