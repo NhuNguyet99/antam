@@ -89,3 +89,17 @@ Ghi chú:
 - `server.py` – máy chủ web + API + SQLite (thư viện chuẩn Python).
 - `xlsx_import.py` – đọc file .xlsx (không cần openpyxl).
 - `static/` – giao diện (HTML/CSS/JS thuần), gồm cả mẫu in phiếu.
+
+## Bản online (không cần cài đặt)
+
+Ngoài bản chạy trên máy (`server.py`), có bản **online trên claude.ai**: mở link là dùng, dữ liệu lưu trực tuyến
+và dùng chung cho mọi người được chia sẻ trang (nút *Share* trên trang, cấp quyền **Contributor** hoặc **Editor**
+để người đó nhập được phiếu; **Viewer** chỉ xem).
+
+- Cùng giao diện và chức năng với bản chạy máy (2 kho, phiếu, sổ, NXT, thẻ kho, kiểm kê, bàn giao, kế hoạch mua…).
+- **In phiếu:** bấm In → hiện bản xem trước → **Tải file để in** → mở file vừa tải, trình duyệt hiện hộp thoại In.
+- Xuất CSV và tải bản sao lưu (.json) ở **Cài đặt & dữ liệu**.
+- Khi người khác vừa thay đổi dữ liệu, nút **↻ Có dữ liệu mới** hiện trên đầu trang để tải lại.
+
+Mã nguồn bản online: `online/backend.js` (thay cho server.py, chạy trong trình duyệt) + giao diện chung `static/`.
+Đóng gói lại thành một trang: `python online/build.py` → `online/kho-antam.html`.

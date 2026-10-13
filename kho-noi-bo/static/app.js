@@ -6,6 +6,8 @@
    Web chứa 2 kho: TP (Thành phẩm - Hàng hóa) và NVL (Nguyên vật liệu), dữ liệu tách riêng từng kho. */
 
 const S = { meta: null, dirty: false, skipDirty: false, user: '', wh: 'TP' };
+// Bản online (trang claude.ai, online/backend.js) không có máy chủ: không in trực tiếp, không mở link tải, không dùng #url.
+const ONLINE = !!window.ANTAM_ONLINE;
 const WH_LABEL = { TP: 'Kho thành phẩm - hàng hóa', NVL: 'Kho nguyên vật liệu' };
 const TYPE_LABEL = { N: 'Nhập', X: 'Xuất', D: 'Điều chỉnh' };
 const TYPE_PREFIX = { N: 'PNK', X: 'PXK', D: 'DCK' };
@@ -61,6 +63,10 @@ function firstOfMonth() { const d = new Date(); return isoDate(new Date(d.getFul
 function debounce(fn, ms = 250) { let t; return (...a) => { clearTimeout(t); t = setTimeout(() => fn(...a), ms); }; }
 
 async function api(method, path, body) {
+  if (ONLINE) {
+    Backend.who = S.user || '';
+    try { return await Backend.handle(method, path, body); } catch (e) { throw new Error(e.message || String(e)); }
+  }
   const opt = { method, headers: { 'X-User': encodeURIComponent(S.user || ''), 'X-Wh': S.wh } };
   if (body !== undefined) {
     if (body instanceof ArrayBuffer) { opt.body = body; opt.headers['Content-Type'] = 'application/octet-stream'; }
@@ -146,6 +152,24 @@ function openModal({ title, body, saveText = 'Lưu', onSave, wide }) {
   return { root: back, close };
 }
 
+// Hộp xác nhận ngay trong trang (trang online không cho dùng confirm() của trình duyệt)
+function ask(message, okText = 'Đồng ý') {
+  return new Promise(resolve => {
+    const back = document.createElement('div');
+    back.className = 'modal-back';
+    back.innerHTML = `<div class="modal" style="width:min(480px,100%)" role="dialog" aria-modal="true"><p style="margin:0 0 4px;font-size:15px">${esc(message)}</p>
+      <div class="actions"><button class="btn" data-no>Hủy</button><button class="btn primary" data-yes>${esc(okText)}</button></div></div>`;
+    document.body.appendChild(back);
+    const done = v => { back.remove(); document.removeEventListener('keydown', onKey, true); resolve(v); };
+    const onKey = e => { if (e.key === 'Escape') { e.stopPropagation(); done(false); } };
+    document.addEventListener('keydown', onKey, true);
+    $('[data-no]', back).onclick = () => done(false);
+    $('[data-yes]', back).onclick = () => done(true);
+    back.addEventListener('click', e => { if (e.target === back) done(false); });
+    $('[data-yes]', back).focus();
+  });
+}
+
 /* ============================================================ combobox mặt hàng */
 function productCombo(code, onPick, { placeholder = 'Gõ mã hoặc tên hàng (không dấu cũng được)…', includeInactive = false } = {}) {
   const wrap = document.createElement('div');
@@ -200,11 +224,52 @@ function productCombo(code, onPick, { placeholder = 'Gõ mã hoặc tên hàng (
 }
 
 /* ============================================================ in ấn */
-function printHtml(html, orientation = 'portrait') {
-  const paper = (S.meta.settings.paper || 'A4');
-  $('#page-style').textContent = `@page { size: ${paper} ${orientation}; margin: 10mm 12mm; }`;
-  $('#print-root').innerHTML = html;
-  setTimeout(() => window.print(), 60);
+function pageCss(orientation) {
+  return `@page { size: ${(S.meta.settings.paper || 'A4')} ${orientation}; margin: 10mm 12mm; }`;
+}
+function allCss() {
+  let css = '';
+  for (const sh of Array.from(document.styleSheets)) {
+    try { css += Array.from(sh.cssRules).map(r => r.cssText).join('\n') + '\n'; } catch (e) { /* bỏ qua */ }
+  }
+  return css;
+}
+// File HTML độc lập: mở bằng trình duyệt là hiện hộp thoại In (dùng cho bản online)
+function printableFile(html, orientation, title) {
+  return `<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${allCss()}
+${pageCss(orientation)}
+html, body { background: #fff; } body { margin: 0; padding: 12mm; } #print-root { display: block; }
+@media print { body { padding: 0; } }</style></head><body><div id="print-root">${html}</div>
+<script>window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 400); });<\/script></body></html>`;
+}
+function printHtml(html, orientation = 'portrait', filename = 'ban-in-kho') {
+  if (!ONLINE) {
+    $('#page-style').textContent = pageCss(orientation);
+    $('#print-root').innerHTML = html;
+    setTimeout(() => window.print(), 60);
+    return;
+  }
+  const safe = String(filename).replace(/[^\w.\- ]+/g, '-').replace(/-+/g, '-') || 'ban-in-kho';
+  const m = openModal({
+    title: 'Xem trước bản in', wide: true, saveText: '⬇ Tải file để in',
+    body: `<p class="hint" style="margin-top:0">Bấm <b>Tải file để in</b>, rồi mở file vừa tải: trình duyệt sẽ hiện hộp thoại In (chọn máy in hoặc "Lưu thành PDF").</p>
+      <div class="print-preview ${orientation}">${html}</div>`,
+    onSave: async () => {
+      const dl = await claude.use('downloads');
+      if (!dl) throw new Error('Trang này chưa được phép tải file xuống. Hãy mở trang trên claude.ai.');
+      try { await dl.save({ filename: safe + '.html', data: printableFile(html, orientation, safe) }); }
+      catch (e) { if (e && e.code === 'declined') return false; throw new Error('Không tải được file: ' + (e && e.message ? e.message : e)); }
+      toast('Đã tải file ' + safe + '.html – mở file để in');
+      return true;
+    },
+  });
+  return m;
+}
+async function saveTextFile(filename, data) {
+  const dl = ONLINE ? await claude.use('downloads') : null;
+  if (!dl) throw new Error('Không tải file được trong trang này.');
+  try { await dl.save({ filename, data }); toast('Đã tải ' + filename); }
+  catch (e) { if (!(e && e.code === 'declined')) throw new Error('Không tải được file: ' + (e && e.message ? e.message : e)); }
 }
 window.addEventListener('afterprint', () => { $('#print-root').innerHTML = ''; });
 
@@ -270,26 +335,26 @@ async function printVouchers(query) {
   const list = await guard(() => api('GET', '/vouchers/full?' + query));
   if (!list) return;
   if (!list.length) return toast('Không có phiếu nào để in', true);
-  printHtml(list.map(voucherDoc).join(''));
+  printHtml(list.map(voucherDoc).join(''), 'portrait', list.length === 1 ? list[0].no : 'phieu-' + list.length + '-to');
 }
 
 /* ============================================================ router */
 const ROUTES = [
   [/^$/, viewDashboard],
   [/^phieu\/moi$/, viewVoucherForm],
-  [/^phieu\/(\d+)$/, viewVoucherForm],
+  [/^phieu\/([\w-]+)$/, viewVoucherForm],
   [/^phieu$/, viewVoucherList],
   [/^so-nx$/, viewLedger],
   [/^nxt$/, viewNXT],
   [/^the-kho$/, viewStockCard],
   [/^kiem-ke$/, () => viewDocList('stocktake')],
-  [/^kiem-ke\/(moi|\d+)$/, viewStocktake],
+  [/^kiem-ke\/(moi|[\w-]+)$/, viewStocktake],
   [/^ban-giao$/, () => viewDocList('handover')],
-  [/^ban-giao\/(moi|\d+)$/, viewHandover],
+  [/^ban-giao\/(moi|[\w-]+)$/, viewHandover],
   [/^kebab$/, () => viewDocList('kebab')],
-  [/^kebab\/(moi|\d+)$/, viewKebab],
+  [/^kebab\/(moi|[\w-]+)$/, viewKebab],
   [/^ke-don$/, () => viewDocList('routeorders')],
-  [/^ke-don\/(moi|\d+)$/, viewRouteOrders],
+  [/^ke-don\/(moi|[\w-]+)$/, viewRouteOrders],
   [/^kh-ngay$/, viewPlanDaily],
   [/^kh-tuan$/, viewPlanWeekly],
   [/^kh-thang$/, viewPlanMonthly],
@@ -298,8 +363,15 @@ const ROUTES = [
   [/^cai-dat$/, viewSettings],
   [/^lich-su$/, viewLog],
 ];
+// Điều hướng: bản chạy máy chủ dùng #/đường-dẫn trên thanh địa chỉ; bản online giữ đường dẫn trong trang.
+let currentHash = ONLINE ? '#/' : location.hash;
+const getHash = () => (ONLINE ? currentHash : location.hash);
+function setHashSilently(h) {
+  if (ONLINE) currentHash = h;
+  else { history.replaceState(null, '', h); currentHash = location.hash; }
+}
 function parseHash() {
-  const h = location.hash.replace(/^#\/?/, '');
+  const h = getHash().replace(/^#\/?/, '');
   const [path, qs] = h.split('?');
   return { path: path.replace(/\/$/, ''), q: Object.fromEntries(new URLSearchParams(qs || '')) };
 }
@@ -308,7 +380,7 @@ async function render() {
   document.body.classList.remove('nav-open');
   $$('#nav a').forEach(a => {
     const r = a.dataset.route;
-    a.classList.toggle('active', r === '' ? path === '' : (path === r || (path.startsWith(r + '/') && r !== 'phieu') || (r === 'phieu' && /^phieu\/\d+$/.test(path))));
+    a.classList.toggle('active', r === '' ? path === '' : (path === r || (path.startsWith(r + '/') && r !== 'phieu') || (r === 'phieu' && /^phieu\/(?!moi$)[\w-]+$/.test(path))));
   });
   const main = $('#main');
   main.innerHTML = '<p class="muted">Đang tải…</p>';
@@ -321,16 +393,33 @@ async function render() {
   }
   main.innerHTML = '<p>Không có trang này.</p>';
 }
-let currentHash = location.hash;
-window.addEventListener('hashchange', () => {
-  if (S.skipDirty) { S.skipDirty = false; return; }
-  if (S.dirty && !confirm('Có thay đổi chưa lưu. Vẫn rời trang này?')) {
-    S.skipDirty = true; location.hash = currentHash; return;
-  }
-  S.dirty = false; currentHash = location.hash; render();
-});
-window.addEventListener('beforeunload', e => { if (S.dirty) { e.preventDefault(); e.returnValue = ''; } });
-function go(hash) { if (location.hash === hash) render(); else location.hash = hash; }
+if (ONLINE) {
+  document.addEventListener('click', e => {
+    const a = e.target.closest('a[href^="#/"]');
+    if (!a || e.defaultPrevented || e.button !== 0) return;
+    e.preventDefault();
+    go(a.getAttribute('href'));
+  });
+} else {
+  window.addEventListener('hashchange', async () => {
+    if (S.skipDirty) { S.skipDirty = false; return; }
+    if (S.dirty) {
+      const target = location.hash;
+      S.skipDirty = true; location.hash = currentHash;
+      if (!(await ask('Có thay đổi chưa lưu. Vẫn rời trang này?'))) return;
+      S.dirty = false; location.hash = target; return;
+    }
+    currentHash = location.hash; render();
+  });
+  window.addEventListener('beforeunload', e => { if (S.dirty) { e.preventDefault(); e.returnValue = ''; } });
+}
+async function go(hash, opts = {}) {
+  if (!ONLINE) { if (opts.force) S.dirty = false; if (location.hash === hash) render(); else location.hash = hash; return; }
+  if (S.dirty && !opts.force && !(await ask('Có thay đổi chưa lưu. Vẫn rời trang này?'))) return;
+  S.dirty = false; currentHash = hash;
+  window.scrollTo(0, 0);
+  render();
+}
 
 async function loadMeta() {
   S.meta = await api('GET', '/meta');
@@ -340,15 +429,16 @@ async function loadMeta() {
 }
 async function switchWh(wh, keepPage) {
   if (wh === S.wh) return;
-  if (S.dirty && !confirm('Có thay đổi chưa lưu. Vẫn chuyển kho?')) return;
+  if (S.dirty && !(await ask('Có thay đổi chưa lưu. Vẫn chuyển kho?'))) return;
   S.dirty = false;
   S.wh = wh; store('wh', wh);
+  if (ONLINE) { $('#main').innerHTML = '<p class="muted">Đang tải dữ liệu kho…</p>'; await Backend.setWh(wh); }
   await loadMeta();
   toast('Đang làm việc: ' + S.meta.warehouse.name);
   if (keepPage) return;
   const { path } = parseHash();
   const only = { 'kebab': 'TP', 'ke-don': 'TP', 'tuyen': 'TP', 'kh-ngay': 'NVL', 'kh-tuan': 'NVL', 'kh-thang': 'NVL' }[path.split('/')[0]];
-  if (/^phieu\/\d+$/.test(path) || /\/\d+$/.test(path) || (only && only !== wh)) go('#/'); else render();
+  if (/\/(?!moi$)[\w-]+$/.test(path) || (only && only !== wh)) go('#/', { force: true }); else render();
 }
 
 /* ============================================================ Tổng quan */
@@ -408,7 +498,7 @@ function newVoucher(type) {
 }
 
 async function viewVoucherForm(main, m, q) {
-  const editing = m[1] ? Number(m[1]) : null;
+  const editing = m[1] ? m[1] : null;
   let v;
   if (editing) {
     v = await api('GET', '/vouchers/' + editing);
@@ -486,9 +576,9 @@ async function viewVoucherForm(main, m, q) {
   }
 
   function bindHeader() {
-    $$('#type-tabs button').forEach(b => b.onclick = () => {
+    $$('#type-tabs button').forEach(b => b.onclick = async () => {
       if (b.dataset.t === v.type) return;
-      if (editing && !confirm('Đổi loại phiếu sẽ đổi cả số phiếu. Tiếp tục?')) return;
+      if (editing && !(await ask('Đổi loại phiếu sẽ đổi cả số phiếu. Tiếp tục?'))) return;
       const nv = newVoucher(b.dataset.t);
       if (!editing) { v.from_party = nv.from_party; v.to_party = nv.to_party; v.reason = nv.reason; }
       v.type = b.dataset.t; autoNo = true; markDirty(); draw(); refreshNo();
@@ -514,7 +604,7 @@ async function viewVoucherForm(main, m, q) {
         printVouchers('ids=' + editing);
       };
       $('#btn-del').onclick = async () => {
-        if (!confirm(`Xóa phiếu ${v.no}? Thao tác này không hoàn tác được (vẫn ghi trong Lịch sử).`)) return;
+        if (!(await ask(`Xóa phiếu ${v.no}? Thao tác này không hoàn tác được (vẫn ghi trong Lịch sử).`))) return;
         if (await guard(() => api('DELETE', '/vouchers/' + editing))) { S.dirty = false; toast('Đã xóa phiếu ' + v.no); go('#/phieu'); }
       };
       $('#btn-copy').onclick = () => {
@@ -619,10 +709,10 @@ async function viewVoucherForm(main, m, q) {
   async function save(andPrint) {
     if (v.lines.some(l => l.product_code && (l.qty === null || isNaN(l.qty)))) return toast('Có dòng chưa nhập số lượng', true);
     if (v.lines.some(l => !l.product_code && l.qty)) return toast('Có dòng có số lượng nhưng chưa chọn mặt hàng', true);
-    if (v.type === 'X' && useRoutes && !v.route && !confirm('Phiếu xuất chưa chọn tuyến. Vẫn lưu?')) return;
+    if (v.type === 'X' && useRoutes && !v.route && !(await ask('Phiếu xuất chưa chọn tuyến. Vẫn lưu?'))) return;
     if (v.type !== 'D') {
       const over = v.lines.filter(l => l.product_code && v.type === 'X' && (stock[l.product_code] || 0) - (Number(l.qty) || 0) < 0);
-      if (over.length && !confirm(`${over.length} mặt hàng xuất vượt tồn sổ sách (sẽ bị tồn âm). Vẫn lưu?`)) return;
+      if (over.length && !(await ask(`${over.length} mặt hàng xuất vượt tồn sổ sách (sẽ bị tồn âm). Vẫn lưu?`))) return;
     }
     const body = Object.assign({}, v, { lines: v.lines.filter(l => l.product_code) });
     if (autoNo && !editing) body.no = '';
@@ -633,8 +723,8 @@ async function viewVoucherForm(main, m, q) {
     store('lastVoucher_' + S.wh + '_' + v.type, { giver: v.giver, receiver: v.receiver });
     toast(`Đã lưu phiếu ${res.no}`);
     loadMeta();
-    if (andPrint) printHtml(voucherDoc(res));
-    if (!editing) location.hash = '#/phieu/' + res.id;
+    if (andPrint) printHtml(voucherDoc(res), 'portrait', res.no);
+    if (!editing) go('#/phieu/' + res.id, { force: true });
     else { v.no = res.no; $('#f-no').value = res.no; setTitle(`Sửa phiếu ${res.no}`); }
   }
 
@@ -678,7 +768,7 @@ async function viewVoucherList(main) {
     $('#v-list').innerHTML = list.length ? `<div class="table-wrap"><table class="data"><thead><tr>
       <th><input type="checkbox" id="v-all"></th><th>Ngày</th><th>Số phiếu</th><th>Loại</th><th>Tuyến / Bên nhận</th><th>Lý do / Diễn giải</th>
       <th class="num">Dòng</th><th class="num">Tổng SL</th><th>Người giao → nhận</th><th></th></tr></thead><tbody>
-      ${list.map(v => `<tr class="clickable" data-id="${v.id}"><td><input type="checkbox" data-sel="${v.id}" ${sel.has(v.id) ? 'checked' : ''}></td>
+      ${list.map(v => `<tr class="clickable" data-id="${v.id}"><td><input type="checkbox" data-sel="${v.id}" ${sel.has(String(v.id)) ? 'checked' : ''}></td>
         <td class="nowrap">${vnDate(v.date)}</td><td class="nowrap"><b>${esc(v.no)}</b></td><td><span class="badge ${v.type}">${TYPE_LABEL[v.type]}</span></td>
         <td>${esc(v.route || v.to_party)}</td><td>${esc(v.reason)}</td><td class="num">${v.line_count}</td><td class="num">${fmt(v.total_qty)}</td>
         <td class="small">${esc(v.giver)}${v.receiver ? ' → ' + esc(v.receiver) : ''}</td>
@@ -688,10 +778,10 @@ async function viewVoucherList(main) {
       if (e.target.closest('input,button')) return;
       go('#/phieu/' + tr.dataset.id);
     });
-    $$('#v-list [data-sel]').forEach(cb => cb.onchange = () => { cb.checked ? sel.add(+cb.dataset.sel) : sel.delete(+cb.dataset.sel); draw(); });
+    $$('#v-list [data-sel]').forEach(cb => cb.onchange = () => { cb.checked ? sel.add(cb.dataset.sel) : sel.delete(cb.dataset.sel); draw(); });
     $$('#v-list [data-print]').forEach(b => b.onclick = () => printVouchers('ids=' + b.dataset.print));
     const all = $('#v-all');
-    if (all) { all.checked = sel.size && sel.size === list.length; all.onchange = () => { list.forEach(v => all.checked ? sel.add(v.id) : sel.delete(v.id)); draw(); }; }
+    if (all) { all.checked = sel.size && sel.size === list.length; all.onchange = () => { list.forEach(v => all.checked ? sel.add(String(v.id)) : sel.delete(String(v.id))); draw(); }; }
   }
   const upd = () => { f.from = $('#v-from').value; f.to = $('#v-to').value; f.type = $('#v-type').value; f.q = $('#v-q').value; store('voucherFilter', f); load(); };
   ['#v-from', '#v-to', '#v-type'].forEach(id => $(id).addEventListener('change', upd));
@@ -711,13 +801,14 @@ async function viewLedger(main) {
       <label class="field">Đến ngày<input type="date" id="l-to" value="${f.to}"></label>
       <label class="field">Loại<select id="l-type">${options([['N', 'Nhập'], ['X', 'Xuất'], ['D', 'Điều chỉnh']], f.type, 'Tất cả')}</select></label>
       <label class="field grow">Tìm nhanh (mã, tên hàng không dấu, số phiếu, ghi chú…)<input id="l-q" value="${esc(f.q)}"></label>
-      <a class="btn" id="l-csv">⬇ Xuất Excel (CSV)</a>
+      ${ONLINE ? '<button class="btn" id="l-csv">⬇ Xuất Excel (CSV)</button>' : '<a class="btn" id="l-csv">⬇ Xuất Excel (CSV)</a>'}
     </div><div id="l-sum" class="kpis"></div><div id="l-list"></div>`;
   async function load() {
     const p = new URLSearchParams({ from: f.from, to: f.to, type: f.type });
     let rows = await guard(() => api('GET', '/lines?' + p)) || [];
     if (f.q) rows = rows.filter(r => matches(f.q, [r.no, r.product_code, r.name, r.note, r.reason, r.giver, r.receiver, r.to_party].join(' ')));
-    $('#l-csv').href = '/api/export/lines.csv?' + new URLSearchParams({ wh: S.wh, from: f.from, to: f.to });
+    if (ONLINE) $('#l-csv').onclick = () => guard(async () => saveTextFile(`so-nhap-xuat-${S.wh.toLowerCase()}-${f.from}-${f.to}.csv`, await api('GET', '/export/lines.csv?' + new URLSearchParams({ from: f.from, to: f.to }))));
+    else $('#l-csv').href = '/api/export/lines.csv?' + new URLSearchParams({ wh: S.wh, from: f.from, to: f.to });
     const sum = { N: 0, X: 0, D: 0 };
     rows.forEach(r => { sum[r.type] += 1; });
     $('#l-sum').innerHTML = `<div class="kpi"><div class="k-label">Số dòng</div><div class="k-val">${rows.length}</div></div>
@@ -805,7 +896,7 @@ async function viewNXT(main, m, q) {
         <td class="n">${fmtBlank0(r.in)}</td><td class="n">${fmtBlank0(r.out)}</td><td class="n">${fmtBlank0(r.adj)}</td><td class="n"><b>${fmt(r.close)}</b></td>
         <td class="n">${fmtBlank0(r.price)}</td><td class="n">${fmtBlank0(Math.round(r.value))}</td><td>${esc(r.warn)}</td></tr>`).join('')}
       <tr class="sum"><td colspan="10" class="c">TỔNG GIÁ TRỊ TỒN KHO CUỐI KỲ</td><td class="n">${money(rows.reduce((a, r) => a + r.value, 0))}</td><td></td></tr></tbody></table>
-      ${signBlock([['Người lập', S.user], ['Thủ kho', ''], ['Kế toán', '']])}</div>`, 'landscape');
+      ${signBlock([['Người lập', S.user], ['Thủ kho', ''], ['Kế toán', '']])}</div>`, 'landscape', `NXT-${S.wh}-${f.from}-${f.to}`);
   };
   await load();
 }
@@ -860,7 +951,7 @@ async function viewStockCard(main, m, q) {
       ${data.lines.map((l, i) => `<tr><td class="c">${i + 1}</td><td class="c">${vnDate(l.date)}</td><td>${esc(l.no)}</td><td>${esc(l.reason || (l.from_party + ' → ' + l.to_party))}</td>
         <td class="n">${l.type === 'N' ? fmt(l.qty) : ''}</td><td class="n">${l.type === 'X' ? fmt(l.qty) : ''}</td><td class="n">${l.type === 'D' ? fmt(l.qty) : ''}</td><td class="n">${fmt(l.balance)}</td></tr>`).join('')}
       <tr class="sum"><td colspan="7" class="c">TỒN CUỐI KỲ</td><td class="n">${fmt(data.closing)}</td></tr></tbody></table>
-      ${signBlock([['Người lập thẻ', S.user], ['Thủ kho', ''], ['Kế toán', '']])}</div>`);
+      ${signBlock([['Người lập thẻ', S.user], ['Thủ kho', ''], ['Kế toán', '']])}</div>`, 'portrait', `the-kho-${f.code}`);
   };
   await load();
 }
@@ -894,11 +985,11 @@ async function saveDoc(doc) {
   const res = doc.id ? await api('PUT', '/docs/' + doc.id, body) : await api('POST', '/docs', body);
   S.dirty = false;
   toast('Đã lưu');
-  if (!doc.id) { doc.id = res.id; history.replaceState(null, '', `#/${DOC_KINDS[doc.kind].path}/${res.id}`); currentHash = location.hash; }
+  if (!doc.id) { doc.id = res.id; setHashSilently(`#/${DOC_KINDS[doc.kind].path}/${res.id}`); }
   return true;
 }
 async function deleteDoc(doc) {
-  if (!doc.id || !confirm('Xóa biên bản này?')) return;
+  if (!doc.id || !(await ask('Xóa biên bản này?'))) return;
   if (await guard(() => api('DELETE', '/docs/' + doc.id))) { S.dirty = false; go('#/' + DOC_KINDS[doc.kind].path); }
 }
 
@@ -958,7 +1049,7 @@ async function viewStocktake(main, m) {
         ${doc.id ? '<button class="btn danger" id="k-del">Xóa</button>' : ''}
         <a class="btn ghost" href="#/kiem-ke">← Danh sách</a></div>`;
     drawRows();
-    $('#k-date').onchange = async () => { doc.date = $('#k-date').value; markDirty(); if (confirm('Đổi ngày: lấy lại tồn sổ theo ngày mới? (giữ số đã đếm)')) { await fetchBook(true); drawRows(); } };
+    $('#k-date').onchange = async () => { doc.date = $('#k-date').value; markDirty(); if ((await ask('Đổi ngày: lấy lại tồn sổ theo ngày mới? (giữ số đã đếm)'))) { await fetchBook(true); drawRows(); } };
     $('#k-counter').oninput = () => { d.counter = $('#k-counter').value; markDirty(); };
     $('#k-keeper').oninput = () => { d.keeper = $('#k-keeper').value; markDirty(); };
     $('#k-thr').oninput = () => { const n = parseNum($('#k-thr').value); if (n !== null && !isNaN(n)) { d.threshold = n / 100; markDirty(); drawRows(); } };
@@ -968,7 +1059,7 @@ async function viewStocktake(main, m) {
     $('#k-save').onclick = () => guard(() => { doc.title = summaryTitle(); return saveDoc(doc).then(() => draw()); });
     $('#k-print').onclick = () => printStocktake(false);
     $('#k-print-blank').onclick = () => printStocktake(true);
-    $('#k-refresh').onclick = async () => { if (!confirm('Lấy lại tồn sổ sách theo sổ hiện tại? Số đã đếm được giữ nguyên.')) return; await guard(() => fetchBook(true)); markDirty(); drawRows(); };
+    $('#k-refresh').onclick = async () => { if (!(await ask('Lấy lại tồn sổ sách theo sổ hiện tại? Số đã đếm được giữ nguyên.'))) return; await guard(() => fetchBook(true)); markDirty(); drawRows(); };
     $('#k-adj').onclick = makeAdjustment;
     if (doc.id) $('#k-del').onclick = () => deleteDoc(doc);
   }
@@ -1030,12 +1121,12 @@ async function viewStocktake(main, m) {
       <table class="t"><thead><tr>${blind ? '<th>STT</th><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th><th style="width:22%">Tồn thực tế (đếm/cân)</th><th style="width:20%">Ghi chú</th>'
         : '<th>STT</th><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th><th>Tồn sổ sách</th><th>Tồn thực tế</th><th>Chênh lệch</th><th>% lệch</th><th>Giá trị lệch (đ)</th><th>Đánh giá</th><th>Nguyên nhân / Hướng xử lý</th>'}</tr></thead>
       <tbody>${body}</tbody></table>
-      ${signBlock([['Người kiểm kê', d.counter], ['Thủ kho', d.keeper], ['Kế toán', '']])}</div>`, blind ? 'portrait' : 'landscape');
+      ${signBlock([['Người kiểm kê', d.counter], ['Thủ kho', d.keeper], ['Kế toán', '']])}</div>`, blind ? 'portrait' : 'landscape', (blind ? 'phieu-dem-' : 'kiem-ke-') + doc.date);
   }
-  function makeAdjustment() {
+  async function makeAdjustment() {
     const rows = d.rows.filter(r => { const c = calc(r); return c.diff !== null && c.diff !== 0; });
     if (!rows.length) return toast('Không có dòng chênh lệch để điều chỉnh', true);
-    if (S.dirty && !confirm('Biên bản chưa lưu. Vẫn tạo phiếu điều chỉnh? (nên Lưu trước)')) return;
+    if (S.dirty && !(await ask('Biên bản chưa lưu. Vẫn tạo phiếu điều chỉnh? (nên Lưu trước)'))) return;
     store('voucherDraft', {
       wh: S.wh, type: 'D', date: doc.date, from_party: S.meta.warehouse.name, giver: d.counter, receiver: d.keeper,
       reason: 'Điều chỉnh về theo số kiểm kê thực tế', doc_ref: 'Biên bản kiểm kê ngày ' + vnDate(doc.date),
@@ -1153,7 +1244,7 @@ async function viewHandover(main, m) {
       <tr class="sum"><td colspan="4" class="c">CỘNG</td><td class="n">${st.n} mã</td><td class="n">Đã đếm ${st.counted}</td><td class="n">${st.off} mã lệch</td><td class="n">${money(st.value)}</td><td>${st.bad} mã có vấn đề</td><td></td></tr></tbody></table>
       <div class="d-foot"><div>Ý kiến / kết luận: ${esc(d.conclusion) || dots}</div>
       <div>Bên nhận đã kiểm đếm và nhận đủ số lượng hàng tồn theo cột "SL thực tế bàn giao" và chịu trách nhiệm quản lý kể từ thời điểm bàn giao.</div></div>
-      ${signBlock([['Bên giao', d.giver_name], ['Bên nhận', d.receiver_name], ['Người chứng kiến', d.witness], ['Quản lý / Kế toán', '']])}</div>`, 'landscape');
+      ${signBlock([['Bên giao', d.giver_name], ['Bên nhận', d.receiver_name], ['Người chứng kiến', d.witness], ['Quản lý / Kế toán', '']])}</div>`, 'landscape', no);
   }
   draw();
 }
@@ -1207,7 +1298,7 @@ async function viewKebab(main, m) {
       <tbody>${d.rows.map(r => { const b = bags(r); return `<tr><td>${r.size} cái</td>${cols.map(c => `<td class="n">${r[c[0]] === null || r[c[0]] === undefined ? '' : fmt(r[c[0]])}</td>`).join('')}
         <td class="n">${b === null ? '' : fmt(b)}</td><td class="n">${b === null ? '' : fmt(b * r.size)}</td></tr>`; }).join('')}
       <tr class="sum"><td>Tổng</td>${cols.map(c => `<td class="n">${fmt(t[c[0]])}</td>`).join('')}<td class="n">${fmt(t.bags)}</td><td class="n">${fmt(t.units)}</td></tr></tbody></table>
-      ${signBlock([['Người ghi', d.person], ['Thủ kho', '']])}</div>`);
+      ${signBlock([['Người ghi', d.person], ['Thủ kho', '']])}</div>`, 'portrait', 'kebab-' + doc.date);
   }
   draw();
 }
@@ -1257,7 +1348,7 @@ async function viewRouteOrders(main, m) {
       <table class="t"><thead><tr><th>STT</th><th>Tuyến</th><th>Số đơn</th><th>Mã khách hàng</th><th>Số tiền</th></tr></thead>
       <tbody>${d.rows.filter(r => r.route || r.orders || r.customers).map((r, i) => `<tr><td class="c">${i + 1}</td><td>${esc(r.route)}</td><td class="n">${fmt(r.orders)}</td><td>${esc(r.customers)}</td><td class="n">${fmt(r.amount)}</td></tr>`).join('')}
       <tr class="sum"><td colspan="2" class="c">Tổng</td><td class="n">${fmt(t.orders)}</td><td></td><td class="n">${fmt(t.amount)}</td></tr></tbody></table>
-      ${signBlock([['Người lập', S.user], ['Thủ kho', '']])}</div>`);
+      ${signBlock([['Người lập', S.user], ['Thủ kho', '']])}</div>`, 'portrait', 'ke-don-' + doc.date);
   }
   draw();
 }
@@ -1282,7 +1373,7 @@ async function viewProducts(main) {
       </tbody></table></div><p class="hint">${rows.length} mã hàng.</p>`;
     $$('#p-list tr[data-code]').forEach(tr => tr.onclick = e => { if (!e.target.closest('button')) edit(productByCode(tr.dataset.code)); });
     $$('#p-list [data-del]').forEach(b => b.onclick = async () => {
-      if (!confirm('Xóa mã ' + b.dataset.del + '?')) return;
+      if (!(await ask('Xóa mã ' + b.dataset.del + '?'))) return;
       if (await guard(() => api('DELETE', '/products/' + encodeURIComponent(b.dataset.del)))) { toast('Đã xóa'); await loadMeta(); draw(); }
     });
   }
@@ -1331,9 +1422,9 @@ async function viewRoutes(main) {
       ${S.meta.routes.map((r, i) => `<tr class="clickable" data-id="${r.id}"><td>${i + 1}</td><td>${esc(r.name)}</td><td><b>${esc(r.code)}</b></td><td>${esc(r.note)}</td>
         <td><button class="btn sm danger" data-del="${r.id}">Xóa</button></td></tr>`).join('')}</tbody></table></div>`;
     $('#r-add').onclick = () => edit(null);
-    $$('tr[data-id]', main).forEach(tr => tr.onclick = e => { if (!e.target.closest('button')) edit(S.meta.routes.find(r => r.id === +tr.dataset.id)); });
+    $$('tr[data-id]', main).forEach(tr => tr.onclick = e => { if (!e.target.closest('button')) edit(S.meta.routes.find(r => String(r.id) === tr.dataset.id)); });
     $$('[data-del]', main).forEach(b => b.onclick = async () => {
-      if (!confirm('Xóa tuyến này? (phiếu cũ vẫn giữ tên tuyến)')) return;
+      if (!(await ask('Xóa tuyến này? (phiếu cũ vẫn giữ tên tuyến)'))) return;
       if (await guard(() => api('DELETE', '/routes/' + b.dataset.del))) { await loadMeta(); draw(); }
     });
   }
@@ -1375,9 +1466,12 @@ async function viewSettings(main) {
       ${cnt ? `<div class="callout warn small">${esc(W.name)} đã có ${cnt} phiếu trên web. Nếu chọn "Sổ nhập xuất", các phiếu này sẽ bị thay bằng dữ liệu trong file (kho kia không bị ảnh hưởng). Nên tải bản sao lưu trước.</div>` : ''}
     </div>
     <div class="card"><h3>Sao lưu / xuất dữ liệu</h3><div class="toolbar">
-      <a class="btn" href="/api/export/backup">⬇ Tải bản sao lưu cả 2 kho (.db)</a>
+      ${ONLINE ? `<button class="btn" id="ex-backup">⬇ Tải bản sao lưu (.json)</button>
+      <button class="btn" id="ex-csv">⬇ Xuất sổ nhập xuất ${esc(W.name)} (CSV mở bằng Excel)</button></div>
+      <p class="hint">Dữ liệu được lưu trực tuyến, dùng chung cho mọi người được chia sẻ trang. Nên tải bản sao lưu định kỳ.</p></div>`
+      : `<a class="btn" href="/api/export/backup">⬇ Tải bản sao lưu cả 2 kho (.db)</a>
       <a class="btn" href="/api/export/lines.csv?wh=${S.wh}">⬇ Xuất sổ nhập xuất ${esc(W.name)} (CSV mở bằng Excel)</a></div>
-      <p class="hint">Nên sao lưu mỗi cuối ngày. Để khôi phục: tắt web, chép file .db đè vào <code>kho-noi-bo/data/kho.db</code>, chạy lại.</p></div>
+      <p class="hint">Nên sao lưu mỗi cuối ngày. Để khôi phục: tắt web, chép file .db đè vào <code>kho-noi-bo/data/kho.db</code>, chạy lại.</p></div>`}
     <div class="card"><h3>Thông tin ${esc(W.name)}</h3><div class="grid c3">
       <label class="field">Tên kho (ghi trên phiếu, bàn giao, điều chỉnh)<input id="w-name" value="${esc(W.name)}"></label>
       <label class="field">Bộ phận (dòng "Bộ phận:" trên phiếu in)<input id="w-dept" value="${esc(W.department)}"></label>
@@ -1394,11 +1488,15 @@ async function viewSettings(main) {
       <label class="field">Nhóm hàng<textarea id="s-groups" rows="7">${esc(lines(s.groups))}</textarea></label>
       <label class="field">Đơn vị tính<textarea id="s-units" rows="7">${esc(lines(s.units))}</textarea></label>
     </div><div style="margin-top:12px"><button class="btn primary" id="s-save">💾 Lưu cài đặt</button></div></div>`;
+  if (ONLINE) {
+    $('#ex-backup').onclick = () => guard(async () => saveTextFile(`kho-antam-sao-luu-${isoDate()}.json`, await api('GET', '/export/backup')));
+    $('#ex-csv').onclick = () => guard(async () => saveTextFile(`so-nhap-xuat-${S.wh.toLowerCase()}.csv`, await api('GET', '/export/lines.csv')));
+  }
   $('#imp-go').onclick = async () => {
     const file = $('#imp-file').files[0];
     if (!file) return toast('Chọn file .xlsx trước', true);
     const ledger = $('#imp-l').checked;
-    if (ledger && cnt && !confirm(`Thay toàn bộ ${cnt} phiếu của ${W.name} bằng dữ liệu trong file?`)) return;
+    if (ledger && cnt && !(await ask(`Thay toàn bộ ${cnt} phiếu của ${W.name} bằng dữ liệu trong file?`))) return;
     $('#imp-go').disabled = true; $('#imp-result').innerHTML = '<p class="muted">Đang nhập…</p>';
     const buf = await file.arrayBuffer();
     const chk = id => ($(id) && $(id).checked ? 1 : 0);
@@ -1525,12 +1623,12 @@ async function viewPlanDaily(main) {
       <p class="hint">Bấm vào dòng để sửa. Tổng hợp theo tuần/tháng ở mục KH mua theo tuần / tháng.</p>` : '<p class="muted">Chưa có kế hoạch trong tháng này.</p>';
     $$('#pm-list tr[data-id]').forEach(tr => tr.onclick = e => {
       if (e.target.closest('button')) return;
-      const r = rows.find(x => x.id === +tr.dataset.id);
+      const r = rows.find(x => String(x.id) === tr.dataset.id);
       form = { id: r.id, date: r.date, dept: r.dept, product_code: r.product_code, qty: r.qty, price: r.price, need_date: r.need_date, proposer: r.proposer, note: r.note };
       fill(); window.scrollTo({ top: 0, behavior: 'smooth' });
     });
     $$('#pm-list [data-del]').forEach(b => b.onclick = async () => {
-      if (!confirm('Xóa dòng kế hoạch này?')) return;
+      if (!(await ask('Xóa dòng kế hoạch này?'))) return;
       if (await guard(() => api('DELETE', '/plans/' + b.dataset.del))) load();
     });
   }
@@ -1683,9 +1781,23 @@ async function boot() {
   S.wh = store('wh') === 'NVL' ? 'NVL' : 'TP';
   $$('#wh-switch button').forEach(b => b.onclick = () => switchWh(b.dataset.wh));
   $('#menu-btn').onclick = () => document.body.classList.toggle('nav-open');
-  $('#user-btn').textContent = '👤 ' + (S.user || 'Khách');
   $('#user-btn').onclick = () => askUser(true);
-  try { await loadMeta(); } catch (e) { $('#main').innerHTML = `<div class="callout warn">Không kết nối được máy chủ: ${esc(e.message)}</div>`; return; }
+  $('#refresh-btn').onclick = async () => {
+    if (S.dirty && !(await ask('Có thay đổi chưa lưu. Tải lại dữ liệu mới sẽ bỏ thay đổi đó?'))) return;
+    S.dirty = false; $('#refresh-btn').hidden = true; await loadMeta(); render();
+  };
+  try {
+    if (ONLINE) {
+      $('#main').innerHTML = '<div class="callout">Đang kết nối dữ liệu dùng chung…</div>';
+      await Backend.init();
+      if (!S.user && Backend.myName) { S.user = Backend.myName; store('user', S.user); }
+      await Backend.setWh(S.wh);
+      Backend.onRemote(() => { const b = $('#refresh-btn'); if (b) b.hidden = false; });
+      if (Backend.canWrite === false) toast('Bạn đang ở chế độ chỉ xem: không lưu được thay đổi.', true);
+    }
+    await loadMeta();
+  } catch (e) { $('#main').innerHTML = `<div class="callout warn">Không kết nối được dữ liệu: ${esc(e.message)}</div>`; return; }
+  $('#user-btn').textContent = '👤 ' + (S.user || 'Khách');
   await render();
   if (!S.user) askUser();
 }
