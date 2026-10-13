@@ -5,7 +5,7 @@ Web nội bộ thay cho 2 file Excel quản lý kho, giữ nguyên quy trình v�
 
 | Kho | Màu | Chức năng riêng |
 |---|---|---|
-| **Kho thành phẩm - hàng hóa** (trước đây ghi "Kho tổng") | xanh lá | Tuyến giao hàng (số PXK có mã tuyến), SL Kebab hằng ngày, Kê đơn theo tuyến |
+| **Kho thành phẩm - hàng hóa** (trước đây ghi "Kho tổng") | xanh lá | Tuyến giao hàng (số PXK có mã tuyến) |
 | **Kho nguyên vật liệu** | xanh dương | Kế hoạch mua hàng theo Ngày / Tuần / Tháng (sheet KH Ngày, KH Tuần, KH Tháng) |
 
 Hai kho dùng chung: Lập phiếu nhập/xuất/điều chỉnh, Danh sách phiếu, Sổ nhập – xuất, Nhập – Xuất – Tồn, Thẻ kho,
@@ -65,8 +65,6 @@ Nếu trước đây đã dùng bản web 1 kho, khi chạy bản mới dữ li�
 | Theo dõi 1 mặt hàng | **Thẻ kho** | Sheet Thẻ kho |
 | Kiểm kê | **Kiểm kê kho** › nhập số đếm › **Tạo phiếu điều chỉnh (DCK)** từ chênh lệch; có *In phiếu đếm (ẩn tồn sổ)* để đếm mù | Sheet Kiểm kê + Phiếu Điều chỉnh |
 | Bàn giao ca / thủ kho | **Bàn giao kho** | Sheet Bàn giao kho |
-| Sản lượng kebab | **SL Kebab hằng ngày** | Sheet SL Kebab hàng ngày |
-| Kê đơn theo tuyến (kho TP) | **Kê đơn theo tuyến** | Sheet1 |
 | Đặt hàng mua NVL (kho NVL) | **KH mua theo ngày** – nhập ngày đặt, bộ phận, mặt hàng, SL, đơn giá (tự lấy, gõ đè được), ngày cần hàng | Sheet KH Ngày |
 | Tổng hợp mua theo tuần (kho NVL) | **KH mua theo tuần** – tuần tính Thứ 2 → Chủ nhật, cắt theo tháng | Sheet KH Tuần |
 | Kế hoạch mua tháng gửi Kế toán (kho NVL) | **KH mua theo tháng** – SL Xưởng / Văn phòng, đơn giá BQ, thành tiền; in có chữ ký Thủ kho, Kế toán, Giám đốc | Sheet KH Tháng |

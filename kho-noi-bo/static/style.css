@@ -249,8 +249,7 @@ body.readonly #nav a[data-route="phieu/moi"], body.readonly #nav a[data-route="c
 body.readonly #nav .nav-group.ro-hide, body.readonly a[href*="/moi"], body.readonly .ro-hide,
 body.readonly #btn-save, body.readonly #btn-save-print, body.readonly #btn-copy, body.readonly #btn-del, body.readonly #btn-add, body.readonly #btn-renum,
 body.readonly [data-del], body.readonly #k-save, body.readonly #k-refresh, body.readonly #k-adj, body.readonly #k-del,
-body.readonly #h-save, body.readonly #h-refresh, body.readonly #h-del, body.readonly #kb-save, body.readonly #kb-del,
-body.readonly #ro-save, body.readonly #ro-add, body.readonly #ro-del, body.readonly #p-add, body.readonly #r-add, body.readonly #pf-card,
+body.readonly #h-save, body.readonly #h-refresh, body.readonly #h-del, body.readonly #p-add, body.readonly #r-add, body.readonly #pf-card,
 body.readonly #user-btn, body.readonly .card > div > .hint { display: none !important; }
 @media (max-width: 560px) { .view-badge { display: none; } }
 kbd { display: inline-block; padding: 1px 6px; border: 1px solid #c5cbd3; border-bottom-width: 2px; border-radius: 4px; background: #fff; font: 600 12px/1.4 ui-monospace, Menlo, Consolas, monospace; color: var(--ink); }

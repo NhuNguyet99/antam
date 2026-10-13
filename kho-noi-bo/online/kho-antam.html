@@ -251,8 +251,7 @@ body.readonly #nav a[data-route="phieu/moi"], body.readonly #nav a[data-route="c
 body.readonly #nav .nav-group.ro-hide, body.readonly a[href*="/moi"], body.readonly .ro-hide,
 body.readonly #btn-save, body.readonly #btn-save-print, body.readonly #btn-copy, body.readonly #btn-del, body.readonly #btn-add, body.readonly #btn-renum,
 body.readonly [data-del], body.readonly #k-save, body.readonly #k-refresh, body.readonly #k-adj, body.readonly #k-del,
-body.readonly #h-save, body.readonly #h-refresh, body.readonly #h-del, body.readonly #kb-save, body.readonly #kb-del,
-body.readonly #ro-save, body.readonly #ro-add, body.readonly #ro-del, body.readonly #p-add, body.readonly #r-add, body.readonly #pf-card,
+body.readonly #h-save, body.readonly #h-refresh, body.readonly #h-del, body.readonly #p-add, body.readonly #r-add, body.readonly #pf-card,
 body.readonly #user-btn, body.readonly .card > div > .hint { display: none !important; }
 @media (max-width: 560px) { .view-badge { display: none; } }
 kbd { display: inline-block; padding: 1px 6px; border: 1px solid #c5cbd3; border-bottom-width: 2px; border-radius: 4px; background: #fff; font: 600 12px/1.4 ui-monospace, Menlo, Consolas, monospace; color: var(--ink); }
@@ -290,9 +289,6 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid #c5cbd3; border
       <div class="nav-group">Biên bản</div>
       <a href="#/kiem-ke" data-route="kiem-ke">Kiểm kê kho</a>
       <a href="#/ban-giao" data-route="ban-giao">Bàn giao kho</a>
-      <div class="nav-group" data-only="TP">Sổ phụ</div>
-      <a href="#/kebab" data-route="kebab" data-only="TP">SL Kebab hằng ngày</a>
-      <a href="#/ke-don" data-route="ke-don" data-only="TP">Kê đơn theo tuyến</a>
       <div class="nav-group">Danh mục</div>
       <a href="#/hang" data-route="hang">Mặt hàng</a>
       <a href="#/tuyen" data-route="tuyen" data-only="TP">Tuyến / nơi nhận</a>
@@ -1233,7 +1229,7 @@ const Backend = (() => {
 /* Web làm việc nội bộ – Kho Thành phẩm & Hàng hóa An Tâm.
    Mô phỏng quy trình của file Excel: Danh mục hàng, Danh mục tuyến, Sổ Nhập Xuất,
    Phiếu Nhập Xuất, Phiếu Điều chỉnh, Nhập Xuất Tồn, Thẻ kho, Kiểm kê, Bàn giao kho,
-   SL Kebab hằng ngày, Kê đơn theo tuyến; kho NVL có thêm Kế hoạch mua hàng (KH Ngày/Tuần/Tháng).
+   kho NVL có thêm Kế hoạch mua hàng (KH Ngày/Tuần/Tháng).
    Web chứa 2 kho: TP (Thành phẩm - Hàng hóa) và NVL (Nguyên vật liệu), dữ liệu tách riêng từng kho. */
 
 const S = { meta: null, dirty: false, skipDirty: false, user: '', wh: 'TP' };
@@ -1597,10 +1593,6 @@ const ROUTES = [
   [/^kiem-ke\/(moi|[\w-]+)$/, viewStocktake],
   [/^ban-giao$/, () => viewDocList('handover')],
   [/^ban-giao\/(moi|[\w-]+)$/, viewHandover],
-  [/^kebab$/, () => viewDocList('kebab')],
-  [/^kebab\/(moi|[\w-]+)$/, viewKebab],
-  [/^ke-don$/, () => viewDocList('routeorders')],
-  [/^ke-don\/(moi|[\w-]+)$/, viewRouteOrders],
   [/^kh-ngay$/, viewPlanDaily],
   [/^kh-tuan$/, viewPlanWeekly],
   [/^kh-thang$/, viewPlanMonthly],
@@ -1683,7 +1675,7 @@ async function switchWh(wh, keepPage) {
   toast('Đang làm việc: ' + S.meta.warehouse.name);
   if (keepPage) return;
   const { path } = parseHash();
-  const only = { 'kebab': 'TP', 'ke-don': 'TP', 'tuyen': 'TP', 'kh-ngay': 'NVL', 'kh-tuan': 'NVL', 'kh-thang': 'NVL' }[path.split('/')[0]];
+  const only = { 'tuyen': 'TP', 'kh-ngay': 'NVL', 'kh-tuan': 'NVL', 'kh-thang': 'NVL' }[path.split('/')[0]];
   if (/\/(?!moi$)[\w-]+$/.test(path) || (only && only !== wh)) go('#/', { force: true }); else render();
 }
 
@@ -2213,8 +2205,6 @@ async function viewStockCard(main, m, q) {
 const DOC_KINDS = {
   stocktake: { title: 'Kiểm kê kho', path: 'kiem-ke', add: '+ Biên bản kiểm kê mới' },
   handover: { title: 'Bàn giao kho', path: 'ban-giao', add: '+ Biên bản bàn giao mới' },
-  kebab: { title: 'Sản lượng Kebab hằng ngày', path: 'kebab', add: '+ Nhập sản lượng ngày' },
-  routeorders: { title: 'Kê đơn theo tuyến', path: 'ke-don', add: '+ Bảng kê ngày mới' },
 };
 async function viewDocList(kind) {
   const K = DOC_KINDS[kind];
@@ -2502,110 +2492,6 @@ async function viewHandover(main, m) {
   draw();
 }
 
-/* ============================================================ SL Kebab hằng ngày */
-async function viewKebab(main, m) {
-  const doc = await loadDoc('kebab', m[1]);
-  const d = doc.data;
-  const sizes = S.meta.settings.kebab_sizes || [50, 45, 40, 35, 30, 25, 20, 15, 10, 5];
-  d.rows = d.rows && d.rows.length ? d.rows : sizes.map(sz => ({ size: sz, l1: null, x1: null, l2: null, x2: null, l3: null }));
-  d.person = d.person || S.user || '';
-  setTitle('Sản lượng Kebab hằng ngày');
-  const cols = [['l1', 'Lần 1: 10h'], ['x1', 'Xuất'], ['l2', 'Lần 2: 14h'], ['x2', 'Xuất'], ['l3', 'Lần 3: 17h (Chốt ca)']];
-  const bags = r => (r.l1 === null && r.l2 === null && r.l3 === null) ? null : (r.l1 || 0) + (r.l2 || 0) + (r.l3 || 0);
-  function draw() {
-    main.innerHTML = `<div class="card"><div class="grid c4"><label class="field">Ngày<input type="date" id="kb-date" value="${doc.date}"></label>
-      <label class="field">Người ghi<input id="kb-person" list="dl-people" value="${esc(d.person)}"></label></div>${datalist('dl-people', S.meta.people)}</div>
-      <div class="table-wrap"><table class="data"><thead><tr><th>Loại túi</th>${cols.map(c => `<th class="num">${c[1]}</th>`).join('')}<th class="num">Tổng số túi</th><th class="num">TỔNG SẢN LƯỢNG (cái)</th></tr></thead>
-      <tbody>${d.rows.map((r, i) => `<tr data-i="${i}"><td><b>${r.size} cái</b></td>${cols.map(c => `<td><input class="num" inputmode="decimal" data-k="${c[0]}" value="${r[c[0]] === null || r[c[0]] === undefined ? '' : fmt(r[c[0]])}"></td>`).join('')}
-        <td class="num" data-o="bags"></td><td class="num" data-o="units"></td></tr>`).join('')}</tbody><tfoot id="kb-foot"></tfoot></table></div>
-      <p class="hint">Tổng số túi = Lần 1 + Lần 2 + Lần 3 (như file Excel); Tổng sản lượng = Tổng số túi × số cái/túi.</p>
-      <div class="form-actions"><button class="btn primary" id="kb-save">💾 Lưu</button><button class="btn" id="kb-print">🖨 In</button>
-      ${doc.id ? '<button class="btn danger" id="kb-del">Xóa</button>' : ''}<a class="btn ghost" href="#/kebab">← Danh sách</a></div>`;
-    $$('tbody tr', main).forEach(tr => {
-      const r = d.rows[+tr.dataset.i];
-      $$('input', tr).forEach(inp => inp.oninput = () => { const n = parseNum(inp.value); r[inp.dataset.k] = n === null || isNaN(n) ? null : n; markDirty(); upd(); });
-      tr._upd = () => { const b = bags(r); $('[data-o=bags]', tr).textContent = b === null ? '' : fmt(b); $('[data-o=units]', tr).textContent = b === null ? '' : fmt(b * r.size); };
-    });
-    $('#kb-date').onchange = () => { doc.date = $('#kb-date').value; markDirty(); };
-    $('#kb-person').oninput = () => { d.person = $('#kb-person').value; markDirty(); };
-    $('#kb-save').onclick = () => guard(() => { doc.title = `Tổng sản lượng: ${fmt(totals().units)} cái`; return saveDoc(doc).then(draw); });
-    $('#kb-print').onclick = printIt;
-    if (doc.id) $('#kb-del').onclick = () => deleteDoc(doc);
-    upd();
-  }
-  function totals() {
-    const t = { units: 0, bags: 0 };
-    cols.forEach(c => { t[c[0]] = d.rows.reduce((a, r) => a + (r[c[0]] || 0), 0); });
-    d.rows.forEach(r => { const b = bags(r) || 0; t.bags += b; t.units += b * r.size; });
-    return t;
-  }
-  function upd() {
-    $$('tbody tr', main).forEach(tr => tr._upd && tr._upd());
-    const t = totals();
-    $('#kb-foot').innerHTML = `<tr><td>Tổng</td>${cols.map(c => `<td class="num">${fmt(t[c[0]])}</td>`).join('')}<td class="num">${fmt(t.bags)}</td><td class="num">${fmt(t.units)}</td></tr>`;
-  }
-  function printIt() {
-    const t = totals();
-    printHtml(`<div class="doc">${docHead('', '')}<div class="d-title">Sản lượng Kebab ngày ${vnDate(doc.date)}</div><br>
-      <table class="t"><thead><tr><th>Loại túi</th>${cols.map(c => `<th>${c[1]}</th>`).join('')}<th>Tổng số túi</th><th>TỔNG SẢN LƯỢNG (cái)</th></tr></thead>
-      <tbody>${d.rows.map(r => { const b = bags(r); return `<tr><td>${r.size} cái</td>${cols.map(c => `<td class="n">${r[c[0]] === null || r[c[0]] === undefined ? '' : fmt(r[c[0]])}</td>`).join('')}
-        <td class="n">${b === null ? '' : fmt(b)}</td><td class="n">${b === null ? '' : fmt(b * r.size)}</td></tr>`; }).join('')}
-      <tr class="sum"><td>Tổng</td>${cols.map(c => `<td class="n">${fmt(t[c[0]])}</td>`).join('')}<td class="n">${fmt(t.bags)}</td><td class="n">${fmt(t.units)}</td></tr></tbody></table>
-      ${signBlock([['Người ghi', d.person], ['Thủ kho', '']])}</div>`, 'portrait', 'kebab-' + doc.date);
-  }
-  draw();
-}
-
-/* ============================================================ Kê đơn theo tuyến */
-async function viewRouteOrders(main, m) {
-  const doc = await loadDoc('routeorders', m[1]);
-  const d = doc.data;
-  d.rows = d.rows && d.rows.length ? d.rows : [{ route: '', orders: null, customers: '', amount: null }];
-  setTitle('Kê đơn theo tuyến');
-  function draw() {
-    main.innerHTML = `<div class="card"><div class="grid c4"><label class="field">Ngày<input type="date" id="ro-date" value="${doc.date}"></label></div></div>
-      ${datalist('dl-routes', S.meta.routes.map(r => r.name))}
-      <div class="table-wrap"><table class="data"><thead><tr><th>#</th><th style="min-width:220px">Tuyến</th><th class="num" style="width:110px">Số đơn</th><th style="min-width:260px">Mã khách hàng</th><th class="num" style="width:130px">Số tiền</th><th></th></tr></thead>
-      <tbody id="ro-rows"></tbody><tfoot id="ro-foot"></tfoot></table></div>
-      <div style="margin-top:8px"><button class="btn" id="ro-add">+ Thêm dòng</button></div>
-      <div class="form-actions"><button class="btn primary" id="ro-save">💾 Lưu</button><button class="btn" id="ro-print">🖨 In</button>
-      ${doc.id ? '<button class="btn danger" id="ro-del">Xóa</button>' : ''}<a class="btn ghost" href="#/ke-don">← Danh sách</a></div>`;
-    $('#ro-date').onchange = () => { doc.date = $('#ro-date').value; markDirty(); };
-    $('#ro-add').onclick = () => { d.rows.push({ route: '', orders: null, customers: '', amount: null }); markDirty(); drawRows(); };
-    $('#ro-save').onclick = () => guard(() => { const t = tot(); doc.title = `${d.rows.filter(r => r.route).length} tuyến · ${fmt(t.orders)} đơn · ${fmt(t.amount)}`; return saveDoc(doc).then(draw); });
-    $('#ro-print').onclick = printIt;
-    if (doc.id) $('#ro-del').onclick = () => deleteDoc(doc);
-    drawRows();
-  }
-  const tot = () => ({ orders: d.rows.reduce((a, r) => a + (r.orders || 0), 0), amount: d.rows.reduce((a, r) => a + (r.amount || 0), 0) });
-  function drawRows() {
-    const tb = $('#ro-rows');
-    tb.innerHTML = '';
-    d.rows.forEach((r, i) => {
-      const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${i + 1}</td><td><input list="dl-routes" data-k="route" value="${esc(r.route)}"></td>
-        <td><input class="num" data-n="orders" inputmode="decimal" value="${r.orders === null ? '' : fmt(r.orders)}"></td>
-        <td><input data-k="customers" value="${esc(r.customers)}"></td><td><input class="num" data-n="amount" inputmode="decimal" value="${r.amount === null ? '' : fmt(r.amount)}"></td>
-        <td><button class="btn sm ghost danger" data-del>✕</button></td>`;
-      $$('[data-k]', tr).forEach(inp => inp.oninput = () => { r[inp.dataset.k] = inp.value; markDirty(); });
-      $$('[data-n]', tr).forEach(inp => inp.oninput = () => { const n = parseNum(inp.value); r[inp.dataset.n] = n === null || isNaN(n) ? null : n; markDirty(); foot(); });
-      $('[data-del]', tr).onclick = () => { d.rows.splice(i, 1); markDirty(); drawRows(); };
-      tb.appendChild(tr);
-    });
-    foot();
-  }
-  function foot() { const t = tot(); $('#ro-foot').innerHTML = `<tr><td></td><td>Tổng</td><td class="num">${fmt(t.orders)}</td><td></td><td class="num">${fmt(t.amount)}</td><td></td></tr>`; }
-  function printIt() {
-    const t = tot();
-    printHtml(`<div class="doc">${docHead('', '')}<div class="d-title">Bảng kê đơn theo tuyến</div><div class="d-sub">Ngày ${vnDate(doc.date)}</div>
-      <table class="t"><thead><tr><th>STT</th><th>Tuyến</th><th>Số đơn</th><th>Mã khách hàng</th><th>Số tiền</th></tr></thead>
-      <tbody>${d.rows.filter(r => r.route || r.orders || r.customers).map((r, i) => `<tr><td class="c">${i + 1}</td><td>${esc(r.route)}</td><td class="n">${fmt(r.orders)}</td><td>${esc(r.customers)}</td><td class="n">${fmt(r.amount)}</td></tr>`).join('')}
-      <tr class="sum"><td colspan="2" class="c">Tổng</td><td class="n">${fmt(t.orders)}</td><td></td><td class="n">${fmt(t.amount)}</td></tr></tbody></table>
-      ${signBlock([['Người lập', S.user], ['Thủ kho', '']])}</div>`, 'portrait', 'ke-don-' + doc.date);
-  }
-  draw();
-}
-
 /* ============================================================ Danh mục mặt hàng */
 async function viewProducts(main) {
   setTitle('Danh mục mặt hàng');
@@ -2749,7 +2635,6 @@ async function viewSettings(main) {
       <label class="field">Đơn vị<input id="s-company" value="${esc(s.company)}"></label>
       <label class="field">Khổ giấy in<select id="s-paper">${options(['A4', 'A5'], s.paper)}</select></label>
       <label class="field">Ngưỡng lệch kiểm kê mặc định (%)<input id="s-thr" class="num" value="${fmt((s.stocktake_threshold || 0) * 100)}"></label>
-      <label class="field">Loại túi Kebab (số cái/túi, cách nhau dấu phẩy)<input id="s-kebab" value="${esc((s.kebab_sizes || []).join(', '))}"></label>
       <label class="field">Bộ phận đặt hàng (kế hoạch mua, cách nhau dấu phẩy)<input id="s-depts" value="${esc((s.plan_depts || []).join(', '))}"></label>
     </div><div class="grid c3" style="margin-top:12px">
       <label class="field">Nhân viên<textarea id="s-staff" rows="7">${esc(lines(s.staff))}</textarea></label>
@@ -2797,7 +2682,7 @@ async function viewSettings(main) {
     const arr = id => $(id).value.split('\n').map(x => x.trim()).filter(Boolean);
     const thr = parseNum($('#s-thr').value);
     const body = { company: $('#s-company').value, paper: $('#s-paper').value,
-      stocktake_threshold: thr && !isNaN(thr) ? thr / 100 : 0, kebab_sizes: $('#s-kebab').value.split(',').map(x => parseInt(x, 10)).filter(x => x > 0),
+      stocktake_threshold: thr && !isNaN(thr) ? thr / 100 : 0,
       plan_depts: $('#s-depts').value.split(',').map(x => x.trim()).filter(Boolean),
       staff: arr('#s-staff'), groups: arr('#s-groups'), units: arr('#s-units'),
       warehouses: { [S.wh]: { name: $('#w-name').value.trim() || W.name, department: $('#w-dept').value, parties: arr('#w-parties') } } };
