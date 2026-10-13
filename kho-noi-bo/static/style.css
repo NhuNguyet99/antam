@@ -210,8 +210,10 @@ table.data tr.row-warn td { background: var(--warn-bg); }
 
 @media print {
   body { background: #fff; }
-  #app, #toasts { display: none !important; }
-  #print-root { display: block; }
+  #toasts, .modal-back { display: none !important; }
+  /* có bản in đang mở: chỉ in bản in; không có thì in nguyên màn hình đang xem */
+  body.has-print #app { display: none !important; }
+  body.has-print #print-root { display: block; }
 }
 
 /* =================================================== 2 kho */
@@ -250,3 +252,4 @@ body.readonly #h-save, body.readonly #h-refresh, body.readonly #h-del, body.read
 body.readonly #ro-save, body.readonly #ro-add, body.readonly #ro-del, body.readonly #p-add, body.readonly #r-add, body.readonly #pf-card,
 body.readonly #user-btn, body.readonly .card > div > .hint { display: none !important; }
 @media (max-width: 560px) { .view-badge { display: none; } }
+kbd { display: inline-block; padding: 1px 6px; border: 1px solid #c5cbd3; border-bottom-width: 2px; border-radius: 4px; background: #fff; font: 600 12px/1.4 ui-monospace, Menlo, Consolas, monospace; color: var(--ink); }

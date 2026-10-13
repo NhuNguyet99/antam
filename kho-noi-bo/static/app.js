@@ -139,13 +139,13 @@ function docSo(num) {
 }
 
 /* ============================================================ modal */
-function openModal({ title, body, saveText = 'Lưu', onSave, wide }) {
+function openModal({ title, body, saveText = 'Lưu', onSave, wide, onClose }) {
   const back = document.createElement('div');
   back.className = 'modal-back';
   back.innerHTML = `<div class="modal" ${wide ? 'style="width:min(960px,100%)"' : ''}><h3>${esc(title)}</h3><div class="m-body">${body}</div>
     <div class="actions"><button class="btn" data-x>Đóng</button>${onSave ? `<button class="btn primary" data-save>${esc(saveText)}</button>` : ''}</div></div>`;
   document.body.appendChild(back);
-  const close = () => back.remove();
+  const close = () => { back.remove(); if (onClose) onClose(); };
   back.addEventListener('click', e => { if (e.target === back) close(); });
   $('[data-x]', back).onclick = close;
   if (onSave) $('[data-save]', back).onclick = async () => { if (await guard(() => onSave(back))) close(); };
@@ -244,17 +244,27 @@ html, body { background: #fff; } body { margin: 0; padding: 12mm; } #print-root 
 @media print { body { padding: 0; } }</style></head><body><div id="print-root">${html}</div>
 <script>window.addEventListener('load', function () { setTimeout(function () { window.print(); }, 400); });<\/script></body></html>`;
 }
+function setPrintContent(html, orientation) {
+  $('#page-style').textContent = html ? pageCss(orientation) : '';
+  $('#print-root').innerHTML = html || '';
+  document.body.classList.toggle('has-print', !!html);
+}
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
 function printHtml(html, orientation = 'portrait', filename = 'ban-in-kho') {
   if (!ONLINE) {
-    $('#page-style').textContent = pageCss(orientation);
-    $('#print-root').innerHTML = html;
+    setPrintContent(html, orientation);
     setTimeout(() => window.print(), 60);
     return;
   }
+  // Trang trên claude.ai không được tự mở hộp thoại In: chuẩn bị sẵn bản in, người dùng bấm Ctrl+P / ⌘+P
+  setPrintContent(html, orientation);
   const safe = String(filename).replace(/[^\w.\- ]+/g, '-').replace(/-+/g, '-') || 'ban-in-kho';
   const m = openModal({
     title: 'Xem trước bản in', wide: true, saveText: '⬇ Tải file để in',
-    body: `<p class="hint" style="margin-top:0">Bấm <b>Tải file để in</b>, rồi mở file vừa tải: trình duyệt sẽ hiện hộp thoại In (chọn máy in hoặc "Lưu thành PDF").</p>
+    onClose: () => setPrintContent(''),
+    body: `<div class="callout" style="margin:0 0 12px">Để in ngay: bấm <kbd>${IS_MAC ? '⌘' : 'Ctrl'}</kbd> + <kbd>P</kbd> trên bàn phím
+      (điện thoại: menu trình duyệt → In / Chia sẻ → In). Hộp thoại In chỉ in phiếu bên dưới.
+      <span class="small muted">Nếu máy không in được theo cách này, bấm <b>Tải file để in</b>.</span></div>
       <div class="print-preview ${orientation}">${html}</div>`,
     onSave: async () => {
       const dl = await claude.use('downloads');
@@ -273,7 +283,7 @@ async function saveTextFile(filename, data) {
   try { await dl.save({ filename, data }); toast('Đã tải ' + filename); }
   catch (e) { if (!(e && e.code === 'declined')) throw new Error('Không tải được file: ' + (e && e.message ? e.message : e)); }
 }
-window.addEventListener('afterprint', () => { $('#print-root').innerHTML = ''; });
+window.addEventListener('afterprint', () => { if (!ONLINE) setPrintContent(''); });
 
 function docHead(rightTop, rightSub) {
   const s = S.meta.settings;
