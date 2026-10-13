@@ -257,6 +257,9 @@ body.readonly #user-btn, body.readonly .card > div > .hint { display: none !impo
 @media (max-width: 560px) { .view-badge { display: none; } }
 kbd { display: inline-block; padding: 1px 6px; border: 1px solid #c5cbd3; border-bottom-width: 2px; border-radius: 4px; background: #fff; font: 600 12px/1.4 ui-monospace, Menlo, Consolas, monospace; color: var(--ink); }
 .access-url { font-size: 15px; font-weight: 600; padding: 6px 10px; background: var(--brand-soft); border-radius: 6px; user-select: all; }
+.ro-banner { margin: 12px 20px 0; padding: 12px 14px; border-radius: var(--radius); background: var(--bad-bg); border: 1px solid #f4b8a8; color: #7a2410; font-size: 13.5px; line-height: 1.5; }
+.ro-banner b { color: #5c1a0a; }
+@media (max-width: 900px) { .ro-banner { margin: 10px 16px 0; } }
 </style>
 <div id="app">
   <aside id="sidebar">
@@ -309,6 +312,7 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid #c5cbd3; border
       <button id="refresh-btn" class="btn sm" hidden title="Người khác vừa thay đổi dữ liệu">↻ Có dữ liệu mới</button>
       <button id="user-btn" class="btn ghost" title="Đổi người dùng"></button>
     </header>
+    <div id="ro-banner" class="ro-banner" hidden></div>
     <main id="main"></main>
   </div>
 </div>
@@ -431,7 +435,7 @@ const Backend = (() => {
   };
   function dbError(e) {
     const code = e && e.code;
-    if (code === 'invalid_argument') return new ApiError(403, 'Không lưu được: bạn có thể chỉ có quyền xem trang này (cần quyền Contributor/Editor), hoặc dữ liệu quá lớn.');
+    if (code === 'invalid_argument') return new ApiError(403, 'Không lưu được: bạn đang chỉ có quyền xem trang này. Nếu đã được mời làm Editor, nhờ chủ trang tắt chia sẻ "Anyone with the link" rồi tải lại trang.');
     if (code === 'quota_exceeded') return new ApiError(507, 'Kho dữ liệu đã đầy: ' + (e.message || ''));
     if (code === 'resource_exhausted') return new ApiError(429, 'Thao tác quá nhanh, hãy thử lại sau vài giây.');
     return new ApiError(503, 'Mất kết nối dữ liệu, hãy thử lại. ' + (e && e.message ? '(' + e.message + ')' : ''));
@@ -1315,7 +1319,10 @@ function toast(msg, err) {
   setTimeout(() => el.remove(), err ? 6000 : 3000);
 }
 async function guard(fn) {
-  try { return await fn(); } catch (e) { toast(e.message, true); return undefined; }
+  try { return await fn(); } catch (e) {
+    if (ONLINE && e && /chỉ có quyền xem/.test(e.message)) showReadOnlyBanner();
+    toast(e.message, true); return undefined;
+  }
 }
 function setTitle(t) { $('#page-title').textContent = t; document.title = t + ' – Kho An Tâm'; }
 function markDirty() { S.dirty = true; }
@@ -3088,6 +3095,13 @@ function openSnapshotUpdate() {
   });
 }
 
+// Người được mời nhưng trang đang bật link công khai (hoặc chỉ được quyền Viewer): giải thích rõ vì sao không lưu được
+function showReadOnlyBanner() {
+  const el = $('#ro-banner');
+  el.innerHTML = 'Bạn đang có quyền <b>CHỈ XEM</b> trên trang này nên <b>không lưu, không nhập phiếu, không tải file lên được</b>. Nếu bạn đã được mời làm <b>Editor</b>: nhờ chủ trang mở <b>Share</b> → ở mục <i>General access</i> tắt <b>“Anyone with the link”</b> (chuyển về chỉ người được mời) → rồi bạn tải lại trang. Khi trang đang bật link công khai, claude.ai chỉ cho người được mời qua email quyền xem.';
+  el.hidden = false;
+}
+
 /* ============================================================ khởi động */
 function askUser(force) {
   if (S.user && !force) return;
@@ -3121,7 +3135,7 @@ async function boot() {
         vb.textContent = 'Chỉ xem · số liệu lúc ' + (Backend.snapshotAt ? Backend.snapshotAt.slice(11, 16) + ' ' + vnDate(Backend.snapshotAt.slice(0, 10)) : '—');
         vb.hidden = false;
         Backend.canEditPage().then(ok => { if (ok) { const b = $('#snap-btn'); b.hidden = false; b.onclick = openSnapshotUpdate; } });
-      } else if (Backend.canWrite === false) toast('Bạn đang ở chế độ chỉ xem: không lưu được thay đổi.', true);
+      } else if (Backend.canWrite === false) showReadOnlyBanner();
     }
     await loadMeta();
   } catch (e) { $('#main').innerHTML = `<div class="callout warn">Không kết nối được dữ liệu: ${esc(e.message)}</div>`; return; }

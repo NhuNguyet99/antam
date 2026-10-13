@@ -113,7 +113,7 @@ const Backend = (() => {
   };
   function dbError(e) {
     const code = e && e.code;
-    if (code === 'invalid_argument') return new ApiError(403, 'Không lưu được: bạn có thể chỉ có quyền xem trang này (cần quyền Contributor/Editor), hoặc dữ liệu quá lớn.');
+    if (code === 'invalid_argument') return new ApiError(403, 'Không lưu được: bạn đang chỉ có quyền xem trang này. Nếu đã được mời làm Editor, nhờ chủ trang tắt chia sẻ "Anyone with the link" rồi tải lại trang.');
     if (code === 'quota_exceeded') return new ApiError(507, 'Kho dữ liệu đã đầy: ' + (e.message || ''));
     if (code === 'resource_exhausted') return new ApiError(429, 'Thao tác quá nhanh, hãy thử lại sau vài giây.');
     return new ApiError(503, 'Mất kết nối dữ liệu, hãy thử lại. ' + (e && e.message ? '(' + e.message + ')' : ''));

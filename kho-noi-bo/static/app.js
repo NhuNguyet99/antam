@@ -88,7 +88,10 @@ function toast(msg, err) {
   setTimeout(() => el.remove(), err ? 6000 : 3000);
 }
 async function guard(fn) {
-  try { return await fn(); } catch (e) { toast(e.message, true); return undefined; }
+  try { return await fn(); } catch (e) {
+    if (ONLINE && e && /chỉ có quyền xem/.test(e.message)) showReadOnlyBanner();
+    toast(e.message, true); return undefined;
+  }
 }
 function setTitle(t) { $('#page-title').textContent = t; document.title = t + ' – Kho An Tâm'; }
 function markDirty() { S.dirty = true; }
@@ -1861,6 +1864,13 @@ function openSnapshotUpdate() {
   });
 }
 
+// Người được mời nhưng trang đang bật link công khai (hoặc chỉ được quyền Viewer): giải thích rõ vì sao không lưu được
+function showReadOnlyBanner() {
+  const el = $('#ro-banner');
+  el.innerHTML = 'Bạn đang có quyền <b>CHỈ XEM</b> trên trang này nên <b>không lưu, không nhập phiếu, không tải file lên được</b>. Nếu bạn đã được mời làm <b>Editor</b>: nhờ chủ trang mở <b>Share</b> → ở mục <i>General access</i> tắt <b>“Anyone with the link”</b> (chuyển về chỉ người được mời) → rồi bạn tải lại trang. Khi trang đang bật link công khai, claude.ai chỉ cho người được mời qua email quyền xem.';
+  el.hidden = false;
+}
+
 /* ============================================================ khởi động */
 function askUser(force) {
   if (S.user && !force) return;
@@ -1894,7 +1904,7 @@ async function boot() {
         vb.textContent = 'Chỉ xem · số liệu lúc ' + (Backend.snapshotAt ? Backend.snapshotAt.slice(11, 16) + ' ' + vnDate(Backend.snapshotAt.slice(0, 10)) : '—');
         vb.hidden = false;
         Backend.canEditPage().then(ok => { if (ok) { const b = $('#snap-btn'); b.hidden = false; b.onclick = openSnapshotUpdate; } });
-      } else if (Backend.canWrite === false) toast('Bạn đang ở chế độ chỉ xem: không lưu được thay đổi.', true);
+      } else if (Backend.canWrite === false) showReadOnlyBanner();
     }
     await loadMeta();
   } catch (e) { $('#main').innerHTML = `<div class="callout warn">Không kết nối được dữ liệu: ${esc(e.message)}</div>`; return; }

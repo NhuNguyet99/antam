@@ -255,3 +255,6 @@ body.readonly #user-btn, body.readonly .card > div > .hint { display: none !impo
 @media (max-width: 560px) { .view-badge { display: none; } }
 kbd { display: inline-block; padding: 1px 6px; border: 1px solid #c5cbd3; border-bottom-width: 2px; border-radius: 4px; background: #fff; font: 600 12px/1.4 ui-monospace, Menlo, Consolas, monospace; color: var(--ink); }
 .access-url { font-size: 15px; font-weight: 600; padding: 6px 10px; background: var(--brand-soft); border-radius: 6px; user-select: all; }
+.ro-banner { margin: 12px 20px 0; padding: 12px 14px; border-radius: var(--radius); background: var(--bad-bg); border: 1px solid #f4b8a8; color: #7a2410; font-size: 13.5px; line-height: 1.5; }
+.ro-banner b { color: #5c1a0a; }
+@media (max-width: 900px) { .ro-banner { margin: 10px 16px 0; } }
