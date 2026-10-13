@@ -28,7 +28,45 @@ import xlsx_import
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 DB_PATH = os.environ.get("ANTAM_DB", os.path.join(BASE_DIR, "data", "kho.db"))
-PASSWORD = os.environ.get("ANTAM_PASSWORD", "")
+PASSWORD_FILE = os.path.join(BASE_DIR, "mat-khau.txt")
+
+
+def _read_password():
+    """Mật khẩu: biến môi trường ANTAM_PASSWORD, hoặc dòng đầu của file mat-khau.txt cạnh server.py."""
+    if os.environ.get("ANTAM_PASSWORD"):
+        return os.environ["ANTAM_PASSWORD"]
+    try:
+        with open(PASSWORD_FILE, encoding="utf-8-sig") as f:
+            return f.readline().strip()
+    except OSError:
+        return ""
+
+
+PASSWORD = _read_password()
+PORT = int(os.environ.get("PORT", "8000"))
+
+
+def lan_addresses():
+    """Địa chỉ IP của máy này trong mạng nội bộ (để nhân viên mở web từ máy khác)."""
+    import socket
+    ips = []
+    for target in ("10.255.255.255", "192.168.255.255", "8.8.8.8"):
+        try:
+            sk = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+            sk.connect((target, 1))  # UDP: không gửi gói tin nào, chỉ để hỏi hệ điều hành dùng card mạng nào
+            ip = sk.getsockname()[0]
+            sk.close()
+            if ip and not ip.startswith("127.") and ip not in ips:
+                ips.append(ip)
+        except OSError:
+            pass
+    try:
+        for ip in socket.gethostbyname_ex(socket.gethostname())[2]:
+            if not ip.startswith("127.") and ip not in ips:
+                ips.append(ip)
+    except OSError:
+        pass
+    return ips
 WRITE_LOCK = threading.Lock()
 
 TYPE_PREFIX = {"N": "PNK", "X": "PXK", "D": "DCK"}
@@ -873,6 +911,7 @@ class Handler(BaseHTTPRequestHandler):
                 "people": sorted(people, key=str.lower),
                 "parties": sorted(parties, key=str.lower),
                 "counts": {c: con.execute("SELECT COUNT(*) FROM vouchers WHERE wh=?", (c,)).fetchone()[0] for c in WAREHOUSE_CODES},
+                "access": {"urls": ["http://%s:%d" % (ip, PORT) for ip in lan_addresses()], "password": bool(PASSWORD)},
             }
         if res == "settings" and method == "PUT":
             data = self.read_json()
@@ -1152,11 +1191,13 @@ class Handler(BaseHTTPRequestHandler):
 def main():
     init_db()
     host = os.environ.get("HOST", "0.0.0.0")
-    port = int(os.environ.get("PORT", "8000"))
+    port = PORT
     httpd = ThreadingHTTPServer((host, port), Handler)
     print("Web kho nội bộ đang chạy: http://localhost:%d  (dữ liệu: %s)" % (port, DB_PATH))
     if host == "0.0.0.0":
-        print("Máy khác trong mạng LAN mở: http://<địa-chỉ-IP-máy-này>:%d" % port)
+        for ip in lan_addresses() or ["<địa-chỉ-IP-máy-này>"]:
+            print("Nhân viên (cùng wifi/mạng công ty) mở: http://%s:%d" % (ip, port))
+    print("Mật khẩu: %s" % ("ĐANG BẬT (file mat-khau.txt)" if PASSWORD else "chưa đặt – ai cùng mạng cũng vào được"))
     print("Bấm Ctrl+C để dừng.")
     try:
         httpd.serve_forever()

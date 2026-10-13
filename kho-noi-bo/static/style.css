@@ -18,6 +18,7 @@
   font-size: 14px;
 }
 * { box-sizing: border-box; }
+[hidden] { display: none !important; }
 html, body { margin: 0; height: 100%; }
 body {
   background: var(--bg);
@@ -253,3 +254,4 @@ body.readonly #ro-save, body.readonly #ro-add, body.readonly #ro-del, body.reado
 body.readonly #user-btn, body.readonly .card > div > .hint { display: none !important; }
 @media (max-width: 560px) { .view-badge { display: none; } }
 kbd { display: inline-block; padding: 1px 6px; border: 1px solid #c5cbd3; border-bottom-width: 2px; border-radius: 4px; background: #fff; font: 600 12px/1.4 ui-monospace, Menlo, Consolas, monospace; color: var(--ink); }
+.access-url { font-size: 15px; font-weight: 600; padding: 6px 10px; background: var(--brand-soft); border-radius: 6px; user-select: all; }

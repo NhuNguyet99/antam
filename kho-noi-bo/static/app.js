@@ -1479,6 +1479,12 @@ async function viewSettings(main) {
       <div id="imp-result"></div>
       ${cnt ? `<div class="callout warn small">${esc(W.name)} đã có ${cnt} phiếu trên web. Nếu chọn "Sổ nhập xuất", các phiếu này sẽ bị thay bằng dữ liệu trong file (kho kia không bị ảnh hưởng). Nên tải bản sao lưu trước.</div>` : ''}
     </div>
+    ${!ONLINE && S.meta.access ? `<div class="card"><h3>Cho nhân viên dùng web</h3>
+      <p class="small" style="margin-top:0">Nhân viên dùng máy tính hoặc điện thoại <b>cùng wifi / mạng công ty</b> mở link:</p>
+      <div class="toolbar">${(S.meta.access.urls.length ? S.meta.access.urls : ['http://<IP-máy-này>:8000']).map(u => `<code class="access-url">${esc(u)}</code>
+        <button class="btn sm" data-copy="${esc(u)}">Sao chép</button>`).join('')}</div>
+      <p class="hint">Máy đang chạy web phải <b>bật và để mở cửa sổ đen</b> thì nhân viên mới vào được. Mỗi người bấm nút tên ở góc trên phải để ghi tên mình (hiện trong Lịch sử thao tác).<br>
+      Mật khẩu: ${S.meta.access.password ? '<b>đang bật</b> – trình duyệt sẽ hỏi; tên đăng nhập gõ gì cũng được.' : '<b>chưa đặt</b> – để đặt, tạo file <code>mat-khau.txt</code> cạnh <code>server.py</code>, gõ mật khẩu ở dòng đầu, rồi tắt và mở lại web.'}</p></div>` : ''}
     <div class="card"><h3>Sao lưu / xuất dữ liệu</h3><div class="toolbar">
       ${ONLINE ? `<button class="btn" id="ex-backup">⬇ Tải dữ liệu (sao lưu / cập nhật trang xem công khai)</button>
       <button class="btn" id="ex-csv">⬇ Xuất sổ nhập xuất ${esc(W.name)} (CSV mở bằng Excel)</button></div>
@@ -1511,6 +1517,10 @@ async function viewSettings(main) {
     $('#ex-backup').onclick = () => guard(async () => saveTextFile(`kho-antam-sao-luu-${isoDate()}.json`, await api('GET', '/export/backup')));
     $('#ex-csv').onclick = () => guard(async () => saveTextFile(`so-nhap-xuat-${S.wh.toLowerCase()}.csv`, await api('GET', '/export/lines.csv')));
   }
+  $$('[data-copy]', main).forEach(btn => btn.onclick = async () => {
+    try { await navigator.clipboard.writeText(btn.dataset.copy); toast('Đã sao chép ' + btn.dataset.copy); }
+    catch (e) { toast('Hãy tự bôi đen và sao chép: ' + btn.dataset.copy); }
+  });
   if (!ONLINE) $('#bk-go').onclick = async () => {
     const file = $('#bk-file').files[0];
     if (!file) return toast('Chọn file .json trước', true);

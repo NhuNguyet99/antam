@@ -30,6 +30,10 @@ Tùy chọn (biến môi trường):
 | `ANTAM_PASSWORD` | (trống) | Đặt mật khẩu: trình duyệt sẽ hỏi đăng nhập (tên tùy ý, mật khẩu này) |
 | `ANTAM_DB` | `data/kho.db` | File dữ liệu |
 
+**Cho nhân viên dùng:** vào **Cài đặt & dữ liệu › Cho nhân viên dùng web** để xem link (dạng `http://192.168.x.x:8000`),
+gửi cho nhân viên; ai dùng máy tính/điện thoại cùng wifi công ty đều mở được. Đặt mật khẩu: tạo file `mat-khau.txt`
+cạnh `server.py`, gõ mật khẩu ở dòng đầu, tắt và mở lại web (trình duyệt sẽ hỏi; tên đăng nhập gõ gì cũng được).
+
 Toàn bộ dữ liệu nằm trong **một file `data/kho.db`** – nên để web chạy trên một máy cố định và sao lưu file này.
 
 ## Bắt đầu: chuyển dữ liệu từ Excel sang
