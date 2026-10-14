@@ -53,6 +53,7 @@ const Backend = (() => {
     units: ['Cái', 'Túi', 'Kg', 'Gr', 'Cây', 'Thùng', 'Hộp', 'Gói', 'Lít', 'Cuộn'],
     staff: [], stocktake_threshold: 0.01, kebab_sizes: [50, 45, 40, 35, 30, 25, 20, 15, 10, 5],
     plan_depts: ['Xưởng', 'Văn phòng'], paper: 'A4',
+    routing: { rules: [], memory: {} },
   };
 
   const st = {
@@ -819,7 +820,7 @@ const Backend = (() => {
       }
       if (method === 'POST' || method === 'PUT') {
         const d = body || {};
-        if (!['stocktake', 'handover', 'kebab', 'routeorders'].includes(text(d.kind))) throw new ApiError(400, 'Loại biên bản không hợp lệ');
+        if (!['stocktake', 'handover', 'kebab', 'routeorders', 'routing'].includes(text(d.kind))) throw new ApiError(400, 'Loại biên bản không hợp lệ');
         const id = method === 'PUT' && arg ? arg : newId('d');
         const old = (st.docs[wh] || {})[id];
         const rec = { kind: d.kind, date: validDate(d.date), title: text(d.title), data: d.data || {}, created_at: old ? old.created_at : nowStr(), updated_at: nowStr() };
@@ -869,6 +870,23 @@ const Backend = (() => {
       }
       await log('Nhập file dữ liệu .json', '', summary);
       return summary;
+    }
+
+    // đọc 1 sheet của file Excel (Phân tuyến: danh sách khách theo ngày)
+    if (res === 'sheet-rows' && method === 'POST') {
+      if (!body || !body.byteLength) throw new ApiError(400, 'Chưa chọn file');
+      if (!window.XLSX) throw new ApiError(500, 'Chưa tải được thư viện đọc Excel, hãy tải lại trang.');
+      const data = new Uint8Array(body);
+      let names;
+      try { names = window.XLSX.read(data, { type: 'array', bookSheets: true }).SheetNames; } catch (e) {
+        throw new ApiError(400, 'File không phải định dạng .xlsx (hãy lưu lại file bằng Excel dạng .xlsx)');
+      }
+      const name = names.includes(q.sheet) ? q.sheet : names[names.length - 1];
+      if (!name) return { sheets: [], sheet: null, rows: [] };
+      const ws = window.XLSX.read(data, { type: 'array', sheets: name, cellDates: true }).Sheets[name];
+      const rows = ws ? window.XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '', blankrows: true }) : [];
+      const z = n => String(n).padStart(2, '0');
+      return { sheets: names, sheet: name, rows: rows.map(r => r.map(v => (v instanceof Date ? `${z(v.getDate())}/${z(v.getMonth() + 1)}/${v.getFullYear()}` : v))) };
     }
 
     if (res === 'import' && method === 'POST') {

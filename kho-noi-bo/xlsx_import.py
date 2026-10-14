@@ -54,7 +54,8 @@ def _text(el):
     return "".join(t.text or "" for t in el.iter("{%s}t" % NS["m"]))
 
 
-def read_workbook(blob):
+def read_workbook(blob, only=None):
+    """Đọc mọi sheet (hoặc chỉ sheet tên `only`) -> {tên: Sheet}."""
     try:
         z = zipfile.ZipFile(io.BytesIO(blob))
     except zipfile.BadZipFile:
@@ -75,10 +76,42 @@ def read_workbook(blob):
         target = targets.get(s.get("{%s}id" % REL_NS), "")
         target = target.lstrip("/")
         path = target if target.startswith("xl/") else "xl/" + target
-        if path not in z.namelist():
+        if path not in z.namelist() or (only is not None and s.get("name") != only):
             continue
         sheets[s.get("name")] = _read_sheet(z.read(path), shared, date_styles)
     return sheets
+
+
+def sheet_names(blob):
+    try:
+        z = zipfile.ZipFile(io.BytesIO(blob))
+        wb = ET.fromstring(z.read("xl/workbook.xml"))
+    except (zipfile.BadZipFile, KeyError):
+        raise XlsxError("File không phải định dạng .xlsx (hãy lưu lại file bằng Excel dạng .xlsx)")
+    return [s.get("name") for s in wb.findall("m:sheets/m:sheet", NS)]
+
+
+def _col_index(letters):
+    n = 0
+    for ch in letters:
+        n = n * 26 + ord(ch) - 64
+    return n - 1
+
+
+def sheet_rows(sheet):
+    """Sheet -> danh sách dòng (mỗi dòng là list giá trị, ô trống = "")."""
+    grid = {}
+    width = 0
+    for ref, val in sheet.cells.items():
+        m = re.match(r"([A-Z]+)(\d+)$", ref)
+        if not m:
+            continue
+        r, c = int(m.group(2)) - 1, _col_index(m.group(1))
+        if hasattr(val, "isoformat"):
+            val = val.strftime("%d/%m/%Y")
+        grid.setdefault(r, {})[c] = val
+        width = max(width, c + 1)
+    return [[grid.get(r, {}).get(c, "") for c in range(width)] for r in range(sheet.max_row)]
 
 
 def _read_sheet(xml, shared, date_styles):

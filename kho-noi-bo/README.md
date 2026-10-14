@@ -65,9 +65,32 @@ Nếu trước đây đã dùng bản web 1 kho, khi chạy bản mới dữ li�
 | Theo dõi 1 mặt hàng | **Thẻ kho** | Sheet Thẻ kho |
 | Kiểm kê | **Kiểm kê kho** › nhập số đếm › **Tạo phiếu điều chỉnh (DCK)** từ chênh lệch; có *In phiếu đếm (ẩn tồn sổ)* để đếm mù | Sheet Kiểm kê + Phiếu Điều chỉnh |
 | Bàn giao ca / thủ kho | **Bàn giao kho** | Sheet Bàn giao kho |
+| Chia khách đặt hàng vào tuyến (kho TP) | **Phân tuyến giao hàng** – dán sheet ngày, tự chia, in danh sách từng tuyến | File Google Sheet báo cáo tuyến lẻ |
 | Đặt hàng mua NVL (kho NVL) | **KH mua theo ngày** – nhập ngày đặt, bộ phận, mặt hàng, SL, đơn giá (tự lấy, gõ đè được), ngày cần hàng | Sheet KH Ngày |
 | Tổng hợp mua theo tuần (kho NVL) | **KH mua theo tuần** – tuần tính Thứ 2 → Chủ nhật, cắt theo tháng | Sheet KH Tuần |
 | Kế hoạch mua tháng gửi Kế toán (kho NVL) | **KH mua theo tháng** – SL Xưởng / Văn phòng, đơn giá BQ, thành tiền; in có chữ ký Thủ kho, Kế toán, Giám đốc | Sheet KH Tháng |
+
+## Phân tuyến giao hàng (kho TP)
+
+Mục **Phân tuyến giao hàng** chia khách đặt hàng trong ngày vào các tuyến, theo file Google Sheet
+"BÁO CÁO HẰNG NGÀY TUYẾN LẺ" (mỗi ngày một sheet, vd `14.10`):
+
+1. Trên Google Sheet mở sheet của ngày, bấm `Ctrl+A` rồi `Ctrl+C`.
+2. Trên web: **Phân tuyến giao hàng › + Phân tuyến ngày mới**, chọn ngày, bấm vào ô dán và `Ctrl+V`, rồi bấm
+   **Lấy khách & chia tuyến**. Cách khác: tải file về (.xlsx hoặc .csv) và chọn file. Với file .xlsx, web tự mở sheet
+   trùng ngày đã chọn.
+3. Web chỉ lấy khách có cột **TRẠNG THÁI = HOẠT ĐỘNG**. Khách được xếp tuyến theo thứ tự ưu tiên:
+   - tuyến đã chọn tay cho mã khách đó lần trước;
+   - cột **QUẬN**;
+   - **địa chỉ** của khách.
+
+   Khách chưa xếp được tuyến hiện màu đỏ. Chọn tuyến ở cột *Tuyến*, web sẽ nhớ cho các ngày sau.
+4. **Lưu**, rồi chọn kiểu in:
+   - **In danh sách giao theo tuyến**: mỗi tuyến một trang, có số lượng từng loại bánh và cột ký nhận;
+   - **In tổng hợp tuyến**: số khách và tổng hàng của từng tuyến, dùng để soạn hàng và xuất kho.
+
+Quận nào thuộc tuyến nào được chỉnh ở nút **⚙ Quy tắc chia tuyến**: mỗi tuyến ghi các quận/khu vực, cách nhau bằng
+dấu phẩy.
 
 Ghi chú:
 

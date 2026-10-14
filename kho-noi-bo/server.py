@@ -117,6 +117,8 @@ DEFAULT_SETTINGS = {
     "kebab_sizes": [50, 45, 40, 35, 30, 25, 20, 15, 10, 5],
     "plan_depts": ["Xưởng", "Văn phòng"],
     "paper": "A4",
+    # Phân tuyến giao hàng: quy tắc từ khóa quận/địa chỉ -> mã tuyến, và tuyến đã chọn tay theo mã khách
+    "routing": {"rules": [], "memory": {}},
 }
 
 SCHEMA = """
@@ -1113,7 +1115,7 @@ class Handler(BaseHTTPRequestHandler):
             if method in ("POST", "PUT"):
                 d = self.read_json()
                 kind = text(d.get("kind"))
-                if kind not in ("stocktake", "handover", "kebab", "routeorders"):
+                if kind not in ("stocktake", "handover", "kebab", "routeorders", "routing"):
                     raise ApiError(400, "Loại biên bản không hợp lệ")
                 ddate = valid_date(d.get("date"))
                 payload = json.dumps(d.get("data") or {}, ensure_ascii=False)
@@ -1138,6 +1140,19 @@ class Handler(BaseHTTPRequestHandler):
 
         if res == "import-backup" and method == "POST":
             return import_backup_json(con, self.read_json(), who)
+
+        # ---- đọc 1 sheet của file Excel (dùng cho Phân tuyến: danh sách khách theo ngày)
+        if res == "sheet-rows" and method == "POST":
+            blob = self.read_body()
+            if not blob:
+                raise ApiError(400, "Chưa chọn file")
+            try:
+                names = xlsx_import.sheet_names(blob)
+                name = q.get("sheet") if q.get("sheet") in names else (names[-1] if names else None)
+                sh = xlsx_import.read_workbook(blob, only=name).get(name) if name else None
+            except xlsx_import.XlsxError as e:
+                raise ApiError(400, str(e))
+            return {"sheets": names, "sheet": name, "rows": xlsx_import.sheet_rows(sh) if sh else []}
 
         if res == "import" and method == "POST":
             blob = self.read_body()

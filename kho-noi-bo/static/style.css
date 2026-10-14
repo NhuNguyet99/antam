@@ -92,6 +92,8 @@ label.check { display: inline-flex; gap: 6px; align-items: center; cursor: point
 .grid.c3 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
 .grid.c4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
 .span2 { grid-column: span 2; }
+.span3 { grid-column: span 3; }
+table.data tr.sum td { font-weight: 700; background: var(--panel); }
 .muted { color: var(--muted); }
 .small { font-size: 12.5px; }
 .right { text-align: right; }
@@ -180,7 +182,7 @@ table.data tr.row-warn td { background: var(--warn-bg); }
 }
 @media (max-width: 560px) {
   .grid.c2, .grid.c3, .grid.c4 { grid-template-columns: 1fr; }
-  .span2 { grid-column: auto; }
+  .span2, .span3 { grid-column: auto; }
 }
 
 /* =================================================== IN ẤN */
