@@ -1,0 +1,68 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Kho An Tâm – Nội bộ</title>
+<link rel="stylesheet" href="style.css">
+</head>
+<body>
+<div id="app">
+  <aside id="sidebar">
+    <div class="brand">
+      <div class="brand-mark">AT</div>
+      <div>
+        <div class="brand-name">Kho An Tâm</div>
+        <div class="brand-sub">Web làm việc nội bộ</div>
+      </div>
+    </div>
+    <div class="wh-switch" id="wh-switch" role="tablist" aria-label="Chọn kho">
+      <button data-wh="TP" title="Kho thành phẩm - hàng hóa">Thành phẩm<br><small>Hàng hóa</small></button>
+      <button data-wh="NVL" title="Kho nguyên vật liệu">Nguyên<br><small>vật liệu</small></button>
+    </div>
+    <nav id="nav">
+      <a href="#/" data-route="">Tổng quan</a>
+      <div class="nav-group">Nghiệp vụ hằng ngày</div>
+      <a href="#/phieu/moi?type=N" data-route="phieu/moi">Lập phiếu</a>
+      <a href="#/phieu" data-route="phieu">Danh sách phiếu</a>
+      <a href="#/so-nx" data-route="so-nx">Sổ nhập – xuất</a>
+      <a href="#/phan-tuyen" data-route="phan-tuyen" data-only="TP">Phân tuyến giao hàng</a>
+      <div class="nav-group" data-only="NVL">Kế hoạch mua hàng</div>
+      <a href="#/kh-ngay" data-route="kh-ngay" data-only="NVL">KH mua theo ngày</a>
+      <a href="#/kh-tuan" data-route="kh-tuan" data-only="NVL">KH mua theo tuần</a>
+      <a href="#/kh-thang" data-route="kh-thang" data-only="NVL">KH mua theo tháng</a>
+      <div class="nav-group">Báo cáo</div>
+      <a href="#/nxt" data-route="nxt">Nhập – Xuất – Tồn</a>
+      <a href="#/the-kho" data-route="the-kho">Thẻ kho</a>
+      <div class="nav-group">Biên bản</div>
+      <a href="#/kiem-ke" data-route="kiem-ke">Kiểm kê kho</a>
+      <a href="#/ban-giao" data-route="ban-giao">Bàn giao kho</a>
+      <div class="nav-group">Danh mục</div>
+      <a href="#/hang" data-route="hang">Mặt hàng</a>
+      <a href="#/tuyen" data-route="tuyen" data-only="TP">Tuyến / nơi nhận</a>
+      <div class="nav-group ro-hide">Hệ thống</div>
+      <a href="#/cai-dat" data-route="cai-dat">Cài đặt &amp; dữ liệu</a>
+      <a href="#/lich-su" data-route="lich-su">Lịch sử thao tác</a>
+    </nav>
+  </aside>
+  <div id="content">
+    <header id="topbar">
+      <button id="menu-btn" class="btn ghost" aria-label="Mở menu">☰</button>
+      <span id="wh-badge" class="wh-badge"></span>
+      <div id="page-title"></div>
+      <div class="spacer"></div>
+      <span id="view-badge" class="view-badge" hidden></span>
+      <button id="snap-btn" class="btn sm" hidden title="Chỉ chủ trang thấy nút này">⟳ Cập nhật số liệu</button>
+      <button id="refresh-btn" class="btn sm" hidden title="Người khác vừa thay đổi dữ liệu">↻ Có dữ liệu mới</button>
+      <button id="user-btn" class="btn ghost" title="Đổi người dùng"></button>
+    </header>
+    <div id="ro-banner" class="ro-banner" hidden></div>
+    <main id="main"></main>
+  </div>
+</div>
+<div id="print-root"></div>
+<div id="toasts"></div>
+<style id="page-style"></style>
+<script src="app.js"></script>
+</body>
+</html>
