@@ -89,6 +89,10 @@ Mục **Phân tuyến giao hàng** chia khách đặt hàng trong ngày vào cá
    - **In danh sách giao theo tuyến**: mỗi tuyến một trang, có số lượng từng loại bánh và cột ký nhận;
    - **In tổng hợp tuyến**: số khách và tổng hàng của từng tuyến, dùng để soạn hàng và xuất kho.
 
+Cột **Mã CRM** (cột CRM của sheet) hiện ở bảng, trên bản in và trong file **⬇ Tải danh sách mã CRM** (CSV mở bằng Excel:
+mã CRM, mã khách, tên, địa chỉ, tuyến, số lượng; theo tuyến đang xem). Tuyến chọn tay được nhớ theo mã CRM, dòng chưa có
+mã CRM thì nhớ theo mã ở đầu tên khách.
+
 Quận nào thuộc tuyến nào được chỉnh ở nút **⚙ Quy tắc chia tuyến**: mỗi tuyến ghi các quận/khu vực, cách nhau bằng
 dấu phẩy.
 

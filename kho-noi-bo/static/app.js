@@ -281,6 +281,13 @@ function printHtml(html, orientation = 'portrait', filename = 'ban-in-kho') {
   return m;
 }
 async function saveTextFile(filename, data) {
+  if (!ONLINE) {
+    const a = document.createElement('a');
+    a.href = URL.createObjectURL(new Blob([data], { type: 'text/plain;charset=utf-8' }));
+    a.download = filename; document.body.appendChild(a); a.click(); a.remove();
+    setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+    return;
+  }
   const dl = ONLINE ? await claude.use('downloads') : null;
   if (!dl) throw new Error('Không tải file được trong trang này.');
   try { await dl.save({ filename, data }); toast('Đã tải ' + filename); }
@@ -1314,9 +1321,12 @@ function matchRule(textIn, rules, fromEnd) {
   }
   return best ? best.code : '';
 }
+// Mã CRM (cột CRM) dùng làm mã khách chính; dòng chưa có mã CRM thì dùng mã đầu tên khách (K1326, KH0306…)
+const crmCode = s => String(s || '').replace(/\s+/g, '').toUpperCase();
+const custKeys = row => [row.crm, row.code].map(crmCode).filter(Boolean);
 function autoRoute(row, cfg) {
-  const key = (row.code || '').toUpperCase();
-  if (key && cfg.memory[key]) return [cfg.memory[key], 'nhớ'];
+  const key = custKeys(row).find(k => cfg.memory[k]);
+  if (key) return [cfg.memory[key], 'nhớ'];
   let c = matchRule(row.q, cfg.rules, false);
   if (c) return [c, 'quận'];
   c = matchRule(row.addr || row.cust, cfg.rules, true);
@@ -1390,7 +1400,7 @@ function parseOrderSheet(table) {
     const qty = {};
     pcols.forEach((ci, k) => { const n = parseNum(r[ci]); if (n && !isNaN(n)) qty[k] = n; });
     const c = splitCustomer(cust);
-    rows.push({ q: g(r, col.q), crm: g(r, col.crm), cust, code: c.code, name: c.name, addr: c.addr, phone: g(r, col.phone), note: g(r, col.note),
+    rows.push({ q: g(r, col.q), crm: crmCode(g(r, col.crm)), cust, code: c.code, name: c.name, addr: c.addr, phone: g(r, col.phone), note: g(r, col.note),
       pay: g(r, col.pay), qty, route: '', src: '' });
   }
   return { cols, rows, total, header: hi >= 0 };
@@ -1560,34 +1570,35 @@ async function viewRouting(main, m) {
       <tr class="sum"><td>Cộng</td><td class="num">${d.rows.length}</td>${usedCols.map(k => `<td class="num">${fmtBlank0(sumQty(d.rows)[k])}</td>`).join('')}</tr></tbody></table></div>
       <div class="toolbar" style="margin-top:14px"><label class="field">Xem<select id="rt-filter">${options([['', 'Tất cả khách'], ['-', 'Chưa có tuyến']].concat(gs.filter(g => g[0]).map(g => [g[0], `${g[0]} – ${rName(g[0])} (${g[1].length})`])), ui.filter)}</select></label>
       <label class="field">Tìm khách<input id="rt-search" value="${esc(ui.search)}" placeholder="mã, tên, địa chỉ…"></label></div>
-      <div class="table-wrap"><table class="data"><thead><tr><th>STT</th><th>Quận</th><th>Khách hàng</th><th>Địa chỉ</th><th>SĐT</th><th>Ghi chú</th><th>Số lượng</th><th style="width:170px">Tuyến</th></tr></thead><tbody id="rt-rows"></tbody></table></div>
+      <div class="table-wrap"><table class="data"><thead><tr><th>STT</th><th>Quận</th><th>Mã CRM</th><th>Khách hàng</th><th>Địa chỉ</th><th>SĐT</th><th>Ghi chú</th><th>Số lượng</th><th style="width:170px">Tuyến</th></tr></thead><tbody id="rt-rows"></tbody></table></div>
       <div class="form-actions"><button class="btn primary" id="rt-save">💾 Lưu</button><button class="btn" id="rt-print">🖨 In danh sách giao theo tuyến</button>
-      <button class="btn" id="rt-print-sum">🖨 In tổng hợp tuyến</button>${doc.id ? '<button class="btn danger" id="rt-del">Xóa</button>' : ''}<a class="btn ghost" href="#/phan-tuyen">← Danh sách</a></div>`;
+      <button class="btn" id="rt-print-sum">🖨 In tổng hợp tuyến</button><button class="btn" id="rt-csv">⬇ Tải danh sách mã CRM (Excel)</button>${doc.id ? '<button class="btn danger" id="rt-del">Xóa</button>' : ''}<a class="btn ghost" href="#/phan-tuyen">← Danh sách</a></div>`;
     $$('tr[data-g]', box).forEach(tr => tr.onclick = () => { ui.filter = tr.dataset.g || '-'; $('#rt-filter').value = ui.filter; drawRows(); });
     $('#rt-filter').onchange = () => { ui.filter = $('#rt-filter').value; drawRows(); };
     $('#rt-search').oninput = debounce(() => { ui.search = $('#rt-search').value; drawRows(); }, 200);
     $('#rt-save').onclick = () => guard(save);
     $('#rt-print').onclick = () => printRoutes(ui.filter && ui.filter !== '-' ? ui.filter : null);
     $('#rt-print-sum').onclick = printSummary;
+    $('#rt-csv').onclick = () => guard(exportCsv);
     if (doc.id) $('#rt-del').onclick = () => deleteDoc(doc);
     drawRows();
   }
   function drawRows() {
     const tb = $('#rt-rows');
     const rows = d.rows.map((r, i) => [r, i]).filter(([r]) => (!ui.filter || (ui.filter === '-' ? !r.route : r.route === ui.filter))
-      && (!ui.search || matches(ui.search, [r.cust, r.q, r.phone, r.note].join(' '))));
+      && (!ui.search || matches(ui.search, [r.crm, r.cust, r.q, r.phone, r.note].join(' '))));
     const opts = [['', '— chưa có —']].concat(routes.map(r => [r.code, `${r.code} – ${r.name}`]));
     tb.innerHTML = rows.map(([r, i], n) => `<tr class="${r.route ? '' : 'row-bad'}" data-i="${i}"><td>${n + 1}</td><td>${esc(r.q)}</td>
-      <td class="nm"><b>${esc(r.code)}</b> ${esc(r.name)}${r.crm ? ` <span class="small muted">CRM ${esc(r.crm)}</span>` : ''}</td><td class="small">${esc(r.addr)}</td>
+      <td>${r.crm ? `<b>${esc(r.crm)}</b>` : '<span class="small muted">—</span>'}</td><td class="nm"><b>${esc(r.code)}</b> ${esc(r.name)}</td><td class="small">${esc(r.addr)}</td>
       <td class="small">${esc(r.phone)}</td><td class="small">${esc(r.note)}${r.pay ? `<br><span class="badge ${/chua/.test(noAccent(r.pay)) ? 'warn' : 'ok'}">${esc(r.pay)}</span>` : ''}</td>
       <td class="small">${qtyText(r)}</td>
       <td><select data-k="route">${options(opts.some(o => o[0] === r.route) ? opts : opts.concat([[r.route, r.route]]), r.route)}</select>
       <div class="small muted">${r.src === 'tay' ? 'chọn tay' : r.src === 'nhớ' ? 'như lần chọn tay trước' : r.src ? 'tự động theo ' + esc(r.src) : ''}</div></td></tr>`).join('')
-      || '<tr><td colspan="8" class="muted">Không có khách nào.</td></tr>';
+      || '<tr><td colspan="9" class="muted">Không có khách nào.</td></tr>';
     $$('select[data-k=route]', tb).forEach(sel => sel.onchange = () => {
       const r = d.rows[+sel.closest('tr').dataset.i];
       r.route = sel.value; r.src = 'tay';
-      if (r.code) changedMemory[r.code.toUpperCase()] = sel.value;
+      custKeys(r).forEach(k => { changedMemory[k] = sel.value; });
       markDirty();
       const y = window.scrollY; drawBody(); window.scrollTo(0, y);
     });
@@ -1612,11 +1623,19 @@ async function viewRouting(main, m) {
     return `<div class="doc landscape">${docHead('Danh sách giao hàng', 'Ngày ' + vnDate(doc.date))}
       <div class="d-title">Danh sách giao hàng – tuyến ${esc(code || 'chưa có')}</div>
       <div class="d-sub">${esc(rName(code))} · ${rows.length} khách · ${longDate(doc.date)}</div>
-      <table class="t"><thead><tr><th>STT</th><th>Khách hàng</th><th>Địa chỉ</th><th>SĐT</th><th>Ghi chú</th>${used.map(k => `<th>${esc(d.cols[k])}</th>`).join('')}<th>Thanh toán</th><th>Ký nhận</th></tr></thead>
-      <tbody>${rows.map((r, i) => `<tr><td class="c">${i + 1}</td><td><b>${esc(r.code)}</b> ${esc(r.name)}</td><td>${esc(r.addr || r.q)}</td><td>${esc(r.phone)}</td><td>${esc(r.note)}</td>
+      <table class="t"><thead><tr><th>STT</th><th>Mã CRM</th><th>Khách hàng</th><th>Địa chỉ</th><th>SĐT</th><th>Ghi chú</th>${used.map(k => `<th>${esc(d.cols[k])}</th>`).join('')}<th>Thanh toán</th><th>Ký nhận</th></tr></thead>
+      <tbody>${rows.map((r, i) => `<tr><td class="c">${i + 1}</td><td class="c"><b>${esc(r.crm)}</b></td><td>${esc(r.code)} ${esc(r.name)}</td><td>${esc(r.addr || r.q)}</td><td>${esc(r.phone)}</td><td>${esc(r.note)}</td>
         ${used.map(k => `<td class="n">${fmtBlank0((r.qty || {})[k])}</td>`).join('')}<td>${esc(r.pay)}</td><td style="min-width:70px"></td></tr>`).join('')}
-      <tr class="sum"><td colspan="5" class="c">CỘNG ${rows.length} khách</td>${used.map(k => `<td class="n">${fmt(s[k])}</td>`).join('')}<td></td><td></td></tr></tbody></table>
+      <tr class="sum"><td colspan="6" class="c">CỘNG ${rows.length} khách</td>${used.map(k => `<td class="n">${fmt(s[k])}</td>`).join('')}<td></td><td></td></tr></tbody></table>
       ${signBlock([['Người lập', S.user], ['Thủ kho', ''], ['Tài xế / người giao', '']])}</div>`;
+  }
+  // File CSV (mở bằng Excel): mã CRM, mã khách, tên, tuyến… theo bộ lọc đang xem
+  function exportCsv() {
+    const rows = d.rows.filter(r => !ui.filter || (ui.filter === '-' ? !r.route : r.route === ui.filter));
+    const q = v => `"${String(v == null ? '' : v).replace(/"/g, '""')}"`;
+    const lines = [['STT', 'Mã CRM', 'Mã khách', 'Tên khách', 'Địa chỉ', 'Quận', 'SĐT', 'Ghi chú', 'Thanh toán', 'Mã tuyến', 'Tuyến'].concat(d.cols)]
+      .concat(rows.map((r, i) => [i + 1, r.crm, r.code, r.name, r.addr, r.q, r.phone, r.note, r.pay, r.route, rName(r.route)].concat(d.cols.map((_, k) => (r.qty || {})[k] || ''))));
+    return saveTextFile(`ma-crm-tuyen-${doc.date}${ui.filter && ui.filter !== '-' ? '-' + ui.filter : ''}.csv`, '\ufeff' + lines.map(l => l.map(q).join(',')).join('\r\n'));
   }
   function printRoutes(only) {
     const gs = groups().filter(([c]) => (only ? c === only : true));
