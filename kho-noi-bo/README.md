@@ -136,11 +136,13 @@ Link web giao hàng:
   xem/ghi được tuyến của chính mình.
 - **Bản online**: trang riêng **Giao hàng An Tâm** (https://claude.ai/artifact/6bVzsWLxPdkdCKF687Bnky), không có phần kho.
   **Phân tuyến giao hàng** và **Tài khoản giao hàng** vẫn làm ở web Kho An Tâm như cũ; trang Giao hàng An Tâm chỉ nhận dữ liệu:
-  - Web kho › Phân tuyến giao hàng: chia tuyến, chọn người giao, **💾 Lưu** → **📤 Gửi sang Giao hàng An Tâm** (dữ liệu được sao chép:
-    bảng phân tuyến của ngày + tài khoản người giao + danh mục tuyến). Hai trang trên claude.ai không đọc dữ liệu của nhau được nên
-    cần bước dán này; sửa phân tuyến thì Lưu và gửi lại (thay bảng cũ cùng ngày, kết quả đã giao vẫn giữ).
-  - Trang Giao hàng An Tâm › **🗂 Quản lý phân tuyến** (mật khẩu quản lý, chủ trang đặt lần đầu) › **Nhận phân tuyến từ kho**:
-    bấm vào ô → `Ctrl+V` → **Nhận dữ liệu**. Kết quả giao (ảnh, vị trí lúc giao) xem ở **Người giao & kết quả giao** của trang này.
+  - Web kho › Phân tuyến giao hàng: chia tuyến, chọn người giao, bấm **💾 Lưu** – web tự sao chép dữ liệu gửi sang (bảng phân tuyến
+    của ngày + tài khoản người giao + danh mục tuyến). Sang tab Giao hàng An Tâm (phần quản lý › **Nhận phân tuyến từ kho**) bấm
+    `Ctrl+V` là trang tự nhận. Hai trang trên claude.ai không ghi được dữ liệu của nhau nên còn bước dán này; sửa phân tuyến thì
+    Lưu lại và dán lại (thay bảng cũ cùng ngày, kết quả đã giao vẫn giữ). Nút **📤 Gửi lại** để sao chép lại khi cần.
+  - Trang Giao hàng An Tâm › **🗂 Quản lý phân tuyến**: mật khẩu quản lý (chủ trang đặt lần đầu). Kết quả giao (ảnh, vị trí lúc giao)
+    xem ở **Người giao & kết quả giao** của trang này.
+  - Muốn Lưu là người giao thấy ngay, không cần bước dán: dùng **bản chạy trên máy** (`/giao-hang` dùng chung dữ liệu với web kho).
   - Người giao mở trang → **🚚 Tôi là người giao hàng** → nick + PIN (lần sau vào thẳng tuyến của mình).
   - Mời người giao **chỉ vào trang Giao hàng An Tâm** bằng email ở nút *Share*, quyền **Editor**, và tắt "Anyone with the link"
     (tài khoản claude.ai cá nhân không có quyền Contributor; Viewer/Commenter chỉ xem, không bấm "Đã giao" hay gửi ảnh được).
