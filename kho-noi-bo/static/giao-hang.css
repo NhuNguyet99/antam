@@ -119,10 +119,35 @@ body.gh-mode #app { display: none !important; }
 .gh-badge.info { background: var(--gh-info-bg); color: var(--gh-info); }
 .gh-actions { display: flex; gap: 8px; flex-wrap: wrap; }
 .gh-actions .gh-btn { flex: 1; min-width: 130px; }
-.gh-fail-box { display: grid; gap: 8px; background: var(--gh-bad-bg); padding: 10px; border-radius: 10px; }
 .gh-reasons { display: flex; flex-wrap: wrap; gap: 6px; }
 .gh-chip { font: inherit; font-size: 13px; border: 1px solid #f2b8a8; background: #fff; color: var(--gh-ink); border-radius: 99px; padding: 6px 10px; cursor: pointer; }
+.gh-chip.on { background: var(--gh-bad); border-color: var(--gh-bad); color: #fff; }
 .gh-search { font-size: 15px; }
+.gh-small { font-size: 13px; }
+.gh-input { font: inherit; font-size: 16px; padding: 10px 12px; border: 1px solid var(--gh-line); border-radius: 10px; width: 100%; background: #fff; color: var(--gh-ink); }
+
+/* ảnh giao hàng + vị trí */
+.gh-locline { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 12px; font-size: 14px; }
+.gh-linkbtn { font: inherit; font-size: 14px; background: none; border: 0; padding: 4px 0; color: var(--gh-info); text-decoration: underline; cursor: pointer; }
+.gh-panel { display: grid; gap: 10px; background: #f5f8f7; border: 1px solid var(--gh-line); padding: 12px; border-radius: 12px; }
+.gh-panel.ok { background: var(--gh-ok-bg); border-color: #b9e2c9; }
+.gh-panel.bad { background: var(--gh-bad-bg); border-color: #f2c4b6; }
+.gh-panel-title { font-weight: 700; }
+.gh-panel p { margin: 0; }
+.gh-gps { font-size: 14px; display: flex; flex-wrap: wrap; gap: 4px 10px; align-items: center; }
+.gh-check { display: flex; gap: 8px; align-items: flex-start; font-size: 14px; }
+.gh-check input { width: 20px; height: 20px; flex: none; margin: 0; }
+.gh-file { position: relative; display: inline-flex; align-items: center; justify-content: center; font-weight: 600; overflow: hidden; }
+.gh-file input { position: absolute; inset: 0; opacity: 0; cursor: pointer; font-size: 0; }
+.gh-photos { display: flex; flex-wrap: wrap; gap: 8px; }
+.gh-ph { position: relative; width: 76px; height: 76px; border-radius: 10px; overflow: hidden; background: var(--gh-line); }
+.gh-ph img { width: 100%; height: 100%; object-fit: cover; display: block; cursor: zoom-in; }
+.gh-ph-x { position: absolute; top: 3px; right: 3px; width: 24px; height: 24px; border-radius: 50%; border: 0; background: rgba(0,0,0,.6); color: #fff; font-size: 13px; cursor: pointer; }
+.gh-dialog { position: fixed; inset: 0; background: rgba(10,20,16,.55); display: grid; place-items: center; z-index: 60; padding: 16px; }
+.gh-dialog-box { background: #fff; border-radius: 14px; padding: 16px; max-width: 420px; width: 100%; display: grid; gap: 12px; }
+.gh-dialog-box p { margin: 0; font-size: 16px; }
+.gh-viewer { background: rgba(0,0,0,.88); align-content: center; gap: 12px; }
+.gh-viewer img { max-width: 100%; max-height: 80vh; border-radius: 8px; }
 
 /* ngày khác / trống */
 .gh-card { background: var(--gh-panel); border: 1px solid var(--gh-line); border-radius: 14px; padding: 12px 14px; }

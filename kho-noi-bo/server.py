@@ -32,6 +32,7 @@ import xlsx_import
 BASE_DIR = os.path.dirname(os.path.abspath(__file__))
 STATIC_DIR = os.path.join(BASE_DIR, "static")
 DB_PATH = os.environ.get("ANTAM_DB", os.path.join(BASE_DIR, "data", "kho.db"))
+PHOTO_DIR = os.path.join(os.path.dirname(os.path.abspath(DB_PATH)), "anh-giao")  # ảnh giao hàng (chép cùng file .db khi sao lưu)
 PASSWORD_FILE = os.path.join(BASE_DIR, "mat-khau.txt")
 
 
@@ -162,7 +163,10 @@ CREATE TABLE IF NOT EXISTS plans (
 );
 CREATE TABLE IF NOT EXISTS deliveries (
   date TEXT NOT NULL, cust_key TEXT NOT NULL, route TEXT DEFAULT '', driver TEXT DEFAULT '', status TEXT DEFAULT '',
-  note TEXT DEFAULT '', at TEXT, PRIMARY KEY (date, cust_key)
+  note TEXT DEFAULT '', at TEXT, name TEXT DEFAULT '', photos TEXT DEFAULT '[]', gps TEXT DEFAULT '', PRIMARY KEY (date, cust_key)
+);
+CREATE TABLE IF NOT EXISTS cust_locations (
+  cust_key TEXT PRIMARY KEY, lat REAL, lng REAL, acc REAL, name TEXT DEFAULT '', driver TEXT DEFAULT '', at TEXT
 );
 CREATE TABLE IF NOT EXISTS log (
   id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT, who TEXT, action TEXT, target TEXT, detail TEXT
@@ -201,6 +205,10 @@ def _columns(con, table):
 
 def migrate(con):
     """Nâng cấp dữ liệu của bản 1 kho cũ lên bản 2 kho (dữ liệu cũ thuộc kho TP)."""
+    # kết quả giao: thêm tên khách, ảnh giao hàng, vị trí lúc giao
+    for col, ddl in (("name", "TEXT DEFAULT ''"), ("photos", "TEXT DEFAULT '[]'"), ("gps", "TEXT DEFAULT ''")):
+        if col not in _columns(con, "deliveries"):
+            con.execute("ALTER TABLE deliveries ADD COLUMN %s %s" % (col, ddl))
     if "wh" not in _columns(con, "products"):
         con.executescript("""
         ALTER TABLE products RENAME TO products_old;
@@ -676,8 +684,8 @@ def export_backup_json(con):
                       for r in con.execute("SELECT * FROM routes")},
            "warehouses": {}, "deliveries": {}}
     for r in con.execute("SELECT * FROM deliveries"):
-        out["deliveries"].setdefault(r["date"], {"date": r["date"], "d": {}})["d"][r["cust_key"]] = {
-            "status": r["status"], "note": r["note"] or "", "at": r["at"] or "", "driver": r["driver"] or "", "route": r["route"] or ""}
+        out["deliveries"].setdefault(r["date"], {"date": r["date"], "d": {}})["d"][r["cust_key"]] = delivery_rec(r)
+    out["locations"] = {"v": locations_all(con)}
     for wh in WAREHOUSE_CODES:
         products = {r["code"]: {"name": r["name"], "unit": r["unit"] or "", "grp": r["grp"] or "", "price": r["price"] or 0,
                                 "supplier": r["supplier"] or "", "note": r["note"] or "", "opening_qty": r["opening_qty"] or 0,
@@ -709,13 +717,18 @@ def import_backup_json(con, snap, who=""):
     if not isinstance(snap, dict) or snap.get("format") != "kho-antam-backup" or not isinstance(snap.get("warehouses"), dict):
         raise ApiError(400, "File không đúng: hãy dùng file 'Tải dữ liệu' (.json) của web Kho An Tâm")
     live = lambda m: [(k, v) for k, v in (m or {}).items() if v is not None]
-    for t in ("voucher_lines", "vouchers", "products", "routes", "docs", "plans", "deliveries"):
+    for t in ("voucher_lines", "vouchers", "products", "routes", "docs", "plans", "deliveries", "cust_locations"):
         con.execute("DELETE FROM %s" % t)
     for _, day in live(snap.get("deliveries")):
         for key, r in live((day or {}).get("d")):
-            con.execute("INSERT OR REPLACE INTO deliveries(date, cust_key, route, driver, status, note, at) VALUES (?,?,?,?,?,?,?)",
+            gps = clean_gps(r.get("gps"))
+            con.execute("INSERT OR REPLACE INTO deliveries(date, cust_key, route, driver, status, note, at, name, photos, gps) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?)",
                         (text(day.get("date")), key, text(r.get("route")), text(r.get("driver")), text(r.get("status")),
-                         text(r.get("note")), text(r.get("at"))))
+                         text(r.get("note")), text(r.get("at")), text(r.get("name")),
+                         json.dumps([text(x) for x in r.get("photos") or [] if text(x)]), json.dumps(gps) if gps else ""))
+    for key, r in live(((snap.get("locations") or {}).get("v"))):
+        set_location(con, key, r, text(r.get("name")), text(r.get("driver")), text(r.get("at")))
     for k, v in (snap.get("settings") or {}).items():
         if k in DEFAULT_SETTINGS:
             con.execute("INSERT OR REPLACE INTO settings(key, value) VALUES (?,?)", (k, json.dumps(v, ensure_ascii=False)))
@@ -915,9 +928,82 @@ def my_routes(con, did, d, drivers=None):
     return data, out
 
 
+def delivery_rec(r):
+    try:
+        photos = json.loads(r["photos"] or "[]")
+    except ValueError:
+        photos = []
+    try:
+        gps = json.loads(r["gps"]) if r["gps"] else None
+    except ValueError:
+        gps = None
+    return {"status": r["status"], "note": r["note"] or "", "at": r["at"] or "", "driver": r["driver"] or "", "route": r["route"] or "",
+            "name": r["name"] or "", "photos": photos, "gps": gps}
+
+
 def deliveries_of(con, d):
-    return {r["cust_key"]: {"status": r["status"], "note": r["note"], "at": r["at"], "driver": r["driver"], "route": r["route"]}
-            for r in con.execute("SELECT * FROM deliveries WHERE date=?", (d,))}
+    return {r["cust_key"]: delivery_rec(r) for r in con.execute("SELECT * FROM deliveries WHERE date=?", (d,))}
+
+
+def clean_gps(v):
+    """{lat, lng, acc} hợp lệ hoặc None."""
+    if not isinstance(v, dict):
+        return None
+    try:
+        lat, lng = float(v.get("lat")), float(v.get("lng"))
+    except (TypeError, ValueError):
+        return None
+    if not (-90 <= lat <= 90 and -180 <= lng <= 180) or (lat == 0 and lng == 0):
+        return None
+    acc = v.get("acc")
+    return {"lat": round(lat, 6), "lng": round(lng, 6), "acc": round(float(acc), 1) if isinstance(acc, (int, float)) else None}
+
+
+def locations_all(con):
+    return {r["cust_key"]: {"lat": r["lat"], "lng": r["lng"], "acc": r["acc"], "name": r["name"] or "", "driver": r["driver"] or "", "at": r["at"] or ""}
+            for r in con.execute("SELECT * FROM cust_locations")}
+
+
+def set_location(con, key, gps, name="", driver="", at=""):
+    g = clean_gps(gps)
+    if not g:
+        raise ApiError(400, "Tọa độ không hợp lệ")
+    con.execute("INSERT OR REPLACE INTO cust_locations(cust_key, lat, lng, acc, name, driver, at) VALUES (?,?,?,?,?,?,?)",
+                (key, g["lat"], g["lng"], g["acc"], name, driver, at or now_str()))
+
+
+PHOTO_RE = re.compile(r"^[A-Za-z0-9_.-]{1,120}\.jpg$")
+
+
+def save_photo(d, key, data_url):
+    """Ảnh JPEG (đã thu nhỏ ở điện thoại) gửi dạng data URL -> tên file trong data/anh-giao/."""
+    m = re.match(r"^data:image/jpeg;base64,([A-Za-z0-9+/=\s]+)$", text(data_url))
+    if not m:
+        raise ApiError(400, "Ảnh không hợp lệ (cần ảnh JPEG)")
+    raw = base64.b64decode(m.group(1))
+    if not raw.startswith(b"\xff\xd8") or len(raw) > 4 * 1024 * 1024:
+        raise ApiError(400, "Ảnh không hợp lệ hoặc quá lớn (tối đa 4 MB)")
+    name = "%s-%s-%s.jpg" % (d.replace("-", ""), re.sub(r"[^A-Za-z0-9]+", "", key)[:30] or "kh", secrets.token_hex(5))
+    os.makedirs(PHOTO_DIR, exist_ok=True)
+    with open(os.path.join(PHOTO_DIR, name), "wb") as f:
+        f.write(raw)
+    return name
+
+
+def photo_path(ref):
+    ref = text(ref)
+    full = os.path.join(PHOTO_DIR, ref)
+    return full if PHOTO_RE.match(ref) and os.path.isfile(full) else None
+
+
+def my_row(con, did, d, key):
+    """(mã tuyến, dòng khách) nếu khách key thuộc tuyến của người giao did ngày d."""
+    _, routes = my_routes(con, did, d)
+    for g in routes:
+        for r in g["rows"]:
+            if cust_key(r) == key:
+                return g["code"], r
+    raise ApiError(403, "Khách này không thuộc tuyến của bạn ngày %s" % d)
 
 
 def gh_api(con, method, action, q, body, token):
@@ -929,9 +1015,11 @@ def gh_api(con, method, action, q, body, token):
         data, routes = my_routes(con, did, d)
         done = deliveries_of(con, d)
         keys = {cust_key(r) for g in routes for r in g["rows"]}
+        locs = locations_all(con)
         return {"date": d, "driver": public_driver(did, me), "planned": data is not None,
                 "cols": (data or {}).get("cols") or [], "routes": routes,
-                "deliveries": {k: v for k, v in done.items() if k in keys}}
+                "deliveries": {k: v for k, v in done.items() if k in keys},
+                "locations": {k: v for k, v in locs.items() if k in keys}}
     if action == "days" and method == "GET":
         drivers = get_drivers(con)
         out = []
@@ -943,16 +1031,33 @@ def gh_api(con, method, action, q, body, token):
                 out.append({"date": r["date"], "routes": [g["code"] for g in routes], "count": len(keys),
                             "done": sum(1 for k in keys if k in done and done[k]["status"] == "ok")})
         return out
+    if action == "photo" and method == "POST":
+        d = valid_date(body.get("date"))
+        key = text(body.get("key"))
+        my_row(con, did, d, key)
+        return {"ref": save_photo(d, key, body.get("data"))}
+    if action == "location" and method == "POST":
+        d = valid_date(body.get("date"))
+        key = text(body.get("key"))
+        _, row = my_row(con, did, d, key)
+        if body.get("clear"):
+            con.execute("DELETE FROM cust_locations WHERE cust_key=?", (key,))
+            write_log(con, "🚚 " + me.get("name", ""), "Xóa vị trí khách", key, "", "TP")
+            return {"ok": True}
+        set_location(con, key, body, text(row.get("name")) or text(row.get("cust")), did)
+        write_log(con, "🚚 " + me.get("name", ""), "Lưu vị trí khách", key, "%s,%s" % (body.get("lat"), body.get("lng")), "TP")
+        return {"ok": True, "location": locations_all(con).get(key)}
     if action == "deliver" and method == "POST":
         d = valid_date(body.get("date"))
         key, status = text(body.get("key")), text(body.get("status"))
-        _, routes = my_routes(con, did, d)
-        route = next((g["code"] for g in routes for r in g["rows"] if cust_key(r) == key), None)
-        if not key or route is None:
-            raise ApiError(403, "Khách này không thuộc tuyến của bạn ngày %s" % d)
+        route, row = my_row(con, did, d, key)
         if status in ("ok", "fail"):
-            con.execute("INSERT OR REPLACE INTO deliveries(date, cust_key, route, driver, status, note, at) VALUES (?,?,?,?,?,?,?)",
-                        (d, key, route, did, status, text(body.get("note"))[:300], now_str()))
+            photos = [text(x) for x in body.get("photos") or [] if photo_path(x)][:6]
+            gps = clean_gps(body.get("gps"))
+            con.execute("INSERT OR REPLACE INTO deliveries(date, cust_key, route, driver, status, note, at, name, photos, gps) "
+                        "VALUES (?,?,?,?,?,?,?,?,?,?)",
+                        (d, key, route, did, status, text(body.get("note"))[:300], now_str(),
+                         text(row.get("name")) or text(row.get("cust")), json.dumps(photos), json.dumps(gps) if gps else ""))
         elif status == "":
             con.execute("DELETE FROM deliveries WHERE date=? AND cust_key=?", (d, key))
         else:
@@ -992,6 +1097,20 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Disposition", "attachment; filename*=UTF-8''%s" % filename)
         self.end_headers()
         self.wfile.write(body)
+
+    def send_photo(self, ref):
+        full = photo_path(ref)
+        if not full:
+            raise ApiError(404, "Không có ảnh này")
+        with open(full, "rb") as f:
+            body = f.read()
+        self.send_response(200)
+        self.send_header("Content-Type", "image/jpeg")
+        self.send_header("Content-Length", str(len(body)))
+        self.send_header("Cache-Control", "private, max-age=86400")
+        self.end_headers()
+        self.wfile.write(body)
+        return None
 
     def read_body(self):
         n = int(self.headers.get("Content-Length") or 0)
@@ -1105,6 +1224,11 @@ class Handler(BaseHTTPRequestHandler):
 
     def route(self, con, method, res, arg, q, wh):
         who = self.who()
+        if res == "gh" and arg == "photo" and method == "GET":
+            gh_auth(con, q.get("t") or self.headers.get("X-GH-Token") or "")
+            return self.send_photo(q.get("ref"))
+        if res == "photo" and method == "GET":
+            return self.send_photo(q.get("ref"))
         if res == "gh":
             body = self.read_json() if method == "POST" else {}
             return gh_api(con, method, arg, q, body, self.headers.get("X-GH-Token") or "")
@@ -1218,6 +1342,8 @@ class Handler(BaseHTTPRequestHandler):
                 return {"ok": True}
         if res == "deliveries" and method == "GET":
             return deliveries_of(con, valid_date(q.get("date")))
+        if res == "locations" and method == "GET":
+            return locations_all(con)
 
         # ---- phiếu
         if res == "next-number" and method == "GET":

@@ -259,3 +259,6 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid #c5cbd3; border
 .ro-banner { margin: 12px 20px 0; padding: 12px 14px; border-radius: var(--radius); background: var(--bad-bg); border: 1px solid #f4b8a8; color: #7a2410; font-size: 13.5px; line-height: 1.5; }
 .ro-banner b { color: #5c1a0a; }
 @media (max-width: 900px) { .ro-banner { margin: 10px 16px 0; } }
+/* ảnh giao hàng (web giao hàng) */
+.ph-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
+.ph-thumb { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; background: var(--line); cursor: zoom-in; display: block; }

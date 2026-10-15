@@ -1,13 +1,14 @@
 'use strict';
 /* Web giao hàng An Tâm – mỗi người giao hàng 1 tài khoản (nick + mã PIN, tạo ở web kho › Tài khoản giao hàng).
    Sau khi đăng nhập: chọn ngày, thấy các tuyến kho đã sắp cho mình ở mục Phân tuyến giao hàng (khách, địa chỉ,
-   SĐT, số lượng từng loại bánh), đánh dấu Đã giao / Không giao được – web kho thấy ngay kết quả.
+   SĐT, số lượng từng loại bánh), đánh dấu Đã giao / Không giao được kèm ảnh chụp + vị trí lúc giao,
+   lưu vị trí chính xác của khách để lần sau chỉ đường – web kho thấy ngay kết quả.
    Bản chạy máy chủ: trang /giao-hang gọi /api/gh/…; bản online: chạy trong trang Kho An Tâm, gọi Backend.handle. */
 const GiaoHang = (() => {
   const ONLINE = !!window.ANTAM_ONLINE;
   const WEEKDAY = ['Chủ nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
   const FAIL_REASONS = ['Khách vắng nhà', 'Khách hẹn giao lại', 'Khách không nhận', 'Sai địa chỉ / SĐT', 'Hết hàng trên xe'];
-  const st = { token: '', driver: null, date: '', data: null, days: [], filter: 'all', search: '', failing: null, busy: 0, root: null, onExit: null, timer: null };
+  const st = { token: '', driver: null, date: '', data: null, days: [], filter: 'all', search: '', panel: null, busy: 0, root: null, onExit: null, timer: null };
 
   /* ---------------------------------------------------------- tiện ích */
   const $ = (sel, root = st.root) => root.querySelector(sel);
@@ -134,7 +135,7 @@ const GiaoHang = (() => {
     startTimer();
   }
   async function setDate(d) {
-    st.date = d; st.failing = null;
+    st.date = d; st.panel = null;
     $('#gh-date').value = d;
     $('#gh-day-label').textContent = dayLabel(d);
     await loadDay();
@@ -154,7 +155,7 @@ const GiaoHang = (() => {
     stopTimer();
     // tự cập nhật khi kho sửa phân tuyến (không làm gián đoạn lúc đang nhập lý do)
     st.timer = setInterval(() => {
-      if (document.hidden || st.busy || st.failing || !st.token || !$('#gh-main')) return;
+      if (document.hidden || st.busy || st.panel || !st.token || !$('#gh-main')) return;
       const y = window.scrollY;
       loadDay(true).then(() => window.scrollTo(0, y));
     }, 90000);
@@ -232,55 +233,255 @@ const GiaoHang = (() => {
         ${rows.map(([r, i]) => stopCard(g, r, i)).join('') || '<p class="gh-muted gh-pad">Không có khách nào ở mục đang xem.</p>'}
       </section>`;
     }).join('');
-    $$('[data-act]', box).forEach(b => b.onclick = () => act(b.dataset.key, b.dataset.act, b));
+    bindStops(box);
+  }
+  const locOf = r => (st.data.locations || {})[custKey(r)] || null;
+  const coordText = g => `${g.lat},${g.lng}`;
+  const gpsLink = g => 'https://www.google.com/maps/search/?api=1&query=' + coordText(g);
+  const accText = g => (g && g.acc ? ` ±${Math.round(g.acc)}m` : '');
+  function photoStrip(refs, removable) {
+    return refs && refs.length ? `<div class="gh-photos">${refs.map((p, n) => `<span class="gh-ph"><img data-ref="${esc(p)}" alt="Ảnh giao hàng ${n + 1}">${removable ? `<button class="gh-ph-x" data-rm="${n}" aria-label="Bỏ ảnh">✕</button>` : ''}</span>`).join('')}</div>` : '';
   }
   function stopCard(g, r, i) {
-    const key = custKey(r), s = statusOf(r);
+    const key = custKey(r), s = statusOf(r), loc = locOf(r);
     const status = s ? (s.status === 'ok' ? `<span class="gh-badge ok">✓ Đã giao ${esc((s.at || '').slice(11, 16))}</span>`
       : `<span class="gh-badge bad">✗ Không giao được${s.note ? ': ' + esc(s.note) : ''}</span>`) : '';
     const pay = r.pay ? `<span class="gh-badge ${/chua|no/.test(noAccent(r.pay)) ? 'warn' : 'info'}">${esc(r.pay)}</span>` : '';
-    const failing = st.failing === key;
-    return `<article class="gh-stop ${s ? 'is-' + s.status : ''}">
+    const addr = r.addr || r.q;
+    const panel = st.panel && st.panel.key === key ? st.panel : null;
+    let actions;
+    if (panel && panel.mode === 'loc') actions = locPanel(key, loc);
+    else if (panel) actions = confirmPanel(key, panel, loc);
+    else if (s) actions = `${photoStrip(s.photos)}${s.gps ? `<a class="gh-link gh-small" href="${gpsLink(s.gps)}" target="_blank" rel="noopener">📍 Vị trí lúc giao${accText(s.gps)}</a>` : ''}
+      <div class="gh-actions"><label class="gh-btn gh-file">📷 Thêm ảnh<input type="file" accept="image/*" capture="environment" multiple data-add="${esc(key)}"></label>
+      <button class="gh-btn" data-act="undo" data-key="${esc(key)}">↺ Hoàn tác</button></div>`;
+    else actions = `<div class="gh-actions"><button class="gh-btn ok" data-act="ok" data-key="${esc(key)}">✓ Đã giao</button><button class="gh-btn" data-act="fail" data-key="${esc(key)}">✗ Không giao được</button></div>`;
+    return `<article class="gh-stop ${s ? 'is-' + s.status : ''}" data-stop="${esc(key)}">
       <div class="gh-stop-top"><span class="gh-stt">${i + 1}</span><div class="gh-stop-name"><b>${esc(r.name || r.cust)}</b>
         <div class="gh-codes">${r.crm ? `CRM <b>${esc(r.crm)}</b>` : ''}${r.code ? ` · ${esc(r.code)}` : ''}${r.q ? ` · ${esc(r.q)}` : ''}</div></div></div>
-      ${r.addr || r.q ? `<a class="gh-link gh-addr" href="${mapUrl(r)}" target="_blank" rel="noopener">📍 ${esc(r.addr || r.q)}</a>` : ''}
+      ${addr ? `<a class="gh-link gh-addr" href="${loc ? gpsLink(loc) : mapUrl(r)}" target="_blank" rel="noopener">📍 ${esc(addr)}</a>` : ''}
+      <div class="gh-locline">${loc ? `<span class="gh-badge info">📌 Đã lưu vị trí khách</span>
+        <a class="gh-link" href="https://www.google.com/maps/dir/?api=1&destination=${coordText(loc)}" target="_blank" rel="noopener">🧭 Chỉ đường</a>` : ''}
+        ${panel ? '' : `<button class="gh-linkbtn" data-act="loc" data-key="${esc(key)}">${loc ? 'Sửa vị trí' : '📌 Lưu vị trí khách'}</button>`}</div>
       ${r.phone ? `<div class="gh-phones">${phoneLinks(r.phone)}</div>` : ''}
       ${r.note ? `<div class="gh-note">📝 ${esc(r.note)}</div>` : ''}
       ${qtyChips(r.qty)}
       ${status || pay ? `<div class="gh-badges">${status}${pay}</div>` : ''}
-      ${failing ? `<div class="gh-fail-box"><div class="gh-reasons">${FAIL_REASONS.map(x => `<button class="gh-chip" data-reason="${esc(x)}">${esc(x)}</button>`).join('')}</div>
-        <input id="gh-fail-note" placeholder="Lý do khác / ghi chú…" maxlength="200">
-        <div class="gh-actions"><button class="gh-btn danger" data-act="fail-save" data-key="${esc(key)}">Xác nhận không giao được</button>
-        <button class="gh-btn" data-act="fail-cancel" data-key="${esc(key)}">Hủy</button></div></div>`
-      : `<div class="gh-actions">${s ? `<button class="gh-btn" data-act="undo" data-key="${esc(key)}">↺ Hoàn tác</button>`
-        : `<button class="gh-btn ok" data-act="ok" data-key="${esc(key)}">✓ Đã giao</button><button class="gh-btn" data-act="fail" data-key="${esc(key)}">✗ Không giao được</button>`}</div>`}
+      ${actions}
     </article>`;
   }
+  function gpsLine(p) {
+    if (p.gpsState === 'wait') return '<span class="gh-muted">📍 Đang lấy vị trí…</span>';
+    if (p.gps) return `<span>📍 Đã lấy vị trí${accText(p.gps)} · <a class="gh-link" href="${gpsLink(p.gps)}" target="_blank" rel="noopener">xem</a></span>`;
+    return `<span class="gh-red">📍 ${esc(p.gpsErr || 'Chưa có vị trí')}</span>`;
+  }
+  function confirmPanel(key, p, loc) {
+    const ok = p.mode === 'ok';
+    return `<div class="gh-panel ${ok ? 'ok' : 'bad'}">
+      <div class="gh-panel-title">${ok ? 'Xác nhận đã giao' : 'Không giao được'}</div>
+      ${photoStrip(p.photos, true)}
+      <label class="gh-btn gh-file">📷 ${p.photos.length ? 'Chụp thêm ảnh' : (ok ? 'Chụp ảnh giao hàng' : 'Chụp ảnh (nếu có)')}<input type="file" accept="image/*" capture="environment" multiple data-pick="${esc(key)}"></label>
+      ${p.uploading ? '<div class="gh-muted">Đang gửi ảnh…</div>' : ''}
+      <div class="gh-gps">${gpsLine(p)} <button class="gh-linkbtn" data-act="gps" data-key="${esc(key)}">↻ Lấy lại</button></div>
+      ${ok && p.gps && !loc ? `<label class="gh-check"><input type="checkbox" data-savloc ${p.saveLoc ? 'checked' : ''}> Lưu vị trí này làm vị trí của khách (lần sau chỉ đường thẳng tới đây)</label>` : ''}
+      ${ok ? '' : `<div class="gh-reasons">${FAIL_REASONS.map(x => `<button class="gh-chip ${p.note === x ? 'on' : ''}" data-reason="${esc(x)}">${esc(x)}</button>`).join('')}</div>`}
+      <input class="gh-input" data-note placeholder="${ok ? 'Ghi chú (không bắt buộc)…' : 'Lý do khác / ghi chú…'}" maxlength="200" value="${esc(p.note)}">
+      <div class="gh-actions"><button class="gh-btn ${ok ? 'ok' : 'danger'}" data-act="save" data-key="${esc(key)}" ${p.uploading ? 'disabled' : ''}>${ok ? '✓ Xác nhận đã giao' : 'Xác nhận không giao được'}</button>
+      <button class="gh-btn" data-act="cancel" data-key="${esc(key)}">Hủy</button></div>
+    </div>`;
+  }
+  function locPanel(key, loc) {
+    const p = st.panel;
+    return `<div class="gh-panel">
+      <div class="gh-panel-title">📌 Vị trí của khách</div>
+      <p class="gh-muted gh-small">Đứng tại cửa hàng của khách rồi bấm <b>Dùng vị trí hiện tại</b>, hoặc dán tọa độ / link Google Maps (trên Google Maps nhấn giữ vào điểm → sao chép tọa độ).</p>
+      <button class="gh-btn primary" data-act="loc-gps" data-key="${esc(key)}">📍 Dùng vị trí hiện tại</button>
+      ${p.gpsState === 'wait' ? '<div class="gh-muted">Đang lấy vị trí…</div>' : p.gpsErr ? `<div class="gh-red gh-small">${esc(p.gpsErr)}</div>` : ''}
+      <input class="gh-input" data-coords placeholder="vd 10.8812, 106.5934 hoặc link Google Maps" value="${esc(p.coords || '')}">
+      <div class="gh-actions"><button class="gh-btn ok" data-act="loc-save" data-key="${esc(key)}">Lưu tọa độ đã dán</button>
+      ${loc ? `<button class="gh-btn" data-act="loc-clear" data-key="${esc(key)}">Xóa vị trí</button>` : ''}
+      <button class="gh-btn" data-act="cancel" data-key="${esc(key)}">Hủy</button></div>
+    </div>`;
+  }
+  function bindStops(box) {
+    $$('[data-act]', box).forEach(b => b.onclick = () => act(b.dataset.key, b.dataset.act, b));
+    $$('[data-reason]', box).forEach(b => b.onclick = () => { if (!st.panel) return; st.panel.note = b.dataset.reason; redraw(); });
+    $$('[data-note]', box).forEach(inp => inp.oninput = () => { if (st.panel) st.panel.note = inp.value; });
+    $$('[data-coords]', box).forEach(inp => inp.oninput = () => { if (st.panel) st.panel.coords = inp.value; });
+    $$('[data-savloc]', box).forEach(cb => cb.onchange = () => { if (st.panel) st.panel.saveLoc = cb.checked; });
+    $$('[data-rm]', box).forEach(b => b.onclick = () => { if (!st.panel) return; st.panel.photos.splice(+b.dataset.rm, 1); redraw(); });
+    $$('input[data-pick]', box).forEach(inp => inp.onchange = () => pickPhotos(inp.dataset.pick, inp.files));
+    $$('input[data-add]', box).forEach(inp => inp.onchange = () => addPhotos(inp.dataset.add, inp.files));
+    $$('img[data-ref]', box).forEach(img => {
+      photoSrc(img.dataset.ref).then(src => { if (src) img.src = src; else img.alt = '(không tải được ảnh)'; });
+      img.onclick = () => { if (img.src) viewPhoto(img.src); };
+    });
+  }
+  function redraw() { const y = window.scrollY; drawRoutes(); window.scrollTo(0, y); }
+  function rowByKey(key) { for (const g of st.data.routes) { const r = g.rows.find(x => custKey(x) === key); if (r) return r; } return null; }
+
   async function act(key, action, btn) {
-    const keepScroll = fn => { const y = window.scrollY; fn(); window.scrollTo(0, y); };
-    if (action === 'fail') { st.failing = key; keepScroll(drawRoutes); bindReasons(); return; }
-    if (action === 'fail-cancel') { st.failing = null; keepScroll(drawRoutes); return; }
-    const status = action === 'ok' ? 'ok' : action === 'fail-save' ? 'fail' : '';
-    const note = status === 'fail' ? ($('#gh-fail-note') ? $('#gh-fail-note').value.trim() : '') : '';
-    if (status === 'fail' && !note) { toast('Chọn hoặc ghi lý do không giao được', true); return; }
-    btn.disabled = true;
+    const p = st.panel && st.panel.key === key ? st.panel : null;
+    if (action === 'ok' || action === 'fail') {
+      st.panel = { key, mode: action, photos: [], note: '', gps: null, gpsState: '', gpsErr: '', saveLoc: true };
+      redraw(); fetchGps(st.panel); return;
+    }
+    if (action === 'loc') { st.panel = { key, mode: 'loc', coords: '', gpsState: '', gpsErr: '' }; redraw(); return; }
+    if (action === 'cancel') { st.panel = null; redraw(); return; }
+    if (action === 'gps' && p) { fetchGps(p); return; }
+    if (action === 'loc-gps' && p) {
+      p.gpsState = 'wait'; p.gpsErr = ''; redraw();
+      try { const g = await getGps(); p.gpsState = ''; await saveLocation(key, g); } catch (e) { p.gpsState = ''; p.gpsErr = e.message + ' – hãy dán tọa độ bên dưới.'; if (st.panel === p) redraw(); }
+      return;
+    }
+    if (action === 'loc-save' && p) {
+      const g = parseCoords(p.coords);
+      if (!g) { toast('Không đọc được tọa độ. Dán dạng "10.88, 106.59" hoặc link Google Maps đầy đủ.', true); return; }
+      await saveLocation(key, g); return;
+    }
+    if (action === 'loc-clear' && p) {
+      if (await guard(() => call('POST', 'location', { date: st.date, key, clear: true }))) {
+        const m = Object.assign({}, st.data.locations); delete m[key]; st.data.locations = m; st.panel = null; toast('Đã xóa vị trí khách'); redraw();
+      }
+      return;
+    }
+    if (action === 'save' && p) {
+      if (p.mode === 'fail' && !p.note.trim()) { toast('Chọn hoặc ghi lý do không giao được', true); return; }
+      if (p.mode === 'ok' && !p.photos.length && !(await confirmNoPhoto())) return;
+      btn.disabled = true;
+      const ok = await submit(key, { status: p.mode, note: p.note.trim(), photos: p.photos, gps: p.gps });
+      if (!ok) { btn.disabled = false; return; }
+      if (p.mode === 'ok' && p.saveLoc && p.gps && !locOf(rowByKey(key) || {}) && (!p.gps.acc || p.gps.acc <= 150)) await saveLocation(key, p.gps, true);
+      st.panel = null;
+      toast(p.mode === 'ok' ? 'Đã ghi: đã giao' : 'Đã ghi: không giao được');
+      keepDraw();
+      return;
+    }
+    if (action === 'undo') {
+      btn.disabled = true;
+      if (await submit(key, { status: '' })) { toast('Đã hoàn tác'); keepDraw(); } else btn.disabled = false;
+    }
+  }
+  function keepDraw() { const y = window.scrollY; draw(); window.scrollTo(0, y); }
+  // Không có nút confirm() trong trang online: hỏi bằng ô nhỏ ngay trong trang
+  function confirmNoPhoto() {
+    return new Promise(resolve => {
+      const el = document.createElement('div');
+      el.className = 'gh-dialog';
+      el.innerHTML = `<div class="gh-dialog-box"><p>Chưa có ảnh giao hàng. Vẫn xác nhận đã giao?</p>
+        <div class="gh-actions"><button class="gh-btn" data-no>Quay lại chụp ảnh</button><button class="gh-btn ok" data-yes>Vẫn xác nhận</button></div></div>`;
+      st.root.appendChild(el);
+      const done = v => { el.remove(); resolve(v); };
+      el.querySelector('[data-no]').onclick = () => done(false);
+      el.querySelector('[data-yes]').onclick = () => done(true);
+    });
+  }
+  async function submit(key, rec) {
     const date = st.date;
-    const ok = await guard(() => call('POST', 'deliver', { date, key, status, note }));
-    if (!ok || date !== st.date) { btn.disabled = false; return; }
+    const ok = await guard(() => call('POST', 'deliver', Object.assign({ date, key }, rec)));
+    if (!ok || date !== st.date) return false;
     const m = Object.assign({}, st.data.deliveries);
-    if (status) m[key] = { status, note, at: nowStr() }; else delete m[key];
+    if (rec.status) m[key] = { status: rec.status, note: rec.note || '', at: nowStr(), photos: rec.photos || [], gps: rec.gps || null }; else delete m[key];
     st.data.deliveries = m;
-    st.failing = null;
     const day = st.days.find(x => x.date === date);
     if (day) day.done = Object.values(m).filter(x => x.status === 'ok').length;
-    toast(status === 'ok' ? 'Đã ghi: đã giao' : status === 'fail' ? 'Đã ghi: không giao được' : 'Đã hoàn tác');
-    keepScroll(draw);
+    return true;
   }
-  function bindReasons() {
-    $$('[data-reason]').forEach(b => b.onclick = () => { $('#gh-fail-note').value = b.dataset.reason; });
-    $$('[data-act]', $('#gh-routes')).forEach(b => b.onclick = () => act(b.dataset.key, b.dataset.act, b));
-    const inp = $('#gh-fail-note');
-    if (inp) inp.focus({ preventScroll: true });
+  async function saveLocation(key, g, quiet) {
+    const res = await guard(() => call('POST', 'location', Object.assign({ date: st.date, key }, g)));
+    if (!res) return;
+    st.data.locations = Object.assign({}, st.data.locations, { [key]: res.location || g });
+    if (st.panel && st.panel.mode === 'loc' && st.panel.key === key) st.panel = null;
+    toast(quiet ? 'Đã lưu vị trí khách' : 'Đã lưu vị trí khách' + accText(g));
+    if (!quiet) redraw();
+  }
+  async function fetchGps(p) {
+    p.gpsState = 'wait'; p.gpsErr = ''; redraw();
+    try { p.gps = await getGps(); } catch (e) { p.gpsErr = e.message; }
+    p.gpsState = '';
+    if (st.panel === p) redraw();
+  }
+  function getGps() {
+    return new Promise((resolve, reject) => {
+      if (!window.isSecureContext) return reject(new Error('Định vị chỉ chạy khi mở web bằng https (bản online)'));
+      if (!navigator.geolocation) return reject(new Error('Điện thoại / trình duyệt không hỗ trợ định vị'));
+      navigator.geolocation.getCurrentPosition(
+        pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy }),
+        e => reject(new Error(e.code === 1 ? 'Chưa cho phép định vị – bật quyền Vị trí cho trình duyệt rồi bấm Lấy lại'
+          : e.code === 3 ? 'Lấy vị trí quá lâu – ra chỗ thoáng rồi bấm Lấy lại' : 'Không lấy được vị trí')),
+        { enableHighAccuracy: true, timeout: 20000, maximumAge: 30000 });
+    });
+  }
+  // "10.88, 106.59", link Google Maps (…!3d10.88!4d106.59…, …@10.88,106.59…, …?q=10.88,106.59)
+  function parseCoords(s) {
+    const t = String(s || '');
+    const pats = [/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/, /[?&](?:q|query|destination|ll)=(-?\d+\.\d+)(?:,|%2C)\s*(-?\d+\.\d+)/i, /@(-?\d+\.\d+),(-?\d+\.\d+)/, /(-?\d{1,2}\.\d{3,})\s*[,; ]\s*(-?\d{1,3}\.\d{3,})/];
+    for (const re of pats) {
+      const m = t.match(re);
+      if (m) { const lat = +m[1], lng = +m[2]; if (Math.abs(lat) <= 90 && Math.abs(lng) <= 180) return { lat, lng, acc: null }; }
+    }
+    return null;
+  }
+
+  /* ---------------------------------------------------------- ảnh giao hàng */
+  async function photoSrc(ref) {
+    if (ONLINE) { try { return await Backend.photoUrl(ref); } catch (e) { return ''; } }
+    return '/api/gh/photo?ref=' + encodeURIComponent(ref) + '&t=' + encodeURIComponent(st.token);
+  }
+  function viewPhoto(src) {
+    const el = document.createElement('div');
+    el.className = 'gh-dialog gh-viewer';
+    el.innerHTML = `<img src="${esc(src)}" alt="Ảnh giao hàng"><button class="gh-btn">Đóng</button>`;
+    el.onclick = () => el.remove();
+    st.root.appendChild(el);
+  }
+  // Thu nhỏ ảnh chụp (≤1280px, JPEG) và ghi giờ chụp + khách lên góc ảnh
+  async function compress(file, label) {
+    const url = URL.createObjectURL(file);
+    try {
+      const img = await new Promise((res, rej) => { const i = new Image(); i.onload = () => res(i); i.onerror = () => rej(new Error('Không đọc được ảnh ' + (file.name || ''))); i.src = url; });
+      const k = Math.min(1, 1280 / Math.max(img.naturalWidth, img.naturalHeight));
+      const c = document.createElement('canvas');
+      c.width = Math.round(img.naturalWidth * k); c.height = Math.round(img.naturalHeight * k);
+      const ctx = c.getContext('2d');
+      ctx.drawImage(img, 0, 0, c.width, c.height);
+      const fs = Math.max(14, Math.round(c.width / 40));
+      ctx.font = `bold ${fs}px sans-serif`;
+      const text = `${nowStr().slice(0, 16)} · ${label}`.slice(0, 80);
+      const w = ctx.measureText(text).width;
+      ctx.fillStyle = 'rgba(0,0,0,.55)'; ctx.fillRect(0, c.height - fs * 1.8, w + fs, fs * 1.8);
+      ctx.fillStyle = '#fff'; ctx.fillText(text, fs / 2, c.height - fs * 0.55);
+      let q = 0.72, out = c.toDataURL('image/jpeg', q);
+      while (out.length > 600000 && q > 0.35) { q -= 0.1; out = c.toDataURL('image/jpeg', q); }
+      return out;
+    } finally { URL.revokeObjectURL(url); }
+  }
+  async function uploadPhotos(key, files) {
+    const r = rowByKey(key) || {};
+    const label = [r.crm || r.code, r.name || r.cust].filter(Boolean).join(' ');
+    const refs = [];
+    for (const f of Array.from(files || []).slice(0, 6)) {
+      const ref = await guard(async () => (await call('POST', 'photo', { date: st.date, key, data: await compress(f, label) })).ref);
+      if (ref) refs.push(ref);
+    }
+    return refs;
+  }
+  async function pickPhotos(key, files) {
+    const p = st.panel;
+    if (!p || p.key !== key || !files || !files.length) return;
+    p.uploading = true; redraw();
+    const refs = await uploadPhotos(key, files);
+    p.uploading = false;
+    p.photos = p.photos.concat(refs).slice(0, 6);
+    if (st.panel === p) redraw();
+  }
+  async function addPhotos(key, files) {
+    const s = (st.data.deliveries || {})[key];
+    if (!s || !files || !files.length) return;
+    toast('Đang gửi ảnh…');
+    const refs = await uploadPhotos(key, files);
+    if (!refs.length) return;
+    if (await submit(key, { status: s.status, note: s.note, photos: (s.photos || []).concat(refs).slice(0, 6), gps: s.gps })) { toast('Đã thêm ảnh'); keepDraw(); }
   }
   function nowStr() { const d = new Date(); return `${isoDate(d)} ${z(d.getHours())}:${z(d.getMinutes())}:${z(d.getSeconds())}`; }
 
@@ -294,6 +495,6 @@ const GiaoHang = (() => {
     st.date = isoDate();
     if (st.token) await showMain(); else drawLogin();
   }
-  function onRemoteChange() { if (st.token && $('#gh-main') && !st.busy && !st.failing) loadDay(true); }
+  function onRemoteChange() { if (st.token && $('#gh-main') && !st.busy && !st.panel) loadDay(true); }
   return { start, onRemoteChange, stop: stopTimer };
 })();

@@ -1474,9 +1474,10 @@ async function viewRouting(main, m) {
   const drivers = (S.meta.drivers || []).filter(x => x.active);
   const driverName = id => { const x = (S.meta.drivers || []).find(v => v.id === id); return x ? x.name || x.nick : ''; };
   const routeDriver = code => routeDriverOf(d, code, S.meta.drivers || []);
-  let deliv = {};
+  let deliv = {}, locs = {};
   async function loadDeliveries() {
-    deliv = (await guard(() => api('GET', '/deliveries?date=' + doc.date))) || {};
+    [deliv, locs] = await Promise.all([guard(() => api('GET', '/deliveries?date=' + doc.date)), guard(() => api('GET', '/locations'))]);
+    deliv = deliv || {}; locs = locs || {};
     if ($('#rt-body') && d.rows.length) { const y = window.scrollY; drawBody(); window.scrollTo(0, y); }
   }
   const delivOf = r => deliv[custKeyOf(r)] || null;
@@ -1607,12 +1608,13 @@ async function viewRouting(main, m) {
       && (!ui.search || matches(ui.search, [r.crm, r.cust, r.q, r.phone, r.note].join(' '))));
     const opts = [['', '— chưa có —']].concat(routes.map(r => [r.code, `${r.code} – ${r.name}`]));
     tb.innerHTML = rows.map(([r, i], n) => `<tr class="${r.route ? '' : 'row-bad'}" data-i="${i}"><td>${n + 1}</td><td>${esc(r.q)}</td>
-      <td>${r.crm ? `<b>${esc(r.crm)}</b>` : '<span class="small muted">—</span>'}</td><td class="nm"><b>${esc(r.code)}</b> ${esc(r.name)}</td><td class="small">${esc(r.addr)}</td>
+      <td>${r.crm ? `<b>${esc(r.crm)}</b>` : '<span class="small muted">—</span>'}</td><td class="nm"><b>${esc(r.code)}</b> ${esc(r.name)}</td><td class="small">${esc(r.addr)}${locLink(locs[custKeyOf(r)], '📌 vị trí đã lưu')}</td>
       <td class="small">${esc(r.phone)}</td><td class="small">${esc(r.note)}${r.pay ? `<br><span class="badge ${/chua/.test(noAccent(r.pay)) ? 'warn' : 'ok'}">${esc(r.pay)}</span>` : ''}</td>
       <td class="small">${qtyText(r)}</td>
       <td><select data-k="route">${options(opts.some(o => o[0] === r.route) ? opts : opts.concat([[r.route, r.route]]), r.route)}</select>
       <div class="small muted">${r.src === 'tay' ? 'chọn tay' : r.src === 'nhớ' ? 'như lần chọn tay trước' : r.src ? 'tự động theo ' + esc(r.src) : ''}</div>${delivBadge(delivOf(r))}</td></tr>`).join('')
       || '<tr><td colspan="9" class="muted">Không có khách nào.</td></tr>';
+    fillPhotos(tb);
     $$('select[data-k=route]', tb).forEach(sel => sel.onchange = () => {
       const r = d.rows[+sel.closest('tr').dataset.i];
       r.route = sel.value; r.src = 'tay';
@@ -1686,10 +1688,27 @@ function routeDriverOf(data, code, drivers) {
   return x ? x.id : '';
 }
 const custKeyOf = r => String(r.crm || '').trim() || String(r.code || '').trim() || String(r.cust || '').trim();
-function delivBadge(x) {
+function delivBadge(x, full) {
   if (!x) return '';
-  return x.status === 'ok' ? `<span class="badge ok">✓ Đã giao ${esc((x.at || '').slice(11, 16))}</span>`
+  const b = x.status === 'ok' ? `<span class="badge ok">✓ Đã giao ${esc((x.at || '').slice(11, 16))}</span>`
     : `<span class="badge bad" title="${esc(x.note)}">✗ Không giao được${x.note ? ': ' + esc(x.note) : ''}</span>`;
+  return b + (full === false ? '' : (x.status === 'ok' && x.note ? `<div class="small muted">${esc(x.note)}</div>` : '') + photoThumbs(x.photos) + locLink(x.gps, '📍 vị trí lúc giao'));
+}
+// Ảnh giao hàng: bản chạy máy lấy từ /api/photo, bản online từ kho ảnh của trang
+function photoSrc(ref) { return ONLINE ? Backend.photoUrl(ref) : Promise.resolve('/api/photo?ref=' + encodeURIComponent(ref)); }
+function photoThumbs(refs) {
+  return refs && refs.length ? `<div class="ph-row">${refs.map((r, i) => `<img class="ph-thumb" data-ref="${esc(r)}" alt="Ảnh giao hàng ${i + 1}">`).join('')}</div>` : '';
+}
+function fillPhotos(root) {
+  $$('img[data-ref]', root).forEach(img => {
+    if (img.dataset.done) return;
+    img.dataset.done = '1';
+    photoSrc(img.dataset.ref).then(src => { if (src) img.src = src; else img.alt = '(không tải được ảnh)'; }, () => {});
+    img.onclick = e => { e.stopPropagation(); if (img.src) openModal({ title: 'Ảnh giao hàng', wide: true, body: `<img src="${esc(img.src)}" style="max-width:100%;display:block;margin:auto" alt="Ảnh giao hàng">` }); };
+  });
+}
+function locLink(g, label) {
+  return g && g.lat != null ? `<div><a class="small" href="https://www.google.com/maps/search/?api=1&query=${g.lat},${g.lng}" target="_blank" rel="noopener">${label}${g.acc ? ' ±' + Math.round(g.acc) + 'm' : ''}</a></div>` : '';
 }
 
 /* ============================================================ Tài khoản giao hàng (web giao hàng) */
@@ -1706,6 +1725,28 @@ async function viewDrivers(main) {
   setTitle('Tài khoản giao hàng');
   const routes = routeList();
   const rName = c => { const r = routes.find(x => x.code.toLowerCase() === String(c).toLowerCase()); return r ? r.name : ''; };
+  const res = { date: isoDate(), who: '', list: {} };
+  const dName = id => { const x = (S.meta.drivers || []).find(v => v.id === id); return x ? x.name || x.nick : '(đã xóa)'; };
+  async function loadRes() {
+    const want = res.date;
+    const list = await guard(() => api('GET', '/deliveries?date=' + want));
+    if (want !== res.date || !$('#g-res')) return;
+    res.list = list || {};
+    drawRes();
+  }
+  function drawRes() {
+    const rows = Object.entries(res.list).filter(([, x]) => !res.who || x.driver === res.who)
+      .sort((a, b) => (a[1].route || '').localeCompare(b[1].route || '') || (a[1].at || '').localeCompare(b[1].at || ''));
+    const ok = rows.filter(([, x]) => x.status === 'ok').length;
+    $('#g-res').innerHTML = rows.length ? `<p class="small" style="margin:0 0 8px"><b>${ok}</b> khách đã giao · <b>${rows.length - ok}</b> không giao được ·
+      ${rows.filter(([, x]) => (x.photos || []).length).length} khách có ảnh</p>
+      <div class="table-wrap"><table class="data"><thead><tr><th>Giờ</th><th>Người giao</th><th>Tuyến</th><th>Khách</th><th>Kết quả</th><th>Ảnh giao hàng</th><th>Vị trí lúc giao</th></tr></thead><tbody>
+      ${rows.map(([k, x]) => `<tr><td class="nowrap">${esc((x.at || '').slice(11, 16))}</td><td>${esc(dName(x.driver))}</td><td><b>${esc(x.route)}</b></td>
+        <td><b>${esc(k)}</b> ${esc(x.name || '')}</td><td>${delivBadge(x, false)}${x.status === 'ok' && x.note ? `<div class="small muted">${esc(x.note)}</div>` : ''}</td>
+        <td>${photoThumbs(x.photos) || '<span class="small muted">—</span>'}</td><td>${locLink(x.gps, '📍 Xem bản đồ') || '<span class="small muted">—</span>'}</td></tr>`).join('')}
+      </tbody></table></div>` : '<p class="muted">Chưa có kết quả giao hàng ngày này.</p>';
+    fillPhotos($('#g-res'));
+  }
   function draw() {
     const list = (S.meta.drivers || []).slice().sort((a, b) => (b.active - a.active) || a.nick.localeCompare(b.nick));
     const links = giaoHangLinks();
@@ -1723,7 +1764,17 @@ async function viewDrivers(main) {
         <td>${x.routes.length ? x.routes.map(c => `<span class="badge" title="${esc(rName(c))}">${esc(c)}</span>`).join(' ') : '<span class="muted small">— chọn theo ngày —</span>'}</td>
         <td>${x.active ? '<span class="badge ok">Đang dùng</span>' : '<span class="badge warn">Đã khóa</span>'}</td>
         <td><button class="btn sm danger" data-del="${esc(x.id)}">Xóa</button></td></tr>`).join('')}</tbody></table></div>`
-      : '<p class="muted">Chưa có tài khoản giao hàng nào.</p>'}`;
+      : '<p class="muted">Chưa có tài khoản giao hàng nào.</p>'}
+      <div class="card" style="margin-top:16px"><h3>Kết quả giao hàng theo ngày</h3>
+        <div class="toolbar"><label class="field">Ngày<input type="date" id="g-date" value="${res.date}"></label>
+        <label class="field">Người giao<select id="g-who">${options([['', 'Tất cả']].concat((S.meta.drivers || []).map(x => [x.id, x.name || x.nick])), res.who)}</select></label>
+        <button class="btn" id="g-reload">↻ Tải lại</button></div>
+        <div id="g-res"><p class="muted">Đang tải…</p></div>
+        <p class="hint">Ảnh do người giao chụp lúc giao (có ghi giờ, mã khách trên ảnh); "vị trí lúc giao" là định vị điện thoại khi bấm Đã giao. Bấm ảnh để xem lớn.</p></div>`;
+    $('#g-date').onchange = () => { res.date = $('#g-date').value; loadRes(); };
+    $('#g-who').onchange = () => { res.who = $('#g-who').value; drawRes(); };
+    $('#g-reload').onclick = () => loadRes();
+    loadRes();
     $('#g-add').onclick = () => edit(null);
     $('#g-open').onclick = () => openGiaoHang();
     $$('tr[data-id]', main).forEach(tr => tr.onclick = e => { if (!e.target.closest('button')) edit(S.meta.drivers.find(x => x.id === tr.dataset.id)); });

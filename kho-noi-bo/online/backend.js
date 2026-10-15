@@ -10,7 +10,9 @@
      kho/<kho>/days/<yyyy-mm-dd>  {date, v: {id: phiếu|null}}       – các phiếu của 1 ngày
      kho/<kho>/docs/<id>          biên bản kiểm kê / bàn giao / kebab / kê đơn
      kho/<kho>/plans/<yyyy-mm>    {ym, p: {id: dòng kế hoạch|null}}
-     kho/TP/giao/<yyyy-mm-dd>     {date, d: {mã khách: kết quả giao|null}}  – web giao hàng ghi
+     kho/TP/giao/<yyyy-mm-dd>     {date, d: {mã khách: kết quả giao|null}}  – web giao hàng ghi (kèm ảnh, vị trí lúc giao)
+     kho/TP/meta/vitri            {v: {mã khách: {lat, lng, acc, name, driver, at}|null}}  – vị trí khách người giao đã lưu
+     kho/TP/anh/<id>              {date, key, data}  – ảnh giao hàng khi trang không lưu được vào kho ảnh (assets)
      log/<yyyy-mm-dd>             {date, e: {id: thao tác}}
    Tài khoản giao hàng nằm trong cài đặt: s.drivers {id: {nick, name, phone, routes, active, salt, pin}|null}
    null = đã xóa (ghi gộp từng phần nên mỗi người sửa phiếu riêng không đè lên nhau). */
@@ -114,6 +116,8 @@ const Backend = (() => {
     planMonth: (wh, ym) => dbx().doc(`kho/${wh}/plans/${ym}`),
     giao: d => dbx().doc(`kho/TP/giao/${d}`),
     giaoAll: () => dbx().collection('kho/TP/giao'),
+    vitri: () => dbx().doc('kho/TP/meta/vitri'),
+    anh: id => dbx().doc(`kho/TP/anh/${id}`),
     logs: () => dbx().collection('log'),
     logDay: d => dbx().doc('log/' + d),
   };
@@ -616,7 +620,10 @@ const Backend = (() => {
   async function exportBackup() {
     const out = { format: 'kho-antam-backup', version: 1, at: nowStr(), settings: st.settings, routes: st.routes, warehouses: {}, deliveries: {} };
     const asMap = snap => Object.fromEntries(snap.docs.map(d => [d.id, d.data()]));
-    if (!VIEW) out.deliveries = asMap(await ref.giaoAll().orderBy('date', 'desc').limit(400).get());
+    if (!VIEW) {
+      out.deliveries = asMap(await ref.giaoAll().orderBy('date', 'desc').limit(400).get());
+      out.locations = { v: await locationsAll() };
+    }
     for (const w of WAREHOUSES) {
       if (VIEW) { out.warehouses[w] = { products: st.products[w], days: st.days[w], docs: st.docs[w], plans: st.plans[w] }; continue; }
       const [p, days, docs, plans] = await Promise.all([ref.products(w).get(), ref.days(w).orderBy('date', 'desc').limit(1000).get(),
@@ -674,6 +681,50 @@ const Backend = (() => {
     if (VIEW) return {};
     try { return Object.fromEntries(live((docData(await ref.giao(d).get()) || {}).d)); } catch (e) { throw dbError(e); }
   }
+  function cleanGps(v) {
+    if (!v || typeof v !== 'object') return null;
+    const lat = Number(v.lat), lng = Number(v.lng);
+    if (!isFinite(lat) || !isFinite(lng) || Math.abs(lat) > 90 || Math.abs(lng) > 180 || (lat === 0 && lng === 0)) return null;
+    const acc = typeof v.acc === 'number' && isFinite(v.acc) ? Math.round(v.acc * 10) / 10 : null;
+    return { lat: Math.round(lat * 1e6) / 1e6, lng: Math.round(lng * 1e6) / 1e6, acc };
+  }
+  async function locationsAll() {
+    if (VIEW) return {};
+    try { return Object.fromEntries(live((docData(await ref.vitri().get()) || {}).v)); } catch (e) { throw dbError(e); }
+  }
+  // Ảnh giao hàng: ưu tiên kho ảnh của trang (assets), không được thì lưu ảnh (đã thu nhỏ) vào dữ liệu chung
+  async function savePhoto(d, key, dataUrl) {
+    const m = /^data:image\/jpeg;base64,([A-Za-z0-9+/=]+)$/.exec(text(dataUrl));
+    if (!m) throw new ApiError(400, 'Ảnh không hợp lệ (cần ảnh JPEG)');
+    let assets = null;
+    try { assets = await window.claude.use('assets'); } catch (e) { assets = null; }
+    if (assets) {
+      try {
+        const bin = atob(m[1]);
+        const bytes = new Uint8Array(bin.length);
+        for (let i = 0; i < bin.length; i++) bytes[i] = bin.charCodeAt(i);
+        const res = await assets.upload(new Blob([bytes], { type: 'image/jpeg' }), { type: 'image/jpeg' });
+        return 'a:' + res.id;
+      } catch (e) {
+        if (e && e.code === 'rate_limited') throw new ApiError(429, 'Gửi ảnh quá nhanh, hãy thử lại sau vài giây.');
+        if (e && e.code === 'quota_or_state') throw new ApiError(507, 'Kho ảnh của trang đã đầy – báo kho xóa bớt ảnh cũ.');
+        console.warn('assets.upload', e);
+      }
+    }
+    if (dataUrl.length > 900000) throw new ApiError(413, 'Ảnh quá lớn để lưu');
+    const id = newId('a');
+    await write(() => ref.anh(id).set({ date: d, key, data: dataUrl, at: nowStr() }));
+    return 'd:' + id;
+  }
+  const photoCache = {};
+  async function photoUrl(ref_) {
+    const r = text(ref_);
+    if (r.startsWith('a:')) return '/_blob/' + r.slice(2);
+    if (!r.startsWith('d:') || VIEW) return '';
+    if (!photoCache[r]) photoCache[r] = ref.anh(r.slice(2)).get().then(s => ((docData(s) || {}).data || ''), () => '');
+    return photoCache[r];
+  }
+  const PHOTO_REF = /^[ad]:[A-Za-z0-9_-]{4,64}$/;
   // dữ liệu phân tuyến kho TP (điện thoại người giao chỉ tải phần này)
   async function ensureGiaoData() {
     if (VIEW || st.giaoLive || (st.wh === 'TP' && st.loaded)) return;
@@ -702,10 +753,11 @@ const Backend = (() => {
     if (action === 'day' && method === 'GET') {
       const d = validDate(q.date || today());
       const { data, routes } = myRoutes(id, d, drv);
-      const done = routes.length ? await deliveriesOf(d) : {};
+      const [done, locs] = routes.length ? await Promise.all([deliveriesOf(d), locationsAll()]) : [{}, {}];
       const keys = new Set(routes.flatMap(g => g.rows.map(custKey)));
+      const mine = m => Object.fromEntries(Object.entries(m).filter(([k]) => keys.has(k)));
       return { date: d, driver: publicDriver(id, me), planned: !!data, cols: (data && data.cols) || [], routes,
-        deliveries: Object.fromEntries(Object.entries(done).filter(([k]) => keys.has(k))) };
+        deliveries: mine(done), locations: mine(locs) };
     }
     if (action === 'days' && method === 'GET') {
       const dates = Array.from(new Set(Object.values(st.docs.TP || {}).filter(x => x && x.kind === 'routing').map(x => x.date))).sort().reverse().slice(0, 45);
@@ -720,12 +772,37 @@ const Backend = (() => {
         return { date: d, routes: routes.map(g => g.code), count: keys.length, done: keys.filter(k => ((done[d] || {})[k] || {}).status === 'ok').length };
       });
     }
+    const myRow = (d, key) => {
+      for (const g of myRoutes(id, d, drv).routes) { const r = g.rows.find(x => custKey(x) === key); if (key && r) return [g, r]; }
+      throw new ApiError(403, `Khách này không thuộc tuyến của bạn ngày ${d}`);
+    };
+    const asDriver = async (action_, target, detail) => { const who = st.who; st.who = '🚚 ' + (me.name || me.nick); await log(action_, target, detail, 'TP'); st.who = who; };
+    if (action === 'photo' && method === 'POST') {
+      const d = validDate(body.date), key = text(body.key);
+      myRow(d, key);
+      return { ref: await savePhoto(d, key, body.data) };
+    }
+    if (action === 'location' && method === 'POST') {
+      const d = validDate(body.date), key = text(body.key);
+      const [, row] = myRow(d, key);
+      if (body.clear) {
+        await mergeInto(ref.vitri(), { v: { [key]: null } }, { v: {} });
+        await asDriver('Xóa vị trí khách', key, '');
+        return { ok: true };
+      }
+      const g = cleanGps(body);
+      if (!g) throw new ApiError(400, 'Tọa độ không hợp lệ');
+      const rec = Object.assign(g, { name: text(row.name) || text(row.cust), driver: id, at: nowStr() });
+      await mergeInto(ref.vitri(), { v: { [key]: rec } }, { v: {} });
+      await asDriver('Lưu vị trí khách', key, `${g.lat},${g.lng}`);
+      return { ok: true, location: rec };
+    }
     if (action === 'deliver' && method === 'POST') {
       const d = validDate(body.date), key = text(body.key), status = text(body.status), note = text(body.note).slice(0, 300);
-      const g = myRoutes(id, d, drv).routes.find(x => x.rows.some(r => custKey(r) === key));
-      if (!key || !g) throw new ApiError(403, `Khách này không thuộc tuyến của bạn ngày ${d}`);
+      const [g, row] = myRow(d, key);
       if (!['ok', 'fail', ''].includes(status)) throw new ApiError(400, 'Trạng thái không hợp lệ');
-      const rec = status ? { status, note, at: nowStr(), driver: id, route: g.code } : null;
+      const rec = status ? { status, note, at: nowStr(), driver: id, route: g.code, name: text(row.name) || text(row.cust),
+        photos: (body.photos || []).map(text).filter(x => PHOTO_REF.test(x)).slice(0, 6), gps: cleanGps(body.gps) } : null;
       await mergeInto(ref.giao(d), { d: { [key]: rec } }, { date: d });
       const who = st.who; st.who = '🚚 ' + (me.name || me.nick);
       await log({ ok: 'Đã giao', fail: 'Không giao được', '': 'Bỏ đánh dấu giao' }[status], `${key} ${d}`, note, 'TP');
@@ -776,6 +853,7 @@ const Backend = (() => {
       }
     }
     if (res === 'deliveries' && method === 'GET') return deliveriesOf(validDate(q.date));
+    if (res === 'locations' && method === 'GET') return locationsAll();
     if (!st.days[wh] && !VIEW && res !== 'meta' && res !== 'settings' && res !== 'routes') throw new ApiError(400, 'Chưa tải dữ liệu kho ' + wh);
 
     if (res === 'meta' && method === 'GET') {
@@ -1013,6 +1091,7 @@ const Backend = (() => {
         for (const id of oldG) if (!snap.deliveries[id]) await write(() => ref.giao(id).delete());
         for (const [id, doc] of Object.entries(snap.deliveries)) if (doc) await write(() => ref.giao(id).set(doc));
       }
+      if (snap.locations) await write(() => ref.vitri().set({ v: snap.locations.v || {} }));
       for (const w of WAREHOUSES) {
         const d = snap.warehouses[w];
         if (!d) continue;
@@ -1068,6 +1147,7 @@ const Backend = (() => {
   return {
     init, setWh, handle,
     get ready() { return !!st.ready; },
+    photoUrl,
     set who(v) { st.who = v; },
     get myName() { return st.myName || ''; },
     get canWrite() { return VIEW ? false : st.canWrite; },

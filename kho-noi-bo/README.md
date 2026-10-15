@@ -113,6 +113,22 @@ Người giao hàng xem **tuyến đã được sắp của từng ngày** (lấ
 4. Kho thấy kết quả ở bảng Phân tuyến của ngày đó: cột **Đã giao** từng tuyến và nhãn ✓ / ✗ cạnh từng khách
    (nút **↻ Kết quả giao** để cập nhật). Bản in danh sách tuyến ghi sẵn tên người giao.
 
+**Ảnh giao hàng và định vị**
+
+- Bấm **✓ Đã giao** (hoặc **✗ Không giao được**) mở ô xác nhận: **📷 Chụp ảnh giao hàng** (mở camera điện thoại, chụp được
+  nhiều ảnh; ảnh được thu nhỏ và in sẵn giờ chụp + mã khách ở góc), web **tự lấy vị trí điện thoại lúc giao** rồi bấm
+  **Xác nhận**. Giao xong vẫn **📷 Thêm ảnh** được.
+- **📌 Lưu vị trí khách**: đứng tại cửa hàng bấm **Dùng vị trí hiện tại**, hoặc dán tọa độ / link Google Maps. Khi xác nhận
+  đã giao mà khách chưa có vị trí, web đề nghị lưu luôn vị trí lúc giao. Khách đã có vị trí thì bấm địa chỉ hoặc
+  **🧭 Chỉ đường** là mở Google Maps tới đúng điểm.
+- Kho xem ở **Tài khoản giao hàng › Kết quả giao hàng theo ngày** (giờ giao, người giao, khách, ảnh, vị trí lúc giao; lọc
+  theo người giao) và ở bảng Phân tuyến (ảnh nhỏ, 📍 vị trí lúc giao, 📌 vị trí khách đã lưu cạnh địa chỉ).
+- Lưu ý định vị: trình duyệt chỉ cho lấy vị trí trên trang **https** – bản online dùng được; bản chạy trên máy
+  (`http://192.168…`) không tự lấy được vị trí, người giao dán tọa độ từ Google Maps.
+- Ảnh ở bản chạy trên máy nằm trong thư mục `data/anh-giao/` (sao lưu cùng file `data/kho.db`; file .json không chứa ảnh).
+  Ở bản online ảnh nằm trong kho ảnh của trang (người giao cần quyền Contributor), nếu kho ảnh chưa được bật cho tài khoản
+  thì ảnh được lưu vào dữ liệu chung.
+
 Link web giao hàng:
 
 - **Bản chạy trên máy**: `http://<IP-máy-chạy-web>:8000/giao-hang` (xem ở **Tài khoản giao hàng › Link web giao hàng**), điện thoại
