@@ -1298,6 +1298,8 @@ const DEFAULT_ROUTE_RULES = [
   { code: 'Qle', kw: 'quận 4, quận 5, quận 6, quận 7, quận 10, quận 11, nhà bè, cần giờ' },
   { code: 'AS', kw: 'chành xe' },
 ];
+// Cột không lấy vào số lượng giao (vd "SỐ TÚI 50" – kho không cần cập nhật)
+const SKIP_COL = h => /(^| )tui( |$)/.test(h);
 const RT_META = ['quan', 'crm', 'khach', 'sdt', 'ghi chu', 'bill', 'nguoi', 'trang thai', 'tinh trang', 'cong no', 'tai xe'];
 function normPlace(s) {
   return ' ' + noAccent(s).replace(/[^a-z0-9]+/g, ' ').replace(/\b(?:q|quan)\s*(\d{1,2})\b/g, 'quan $1').replace(/\s+/g, ' ').trim() + ' ';
@@ -1428,7 +1430,7 @@ function parseOrderSheet(table) {
     col = { q: find(x => x === 'quan'), crm: find(x => x === 'crm'), cust: find(x => x.startsWith('khach')), phone: find(x => x.includes('sdt') || x.includes('dien thoai')),
       note: find(x => x.startsWith('ghi chu')), status: find(x => x.startsWith('trang thai')), pay: find(x => x.startsWith('tinh trang')) };
     const lastMeta = h.reduce((a, x, i) => (RT_META.some(k => x.startsWith(k)) ? i : a), -1);
-    h.forEach((x, i) => { if (i > lastMeta && x) { pcols.push(i); cols.push(String(table[hi][i]).replace(/\s+/g, ' ').trim()); } });
+    h.forEach((x, i) => { if (i > lastMeta && x && !SKIP_COL(x)) { pcols.push(i); cols.push(String(table[hi][i]).replace(/\s+/g, ' ').trim()); } });
   } else {
     // dán không kèm dòng tiêu đề: dùng vị trí cột của mẫu báo cáo (A Quận, B CRM, C Khách, D SĐT, E Ghi chú, I Trạng thái, J Tình trạng, P→AE sản phẩm)
     col = { q: 0, crm: 1, cust: 2, phone: 3, note: 4, status: 8, pay: 9 };
@@ -1467,7 +1469,7 @@ function parseRouteGroupSheet(table, H) {
     if (n > best) { best = n; status = c; }
   }
   const pcols = [], cols = [];
-  h.forEach((x, i) => { if (i > Math.max(col.phone, status) && x && (col.note < 0 || i < col.note)) { pcols.push(i); cols.push(String(table[hi][i]).replace(/\s+/g, ' ').trim()); } });
+  h.forEach((x, i) => { if (i > Math.max(col.phone, status) && x && !SKIP_COL(x) && (col.note < 0 || i < col.note)) { pcols.push(i); cols.push(String(table[hi][i]).replace(/\s+/g, ' ').trim()); } });
   const g = (r, i) => (i >= 0 && r[i] != null ? String(r[i]).replace(/\s+/g, ' ').trim() : '');
   const rows = []; let total = 0, grp = '';
   for (const r of body) {
