@@ -1755,7 +1755,8 @@ async function viewDrivers(main) {
       (lấy từ <a href="#/phan-tuyen">Phân tuyến giao hàng</a>): khách, địa chỉ (bấm để mở bản đồ), SĐT (bấm để gọi), số lượng từng loại; bấm <b>Đã giao</b> /
       <b>Không giao được</b> và kho thấy kết quả ở bảng phân tuyến.<br>Tuyến của mỗi người = <b>tuyến thường chạy</b> dưới đây; ngày nào đổi người thì chọn lại ở cột
       <b>Người giao</b> trong phân tuyến của ngày đó.</div>
-      ${ONLINE ? `<div class="callout small">Gửi <b>link trang Kho An Tâm này</b> cho người giao hàng (nút <i>Share</i>, quyền <b>Contributor</b> để bấm được "Đã giao").
+      ${ONLINE ? `<div class="callout small">Mời người giao hàng bằng <b>email</b> ở nút <i>Share</i> của trang, chọn quyền <b>Editor</b>, và để <i>General access</i> ở chế độ
+        <b>chỉ người được mời</b> (tắt "Anyone with the link") – người được mời quyền Viewer/Commenter chỉ xem được, không bấm được "Đã giao" hay gửi ảnh.
         Trên điện thoại: mở link → ở ô <i>Bạn là ai?</i> bấm <b>🚚 Tôi là người giao hàng</b> → đăng nhập nick + PIN. Lần sau mở link sẽ vào thẳng web giao hàng.</div>`
       : `<div class="card"><h3>Link web giao hàng</h3><div class="toolbar">${links.map(u => `<code class="access-url">${esc(u)}</code><button class="btn sm" data-copy="${esc(u)}">Sao chép</button>`).join('')}</div>
         <p class="hint">Điện thoại phải dùng <b>cùng wifi / mạng công ty</b> với máy chạy web. Web giao hàng không hỏi mật khẩu chung của web kho – mỗi người đăng nhập bằng nick + PIN của mình.</p></div>`}

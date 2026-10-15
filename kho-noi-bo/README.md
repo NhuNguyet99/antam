@@ -126,7 +126,7 @@ Người giao hàng xem **tuyến đã được sắp của từng ngày** (lấ
 - Lưu ý định vị: trình duyệt chỉ cho lấy vị trí trên trang **https** – bản online dùng được; bản chạy trên máy
   (`http://192.168…`) không tự lấy được vị trí, người giao dán tọa độ từ Google Maps.
 - Ảnh ở bản chạy trên máy nằm trong thư mục `data/anh-giao/` (sao lưu cùng file `data/kho.db`; file .json không chứa ảnh).
-  Ở bản online ảnh nằm trong kho ảnh của trang (người giao cần quyền Contributor), nếu kho ảnh chưa được bật cho tài khoản
+  Ở bản online ảnh nằm trong kho ảnh của trang, nếu kho ảnh không dùng được cho người giao
   thì ảnh được lưu vào dữ liệu chung.
 
 Link web giao hàng:
@@ -134,7 +134,8 @@ Link web giao hàng:
 - **Bản chạy trên máy**: `http://<IP-máy-chạy-web>:8000/giao-hang` (xem ở **Tài khoản giao hàng › Link web giao hàng**), điện thoại
   dùng cùng wifi công ty. Trang này **không hỏi mật khẩu chung** (`mat-khau.txt`) của web kho – chỉ đăng nhập bằng nick + PIN, và chỉ
   xem/ghi được tuyến của chính mình.
-- **Bản online**: gửi link trang Kho An Tâm (nút *Share*, quyền **Contributor** để bấm được "Đã giao"; Viewer chỉ xem được). Trên điện
+- **Bản online**: mời người giao bằng email ở nút *Share* với quyền **Editor** và tắt "Anyone with the link" (tài khoản claude.ai
+  cá nhân không có quyền Contributor; người được mời quyền Viewer/Commenter chỉ xem, không bấm "Đã giao" hay gửi ảnh được). Trên điện
   thoại mở link → ô *Bạn là ai?* bấm **🚚 Tôi là người giao hàng** → đăng nhập. Lần sau mở link sẽ vào thẳng web giao hàng
   (nút **Web kho** để quay lại). Ở bản online nick + PIN dùng để mỗi người chỉ thấy tuyến của mình, không phải lớp bảo mật: ai được
   chia sẻ trang vẫn có quyền như trên claude.ai.
