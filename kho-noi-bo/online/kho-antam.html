@@ -261,6 +261,151 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid #c5cbd3; border
 .ro-banner { margin: 12px 20px 0; padding: 12px 14px; border-radius: var(--radius); background: var(--bad-bg); border: 1px solid #f4b8a8; color: #7a2410; font-size: 13.5px; line-height: 1.5; }
 .ro-banner b { color: #5c1a0a; }
 @media (max-width: 900px) { .ro-banner { margin: 10px 16px 0; } }
+
+/* Web giao hàng An Tâm (điện thoại trước) – dùng chung cho trang /giao-hang và chế độ giao hàng của bản online */
+#gh-root {
+  --gh-bg: #f2f4f3;
+  --gh-panel: #ffffff;
+  --gh-ink: #1b2420;
+  --gh-muted: #66736d;
+  --gh-line: #dde3e0;
+  --gh-brand: #0f6e5a;
+  --gh-brand-soft: #e3f2ee;
+  --gh-ok: #13804b;
+  --gh-ok-bg: #e2f5ea;
+  --gh-bad: #c4320a;
+  --gh-bad-bg: #fde8e4;
+  --gh-warn: #93600a;
+  --gh-warn-bg: #fff3d6;
+  --gh-info: #2459a8;
+  --gh-info-bg: #e5eefb;
+  min-height: 100vh; background: var(--gh-bg); color: var(--gh-ink);
+  font-family: "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif; font-size: 15px; line-height: 1.45;
+  max-width: 720px; margin: 0 auto; padding-bottom: 40px;
+}
+body.gh-mode { background: #f2f4f3; margin: 0; }
+body.gh-mode #app { display: none !important; }
+#gh-root * { box-sizing: border-box; }
+#gh-root h1, #gh-root h3 { margin: 0; }
+.gh-muted { color: var(--gh-muted); }
+.gh-pad { padding: 4px 14px 12px; margin: 0; }
+.gh-red { color: var(--gh-bad); }
+
+/* nút */
+.gh-btn {
+  font: inherit; border: 1px solid var(--gh-line); background: var(--gh-panel); color: var(--gh-ink);
+  border-radius: 10px; padding: 9px 14px; cursor: pointer; min-height: 42px;
+}
+.gh-btn:disabled { opacity: .55; }
+.gh-btn.sm { padding: 6px 10px; min-height: 36px; font-size: 14px; }
+.gh-btn.primary { background: var(--gh-brand); border-color: var(--gh-brand); color: #fff; font-weight: 600; }
+.gh-btn.ok { background: var(--gh-ok); border-color: var(--gh-ok); color: #fff; font-weight: 600; }
+.gh-btn.danger { background: var(--gh-bad); border-color: var(--gh-bad); color: #fff; font-weight: 600; }
+.gh-btn.ghost { background: transparent; border-color: transparent; color: var(--gh-muted); }
+.gh-btn.big { width: 100%; min-height: 48px; font-size: 16px; }
+
+/* đăng nhập */
+.gh-login { padding: 40px 20px; max-width: 400px; margin: 0 auto; text-align: center; }
+.gh-logo { font-size: 48px; }
+.gh-login h1 { font-size: 22px; margin: 6px 0 4px; color: var(--gh-brand); }
+.gh-login form { display: grid; gap: 14px; text-align: left; margin-top: 22px; background: var(--gh-panel); padding: 18px; border-radius: 14px; border: 1px solid var(--gh-line); }
+.gh-login label { display: grid; gap: 4px; font-weight: 600; font-size: 14px; }
+.gh-login input, .gh-search, .gh-fail-box input {
+  font: inherit; font-size: 16px; padding: 11px 12px; border: 1px solid var(--gh-line); border-radius: 10px; width: 100%; background: #fff; color: var(--gh-ink);
+}
+.gh-err { color: var(--gh-bad); margin: 0; min-height: 1em; font-size: 14px; }
+
+/* thanh trên + chọn ngày */
+.gh-top {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px; padding: 10px 14px;
+  background: var(--gh-brand); color: #fff; position: sticky; top: 0; z-index: 5;
+}
+.gh-who { display: flex; align-items: center; gap: 10px; min-width: 0; }
+.gh-who b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gh-avatar { font-size: 24px; }
+.gh-sub { font-size: 12px; opacity: .8; }
+.gh-top-actions { display: flex; gap: 6px; flex: none; }
+.gh-top .gh-btn { background: rgba(255,255,255,.14); border-color: rgba(255,255,255,.25); color: #fff; }
+.gh-datebar {
+  display: flex; align-items: center; gap: 6px; padding: 10px 14px; background: var(--gh-panel); border-bottom: 1px solid var(--gh-line);
+  position: sticky; top: 56px; z-index: 4;
+}
+.gh-date { flex: 1; display: grid; position: relative; text-align: center; font-weight: 700; min-width: 0; }
+.gh-date span { padding: 6px 4px; border: 1px solid var(--gh-line); border-radius: 10px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.gh-date input { position: absolute; inset: 0; opacity: 0; width: 100%; cursor: pointer; }
+
+.gh-main { padding: 12px 12px 0; display: grid; gap: 12px; }
+.gh-summary { background: var(--gh-panel); border: 1px solid var(--gh-line); border-radius: 14px; padding: 12px 14px; }
+.gh-progress { height: 10px; background: var(--gh-line); border-radius: 99px; overflow: hidden; }
+.gh-progress div { height: 100%; background: var(--gh-ok); border-radius: 99px; transition: width .3s; }
+.gh-sum-line { margin-top: 8px; font-size: 14px; }
+.gh-tabs { display: flex; gap: 6px; overflow-x: auto; padding-bottom: 2px; }
+.gh-tab { font: inherit; font-size: 14px; white-space: nowrap; border: 1px solid var(--gh-line); background: var(--gh-panel); color: var(--gh-ink); border-radius: 99px; padding: 7px 12px; cursor: pointer; }
+.gh-tab.on { background: var(--gh-brand); border-color: var(--gh-brand); color: #fff; }
+
+/* tuyến + điểm giao */
+.gh-route { background: var(--gh-panel); border: 1px solid var(--gh-line); border-radius: 14px; overflow: hidden; }
+.gh-route-head { display: flex; justify-content: space-between; align-items: center; gap: 10px; padding: 12px 14px; background: var(--gh-brand-soft); }
+.gh-route-code { font-size: 20px; font-weight: 800; color: var(--gh-brand); }
+.gh-route-name { font-size: 14px; color: var(--gh-muted); }
+.gh-route-count { text-align: right; }
+.gh-route-count b { font-size: 20px; display: block; }
+.gh-route-count small { color: var(--gh-muted); }
+.gh-load { padding: 8px 14px; border-bottom: 1px solid var(--gh-line); }
+.gh-load summary { cursor: pointer; font-weight: 600; font-size: 14px; color: var(--gh-brand); padding: 4px 0; }
+.gh-stop { padding: 12px 14px; border-top: 1px solid var(--gh-line); display: grid; gap: 6px; }
+.gh-stop:first-of-type { border-top: 0; }
+.gh-stop.is-ok { background: #f6fbf8; }
+.gh-stop.is-ok .gh-stop-name b { color: var(--gh-muted); }
+.gh-stop.is-fail { background: #fff8f6; }
+.gh-stop-top { display: flex; gap: 10px; align-items: flex-start; }
+.gh-stt { flex: none; width: 28px; height: 28px; border-radius: 50%; background: var(--gh-brand); color: #fff; display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+.is-ok .gh-stt { background: var(--gh-ok); }
+.is-fail .gh-stt { background: var(--gh-bad); }
+.gh-stop-name { min-width: 0; }
+.gh-stop-name b { font-size: 16px; }
+.gh-codes { font-size: 13px; color: var(--gh-muted); }
+.gh-link { color: var(--gh-info); text-decoration: none; }
+.gh-addr { display: block; }
+.gh-phones { display: flex; flex-wrap: wrap; gap: 4px 12px; }
+.gh-phones .gh-link { font-weight: 600; }
+.gh-note { font-size: 14px; background: var(--gh-warn-bg); color: #5c3d05; border-radius: 8px; padding: 6px 9px; }
+.gh-qty { display: flex; flex-wrap: wrap; gap: 6px; }
+.gh-qty span { display: inline-flex; align-items: baseline; gap: 5px; border: 1px solid var(--gh-line); border-radius: 8px; padding: 3px 8px; background: #fafbfa; }
+.gh-qty small { color: var(--gh-muted); font-size: 12px; }
+.gh-qty.big span { padding: 6px 10px; }
+.gh-qty.big b { font-size: 17px; }
+.gh-badges { display: flex; flex-wrap: wrap; gap: 6px; }
+.gh-badge { font-size: 13px; padding: 3px 9px; border-radius: 99px; font-weight: 600; }
+.gh-badge.ok { background: var(--gh-ok-bg); color: var(--gh-ok); }
+.gh-badge.bad { background: var(--gh-bad-bg); color: var(--gh-bad); }
+.gh-badge.warn { background: var(--gh-warn-bg); color: var(--gh-warn); }
+.gh-badge.info { background: var(--gh-info-bg); color: var(--gh-info); }
+.gh-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+.gh-actions .gh-btn { flex: 1; min-width: 130px; }
+.gh-fail-box { display: grid; gap: 8px; background: var(--gh-bad-bg); padding: 10px; border-radius: 10px; }
+.gh-reasons { display: flex; flex-wrap: wrap; gap: 6px; }
+.gh-chip { font: inherit; font-size: 13px; border: 1px solid #f2b8a8; background: #fff; color: var(--gh-ink); border-radius: 99px; padding: 6px 10px; cursor: pointer; }
+.gh-search { font-size: 15px; }
+
+/* ngày khác / trống */
+.gh-card { background: var(--gh-panel); border: 1px solid var(--gh-line); border-radius: 14px; padding: 12px 14px; }
+.gh-card h3 { font-size: 15px; margin-bottom: 8px; }
+.gh-days { display: grid; gap: 6px; }
+.gh-day { font: inherit; text-align: left; border: 1px solid var(--gh-line); background: #fafbfa; border-radius: 10px; padding: 8px 12px; cursor: pointer; display: grid; color: var(--gh-ink); }
+.gh-day span { font-size: 13px; color: var(--gh-muted); }
+.gh-empty { text-align: center; padding: 28px 16px; background: var(--gh-panel); border: 1px solid var(--gh-line); border-radius: 14px; }
+.gh-empty p { margin: 6px 0; }
+.gh-empty-ico { font-size: 40px; }
+
+.gh-toasts { position: fixed; left: 12px; right: 12px; bottom: 16px; display: grid; gap: 8px; z-index: 50; pointer-events: none; max-width: 520px; margin: 0 auto; }
+.gh-toast { background: #1d2a25; color: #fff; padding: 11px 14px; border-radius: 10px; font-size: 14px; box-shadow: 0 4px 16px rgba(0,0,0,.2); }
+.gh-toast.err { background: var(--gh-bad); }
+
+@media (max-width: 380px) {
+  .gh-top-actions .ghost { display: none; }
+  .gh-datebar #gh-today { display: none; }
+}
 </style>
 <div id="app">
   <aside id="sidebar">
@@ -295,6 +440,7 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid #c5cbd3; border
       <div class="nav-group">Danh mục</div>
       <a href="#/hang" data-route="hang">Mặt hàng</a>
       <a href="#/tuyen" data-route="tuyen" data-only="TP">Tuyến / nơi nhận</a>
+      <a href="#/giao-hang-tk" data-route="giao-hang-tk" data-only="TP">Tài khoản giao hàng</a>
       <div class="nav-group ro-hide">Hệ thống</div>
       <a href="#/cai-dat" data-route="cai-dat">Cài đặt &amp; dữ liệu</a>
       <a href="#/lich-su" data-route="lich-su">Lịch sử thao tác</a>
@@ -331,7 +477,9 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid #c5cbd3; border
      kho/<kho>/days/<yyyy-mm-dd>  {date, v: {id: phiếu|null}}       – các phiếu của 1 ngày
      kho/<kho>/docs/<id>          biên bản kiểm kê / bàn giao / kebab / kê đơn
      kho/<kho>/plans/<yyyy-mm>    {ym, p: {id: dòng kế hoạch|null}}
+     kho/TP/giao/<yyyy-mm-dd>     {date, d: {mã khách: kết quả giao|null}}  – web giao hàng ghi
      log/<yyyy-mm-dd>             {date, e: {id: thao tác}}
+   Tài khoản giao hàng nằm trong cài đặt: s.drivers {id: {nick, name, phone, routes, active, salt, pin}|null}
    null = đã xóa (ghi gộp từng phần nên mỗi người sửa phiếu riêng không đè lên nhau). */
 window.ANTAM_ONLINE = true;
 
@@ -375,6 +523,7 @@ const Backend = (() => {
     staff: [], stocktake_threshold: 0.01, kebab_sizes: [50, 45, 40, 35, 30, 25, 20, 15, 10, 5],
     plan_depts: ['Xưởng', 'Văn phòng'], paper: 'A4',
     routing: { rules: [], memory: {} },
+    drivers: {},
   };
 
   const st = {
@@ -430,6 +579,8 @@ const Backend = (() => {
     doc: (wh, id) => dbx().doc(`kho/${wh}/docs/${id}`),
     plans: wh => dbx().collection(`kho/${wh}/plans`),
     planMonth: (wh, ym) => dbx().doc(`kho/${wh}/plans/${ym}`),
+    giao: d => dbx().doc(`kho/TP/giao/${d}`),
+    giaoAll: () => dbx().collection('kho/TP/giao'),
     logs: () => dbx().collection('log'),
     logDay: d => dbx().doc('log/' + d),
   };
@@ -498,7 +649,12 @@ const Backend = (() => {
     }
     st.snapshotAt = snap.at || '';
   }
-  async function init() {
+  // gọi nhiều lần được (web giao hàng → web kho): chỉ kết nối 1 lần
+  function init() {
+    if (!st.initP) st.initP = doInit().then(() => { st.ready = true; }, e => { st.initP = null; throw e; });
+    return st.initP;
+  }
+  async function doInit() {
     if (VIEW) {
       const el = document.getElementById('antam-snapshot');
       loadSnapshot(JSON.parse(el ? el.textContent : '{}'));
@@ -925,8 +1081,9 @@ const Backend = (() => {
   }
   // Toàn bộ dữ liệu 2 kho (đọc mới từ kho dữ liệu): dùng để sao lưu và để cập nhật trang xem công khai
   async function exportBackup() {
-    const out = { format: 'kho-antam-backup', version: 1, at: nowStr(), settings: st.settings, routes: st.routes, warehouses: {} };
+    const out = { format: 'kho-antam-backup', version: 1, at: nowStr(), settings: st.settings, routes: st.routes, warehouses: {}, deliveries: {} };
     const asMap = snap => Object.fromEntries(snap.docs.map(d => [d.id, d.data()]));
+    if (!VIEW) out.deliveries = asMap(await ref.giaoAll().orderBy('date', 'desc').limit(400).get());
     for (const w of WAREHOUSES) {
       if (VIEW) { out.warehouses[w] = { products: st.products[w], days: st.days[w], docs: st.docs[w], plans: st.plans[w] }; continue; }
       const [p, days, docs, plans] = await Promise.all([ref.products(w).get(), ref.days(w).orderBy('date', 'desc').limit(1000).get(),
@@ -936,14 +1093,156 @@ const Backend = (() => {
     return JSON.stringify(out);
   }
 
+  /* ---------------------------------------------------------- web giao hàng (mỗi người giao 1 nick + mã PIN) */
+  // Giống server.py: pin = sha256("salt:PIN"), người giao của tuyến = chọn ở phân tuyến ngày đó, không thì người có tuyến thường chạy
+  async function pinHash(salt, pin) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${salt}:${pin}`));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  const randHex = n => Array.from(crypto.getRandomValues(new Uint8Array(n))).map(b => b.toString(16).padStart(2, '0')).join('');
+  const normNick = v => text(v).replace(/\s+/g, '').toLowerCase();
+  const drivers = () => Object.fromEntries(live(settings().drivers));
+  const publicDriver = (id, d) => ({ id, nick: d.nick || '', name: d.name || '', phone: d.phone || '', routes: d.routes || [],
+    active: d.active !== false, has_pin: !!d.pin });
+  const custKey = r => text(r.crm) || text(r.code) || text(r.cust);
+  function routingDoc(d) {
+    let best = null;
+    for (const doc of Object.values(st.docs.TP || {})) {
+      if (!doc || doc.kind !== 'routing' || doc.date !== d) continue;
+      if (!best || (doc.updated_at || '') > (best.updated_at || '')) best = doc;
+    }
+    return best ? best.data || {} : null;
+  }
+  function routeDriver(data, code, drv) {
+    const a = (data && data.assign) || {};
+    if (code in a) return a[code] || '';
+    const hit = Object.entries(drv).find(([, d]) => d.active !== false && (d.routes || []).some(c => text(c).toLowerCase() === code.toLowerCase()));
+    return hit ? hit[0] : '';
+  }
+  function myRoutes(id, d, drv) {
+    const data = routingDoc(d);
+    if (!data) return { data: null, routes: [] };
+    const names = {}, order = [];
+    live(st.routes).map(([, r]) => r).sort((a, b) => (a.sort || 0) - (b.sort || 0)).forEach(r => {
+      const c = text(r.code).replace(/\s+/g, '').toLowerCase();
+      if (c && !(c in names)) { names[c] = r.name || ''; order.push(c); }
+    });
+    const groups = new Map();
+    for (const row of data.rows || []) {
+      const code = text(row.route);
+      if (code && routeDriver(data, code, drv) === id) { if (!groups.has(code)) groups.set(code, []); groups.get(code).push(row); }
+    }
+    const pos = c => { const i = order.indexOf(c.toLowerCase()); return i < 0 ? 999 : i; };
+    const routes = Array.from(groups, ([code, rows]) => ({ code, name: names[code.toLowerCase()] || '', rows }))
+      .sort((a, b) => pos(a.code) - pos(b.code) || a.code.localeCompare(b.code));
+    return { data, routes };
+  }
+  async function deliveriesOf(d) {
+    if (VIEW) return {};
+    try { return Object.fromEntries(live((docData(await ref.giao(d).get()) || {}).d)); } catch (e) { throw dbError(e); }
+  }
+  // dữ liệu phân tuyến kho TP (điện thoại người giao chỉ tải phần này)
+  async function ensureGiaoData() {
+    if (VIEW || st.giaoLive || (st.wh === 'TP' && st.loaded)) return;
+    st.giaoLive = true;
+    await subscribe(st.globalSubs, ref.docs('TP').orderBy('date', 'desc').limit(500), s => {
+      const m = {}; s.docs.forEach(d => { m[d.id] = d.data(); }); st.docs.TP = m;
+    }, 'giao-docs');
+    st.loaded = true;
+  }
+  function ghAuth(token) {
+    const [id, sig] = text(token).split('.');
+    const d = drivers()[id];
+    if (!d || d.active === false || !sig || sig !== String(d.pin || '').slice(0, 24)) throw new ApiError(401, 'Phiên đăng nhập đã hết hạn hoặc tài khoản bị khóa – hãy đăng nhập lại');
+    return [id, d];
+  }
+  async function ghApi(method, action, q, body, token) {
+    if (action === 'login' && method === 'POST') {
+      const nick = normNick(body.nick), pin = text(body.pin);
+      const hit = Object.entries(drivers()).find(([, d]) => normNick(d.nick) === nick && d.active !== false && d.pin);
+      if (!hit || (await pinHash(hit[1].salt || '', pin)) !== hit[1].pin) { await sleep(500); throw new ApiError(401, 'Sai nick hoặc mã PIN'); }
+      return { token: `${hit[0]}.${hit[1].pin.slice(0, 24)}`, driver: publicDriver(hit[0], hit[1]) };
+    }
+    const [id, me] = ghAuth(token);
+    await ensureGiaoData();
+    const drv = drivers();
+    if (action === 'day' && method === 'GET') {
+      const d = validDate(q.date || today());
+      const { data, routes } = myRoutes(id, d, drv);
+      const done = routes.length ? await deliveriesOf(d) : {};
+      const keys = new Set(routes.flatMap(g => g.rows.map(custKey)));
+      return { date: d, driver: publicDriver(id, me), planned: !!data, cols: (data && data.cols) || [], routes,
+        deliveries: Object.fromEntries(Object.entries(done).filter(([k]) => keys.has(k))) };
+    }
+    if (action === 'days' && method === 'GET') {
+      const dates = Array.from(new Set(Object.values(st.docs.TP || {}).filter(x => x && x.kind === 'routing').map(x => x.date))).sort().reverse().slice(0, 45);
+      const mine = dates.map(d => [d, myRoutes(id, d, drv).routes]).filter(([, r]) => r.length);
+      let done = {};
+      if (mine.length && !VIEW) {
+        try { (await ref.giaoAll().orderBy('date', 'desc').limit(60).get()).docs.forEach(x => { done[x.id] = Object.fromEntries(live((x.data() || {}).d)); }); }
+        catch (e) { done = {}; }
+      }
+      return mine.map(([d, routes]) => {
+        const keys = routes.flatMap(g => g.rows.map(custKey));
+        return { date: d, routes: routes.map(g => g.code), count: keys.length, done: keys.filter(k => ((done[d] || {})[k] || {}).status === 'ok').length };
+      });
+    }
+    if (action === 'deliver' && method === 'POST') {
+      const d = validDate(body.date), key = text(body.key), status = text(body.status), note = text(body.note).slice(0, 300);
+      const g = myRoutes(id, d, drv).routes.find(x => x.rows.some(r => custKey(r) === key));
+      if (!key || !g) throw new ApiError(403, `Khách này không thuộc tuyến của bạn ngày ${d}`);
+      if (!['ok', 'fail', ''].includes(status)) throw new ApiError(400, 'Trạng thái không hợp lệ');
+      const rec = status ? { status, note, at: nowStr(), driver: id, route: g.code } : null;
+      await mergeInto(ref.giao(d), { d: { [key]: rec } }, { date: d });
+      const who = st.who; st.who = '🚚 ' + (me.name || me.nick);
+      await log({ ok: 'Đã giao', fail: 'Không giao được', '': 'Bỏ đánh dấu giao' }[status], `${key} ${d}`, note, 'TP');
+      st.who = who;
+      return { ok: true };
+    }
+    throw new ApiError(404, 'Không có chức năng này');
+  }
+  async function saveDriver(data) {
+    const all = drivers();
+    const id = text(data.id) || newId('g');
+    const nick = normNick(data.nick);
+    if (!/^[a-z0-9._-]{2,30}$/.test(nick)) throw new ApiError(400, 'Tên đăng nhập (nick) 2–30 ký tự, chỉ gồm chữ không dấu, số, dấu chấm, gạch');
+    if (Object.entries(all).some(([k, d]) => normNick(d.nick) === nick && k !== id)) throw new ApiError(409, `Nick ${nick} đã có người dùng`);
+    const old = all[id] || {};
+    const rec = { nick, name: text(data.name) || nick, phone: text(data.phone), routes: (data.routes || []).map(c => text(c).replace(/\s+/g, '')).filter(Boolean),
+      active: data.active !== false, salt: old.salt || '', pin: old.pin || '' };
+    const pin = text(data.pin);
+    if (pin) {
+      if (!/^\d{4,8}$/.test(pin)) throw new ApiError(400, 'Mã PIN gồm 4–8 chữ số');
+      rec.salt = randHex(8); rec.pin = await pinHash(rec.salt, pin);
+    }
+    if (!rec.pin) throw new ApiError(400, 'Cần đặt mã PIN cho tài khoản mới');
+    await mergeInto(ref.settings(), { s: { drivers: { [id]: rec } } }, { s: {} });
+    st.settings = deepMerge(clone(st.settings || {}), { drivers: { [id]: rec } });
+    await log('Lưu tài khoản giao hàng', nick, pin && old.pin ? 'đổi PIN' : '', 'TP');
+    return publicDriver(id, rec);
+  }
+
   /* ---------------------------------------------------------- bộ định tuyến API (giống server.py) */
-  async function handle(method, fullPath, body) {
+  async function handle(method, fullPath, body, opts = {}) {
     const [pathPart, qs] = fullPath.split('?');
     const q = Object.fromEntries(new URLSearchParams(qs || ''));
     const parts = pathPart.replace(/^\/+|\/+$/g, '').split('/');
     const res = parts[0], arg = parts[1] ? decodeURIComponent(parts[1]) : null;
     const wh = q.wh || st.wh;
     if (!WAREHOUSES.includes(wh)) throw new ApiError(400, 'Kho không hợp lệ: ' + wh);
+    if (res === 'gh') return ghApi(method, arg, q, body || {}, opts.token || '');
+    if (res === 'drivers') {
+      if (method === 'GET') return Object.entries(drivers()).map(([k, d]) => publicDriver(k, d));
+      if (method === 'POST') return saveDriver(body || {});
+      if (method === 'DELETE' && arg) {
+        const d = drivers()[arg];
+        await mergeInto(ref.settings(), { s: { drivers: { [arg]: null } } }, { s: {} });
+        st.settings = deepMerge(clone(st.settings || {}), { drivers: { [arg]: null } });
+        await log('Xóa tài khoản giao hàng', (d && d.nick) || arg, '', 'TP');
+        return { ok: true };
+      }
+    }
+    if (res === 'deliveries' && method === 'GET') return deliveriesOf(validDate(q.date));
     if (!st.days[wh] && !VIEW && res !== 'meta' && res !== 'settings' && res !== 'routes') throw new ApiError(400, 'Chưa tải dữ liệu kho ' + wh);
 
     if (res === 'meta' && method === 'GET') {
@@ -955,8 +1254,11 @@ const Backend = (() => {
       }
       planRows(wh).forEach(r => { if (r.proposer) people.add(r.proposer.trim()); });
       const sortVi = a => [...a].sort((x, y) => x.toLowerCase().localeCompare(y.toLowerCase(), 'vi'));
+      const drv = drivers();
+      delete s.drivers;
       return {
         wh, settings: s, warehouse: s.warehouses[wh], products: products(wh),
+        drivers: Object.entries(drv).map(([k, d]) => publicDriver(k, d)),
         routes: live(st.routes).map(([id, r]) => Object.assign({ id }, r)).sort((a, b) => (a.sort || 0) - (b.sort || 0)),
         people: sortVi(people), parties: sortVi(parties),
         counts: Object.fromEntries(WAREHOUSES.map(w => [w, st.days[w] ? vouchers(w).length : 0])),
@@ -971,7 +1273,7 @@ const Backend = (() => {
           const whs = cur.warehouses;
           for (const [code, d] of Object.entries(v || {})) if (whs[code]) ['name', 'department', 'parties'].forEach(f => { if (d[f] !== undefined) whs[code][f] = d[f]; });
           next.warehouses = Object.fromEntries(WAREHOUSES.map(c => [c, { name: whs[c].name, department: whs[c].department, parties: whs[c].parties }]));
-        } else if (k in DEFAULT_SETTINGS) next[k] = v;
+        } else if (k in DEFAULT_SETTINGS && k !== 'drivers') next[k] = v; // tài khoản giao hàng sửa ở /drivers
       }
       await write(() => ref.settings().set({ s: next }));
       st.settings = next;
@@ -1173,6 +1475,11 @@ const Backend = (() => {
       const summary = {};
       if (snap.settings && Object.keys(snap.settings).length) { await write(() => ref.settings().set({ s: snap.settings })); st.settings = snap.settings; }
       await write(() => ref.routes().set({ r: snap.routes || {} })); st.routes = snap.routes || {};
+      if (snap.deliveries) {
+        const oldG = (await ref.giaoAll().limit(1000).get()).docs.map(x => x.id);
+        for (const id of oldG) if (!snap.deliveries[id]) await write(() => ref.giao(id).delete());
+        for (const [id, doc] of Object.entries(snap.deliveries)) if (doc) await write(() => ref.giao(id).set(doc));
+      }
       for (const w of WAREHOUSES) {
         const d = snap.warehouses[w];
         if (!d) continue;
@@ -1227,6 +1534,7 @@ const Backend = (() => {
 
   return {
     init, setWh, handle,
+    get ready() { return !!st.ready; },
     set who(v) { st.who = v; },
     get myName() { return st.myName || ''; },
     get canWrite() { return VIEW ? false : st.canWrite; },
@@ -1247,6 +1555,306 @@ const Backend = (() => {
 })();
 </script>
 <script id="antam-app">'use strict';
+/* Web giao hàng An Tâm – mỗi người giao hàng 1 tài khoản (nick + mã PIN, tạo ở web kho › Tài khoản giao hàng).
+   Sau khi đăng nhập: chọn ngày, thấy các tuyến kho đã sắp cho mình ở mục Phân tuyến giao hàng (khách, địa chỉ,
+   SĐT, số lượng từng loại bánh), đánh dấu Đã giao / Không giao được – web kho thấy ngay kết quả.
+   Bản chạy máy chủ: trang /giao-hang gọi /api/gh/…; bản online: chạy trong trang Kho An Tâm, gọi Backend.handle. */
+const GiaoHang = (() => {
+  const ONLINE = !!window.ANTAM_ONLINE;
+  const WEEKDAY = ['Chủ nhật', 'Thứ Hai', 'Thứ Ba', 'Thứ Tư', 'Thứ Năm', 'Thứ Sáu', 'Thứ Bảy'];
+  const FAIL_REASONS = ['Khách vắng nhà', 'Khách hẹn giao lại', 'Khách không nhận', 'Sai địa chỉ / SĐT', 'Hết hàng trên xe'];
+  const st = { token: '', driver: null, date: '', data: null, days: [], filter: 'all', search: '', failing: null, busy: 0, root: null, onExit: null, timer: null };
+
+  /* ---------------------------------------------------------- tiện ích */
+  const $ = (sel, root = st.root) => root.querySelector(sel);
+  const $$ = (sel, root = st.root) => Array.from(root.querySelectorAll(sel));
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+  function store(key, val) {
+    try {
+      if (val === undefined) return JSON.parse(localStorage.getItem('gh.' + key));
+      if (val === null) localStorage.removeItem('gh.' + key); else localStorage.setItem('gh.' + key, JSON.stringify(val));
+    } catch (e) { return null; }
+    return undefined;
+  }
+  const noAccent = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
+  const matches = (q, hay) => { const h = noAccent(hay); return noAccent(q).split(/\s+/).filter(Boolean).every(t => h.includes(t)); };
+  const fmt = n => Number(n).toLocaleString('vi-VN', { maximumFractionDigits: 3 });
+  const z = n => String(n).padStart(2, '0');
+  const isoDate = (d = new Date()) => `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`;
+  const addDays = (iso, n) => { const d = new Date(iso + 'T00:00:00'); d.setDate(d.getDate() + n); return isoDate(d); };
+  const vnDate = iso => { const [y, m, d] = iso.split('-'); return `${d}/${m}/${y}`; };
+  const dayLabel = iso => {
+    const t = isoDate();
+    const rel = iso === t ? 'Hôm nay' : iso === addDays(t, 1) ? 'Ngày mai' : iso === addDays(t, -1) ? 'Hôm qua' : WEEKDAY[new Date(iso + 'T00:00:00').getDay()];
+    return `${rel}, ${vnDate(iso)}`;
+  };
+  // Mã khách để ghi kết quả giao (giống server.py cust_key): mã CRM, không có thì mã đầu tên khách, không có nữa thì tên
+  const custKey = r => String(r.crm || '').trim() || String(r.code || '').trim() || String(r.cust || '').trim();
+  function toast(msg, err) {
+    const box = $('#gh-toasts');
+    if (!box) return;
+    const el = document.createElement('div');
+    el.className = 'gh-toast' + (err ? ' err' : '');
+    el.textContent = msg;
+    box.appendChild(el);
+    setTimeout(() => el.remove(), err ? 5000 : 2500);
+  }
+
+  async function call(method, path, body) {
+    if (ONLINE) {
+      try { return await Backend.handle(method, '/gh/' + path, body, { token: st.token }); } catch (e) {
+        const err = new Error(e.message || String(e)); err.status = e.status; throw err;
+      }
+    }
+    const opt = { method, headers: { 'X-GH-Token': st.token } };
+    if (body !== undefined) { opt.body = JSON.stringify(body); opt.headers['Content-Type'] = 'application/json'; }
+    let res;
+    try { res = await fetch('/api/gh/' + path, opt); } catch (e) { throw new Error('Mất kết nối tới web kho – kiểm tra wifi/mạng rồi bấm ↻.'); }
+    let data = null;
+    try { data = await res.json(); } catch (e) { /* trống */ }
+    if (!res.ok) { const err = new Error((data && data.error) || ('Lỗi ' + res.status)); err.status = res.status; throw err; }
+    return data;
+  }
+  async function guard(fn) {
+    st.busy++;
+    try { return await fn(); } catch (e) {
+      if (e.status === 401 && st.token) { logout(e.message); return undefined; }
+      toast(e.message, true); return undefined;
+    } finally { st.busy--; }
+  }
+
+  /* ---------------------------------------------------------- đăng nhập */
+  function drawLogin(msg) {
+    stopTimer();
+    st.root.innerHTML = `<div class="gh-login">
+      <div class="gh-logo">🚚</div><h1>Giao hàng An Tâm</h1>
+      <p class="gh-muted">Đăng nhập bằng nick và mã PIN do kho cấp để xem tuyến giao của bạn.</p>
+      <form id="gh-login-form" autocomplete="on">
+        <label>Nick<input id="gh-nick" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" value="${esc(store('nick') || '')}" required></label>
+        <label>Mã PIN<input id="gh-pin" name="password" type="password" inputmode="numeric" autocomplete="current-password" required></label>
+        <button class="gh-btn primary big" type="submit">Đăng nhập</button>
+        <p class="gh-err" id="gh-login-err">${esc(msg || '')}</p>
+      </form>
+      ${st.onExit ? '<button class="gh-btn ghost" id="gh-exit">← Về web kho</button>' : ''}
+    </div><div id="gh-toasts" class="gh-toasts"></div>`;
+    const nick = $('#gh-nick'), pin = $('#gh-pin');
+    (nick.value ? pin : nick).focus();
+    $('#gh-login-form').onsubmit = async e => {
+      e.preventDefault();
+      const btn = $('button[type=submit]');
+      btn.disabled = true; btn.textContent = 'Đang đăng nhập…';
+      try {
+        const res = await call('POST', 'login', { nick: nick.value, pin: pin.value });
+        st.token = res.token; st.driver = res.driver;
+        store('token', st.token); store('driver', st.driver); store('nick', res.driver.nick);
+        st.date = isoDate();
+        await showMain();
+      } catch (err) {
+        $('#gh-login-err').textContent = err.message;
+        btn.disabled = false; btn.textContent = 'Đăng nhập';
+      }
+    };
+    if (st.onExit) $('#gh-exit').onclick = () => exit();
+  }
+  function logout(msg) {
+    st.token = ''; st.driver = null; st.data = null;
+    store('token', null); store('driver', null);
+    drawLogin(msg);
+  }
+  function exit() { stopTimer(); if (st.onExit) st.onExit(); }
+
+  /* ---------------------------------------------------------- màn hình chính */
+  async function showMain() {
+    st.root.innerHTML = `<header class="gh-top">
+        <div class="gh-who"><span class="gh-avatar">🚚</span><div><b id="gh-name"></b><div class="gh-sub">Giao hàng An Tâm</div></div></div>
+        <div class="gh-top-actions"><button class="gh-btn sm" id="gh-reload" title="Tải lại">↻</button>
+        <button class="gh-btn sm" id="gh-logout">Đăng xuất</button>${st.onExit ? '<button class="gh-btn sm ghost" id="gh-exit">Web kho</button>' : ''}</div>
+      </header>
+      <nav class="gh-datebar">
+        <button class="gh-btn sm" id="gh-prev" aria-label="Ngày trước">◀</button>
+        <label class="gh-date"><span id="gh-day-label"></span><input type="date" id="gh-date"></label>
+        <button class="gh-btn sm" id="gh-next" aria-label="Ngày sau">▶</button>
+        <button class="gh-btn sm" id="gh-today">Hôm nay</button>
+      </nav>
+      <main id="gh-main" class="gh-main"><p class="gh-muted">Đang tải…</p></main>
+      <div id="gh-toasts" class="gh-toasts"></div>`;
+    $('#gh-name').textContent = st.driver ? st.driver.name || st.driver.nick : '';
+    $('#gh-logout').onclick = () => logout();
+    if (st.onExit) $('#gh-exit').onclick = () => exit();
+    $('#gh-reload').onclick = () => loadDay();
+    $('#gh-prev').onclick = () => setDate(addDays(st.date, -1));
+    $('#gh-next').onclick = () => setDate(addDays(st.date, 1));
+    $('#gh-today').onclick = () => setDate(isoDate());
+    $('#gh-date').onchange = () => { if ($('#gh-date').value) setDate($('#gh-date').value); };
+    await setDate(st.date || isoDate());
+    startTimer();
+  }
+  async function setDate(d) {
+    st.date = d; st.failing = null;
+    $('#gh-date').value = d;
+    $('#gh-day-label').textContent = dayLabel(d);
+    await loadDay();
+  }
+  async function loadDay(silent) {
+    const d = st.date;
+    if (!silent) $('#gh-main').innerHTML = '<p class="gh-muted">Đang tải tuyến…</p>';
+    const [data, days] = await Promise.all([guard(() => call('GET', 'day?date=' + d)), guard(() => call('GET', 'days'))]);
+    if (d !== st.date || !st.token) return;
+    if (days) st.days = days;
+    if (!data) { if (!silent) $('#gh-main').innerHTML = '<p class="gh-muted">Không tải được dữ liệu. Bấm ↻ để thử lại.</p>'; return; }
+    st.data = data;
+    if (data.driver) { st.driver = data.driver; store('driver', st.driver); $('#gh-name').textContent = st.driver.name || st.driver.nick; }
+    draw();
+  }
+  function startTimer() {
+    stopTimer();
+    // tự cập nhật khi kho sửa phân tuyến (không làm gián đoạn lúc đang nhập lý do)
+    st.timer = setInterval(() => {
+      if (document.hidden || st.busy || st.failing || !st.token || !$('#gh-main')) return;
+      const y = window.scrollY;
+      loadDay(true).then(() => window.scrollTo(0, y));
+    }, 90000);
+  }
+  function stopTimer() { if (st.timer) clearInterval(st.timer); st.timer = null; }
+
+  const statusOf = r => (st.data.deliveries || {})[custKey(r)] || null;
+  function sumQty(rows) {
+    const s = {};
+    rows.forEach(r => Object.entries(r.qty || {}).forEach(([k, n]) => { s[k] = (s[k] || 0) + Number(n || 0); }));
+    return s;
+  }
+  function qtyChips(q, cls = '') {
+    const cols = st.data.cols || [];
+    const items = Object.entries(q || {}).filter(([, n]) => Number(n)).sort((a, b) => a[0] - b[0]);
+    return items.length ? `<div class="gh-qty ${cls}">${items.map(([k, n]) => `<span><small>${esc(cols[k] || 'SP ' + (+k + 1))}</small><b>${fmt(n)}</b></span>`).join('')}</div>` : '';
+  }
+  function phoneLinks(s) {
+    const parts = String(s || '').split(/[\/,;|]|\s[-–]\s|\s{2,}/).map(x => x.trim()).filter(Boolean);
+    return parts.map(p => {
+      const digits = p.replace(/[^\d+]/g, '');
+      return digits.replace(/\D/g, '').length >= 8 ? `<a class="gh-link" href="tel:${esc(digits)}">📞 ${esc(p)}</a>` : `<span>${esc(p)}</span>`;
+    }).join(' ');
+  }
+  const mapUrl = r => 'https://www.google.com/maps/search/?api=1&query=' + encodeURIComponent([r.addr || r.name || r.cust, r.q].filter(Boolean).join(', '));
+
+  function draw() {
+    const main = $('#gh-main');
+    const D = st.data;
+    const all = D.routes.flatMap(g => g.rows);
+    const done = all.filter(r => (statusOf(r) || {}).status === 'ok').length;
+    const fail = all.filter(r => (statusOf(r) || {}).status === 'fail').length;
+    const others = st.days.filter(x => x.date !== st.date).slice(0, 10);
+    const otherDays = others.length ? `<section class="gh-card"><h3>Các ngày có tuyến của bạn</h3><div class="gh-days">
+      ${others.map(x => `<button class="gh-day" data-date="${x.date}"><b>${esc(dayLabel(x.date))}</b><span>${esc(x.routes.join(', '))} · ${x.done}/${x.count} đã giao</span></button>`).join('')}
+      </div></section>` : '';
+    if (!D.routes.length) {
+      main.innerHTML = `<section class="gh-empty"><div class="gh-empty-ico">${D.planned ? '🛵' : '🗓'}</div>
+        <p><b>${D.planned ? 'Ngày này bạn chưa được sắp tuyến nào.' : 'Kho chưa phân tuyến cho ngày này.'}</b></p>
+        <p class="gh-muted">${D.planned ? 'Nếu cần, nhắn kho chọn bạn ở cột <b>Người giao</b> trong Phân tuyến giao hàng.' : 'Khi kho lưu Phân tuyến giao hàng của ngày này, tuyến của bạn sẽ hiện ở đây.'}</p></section>${otherDays}`;
+      bindDays();
+      return;
+    }
+    const tabs = [['all', `Tất cả ${all.length}`], ['todo', `Chưa giao ${all.length - done - fail}`], ['ok', `Đã giao ${done}`], ['fail', `Không giao được ${fail}`]];
+    main.innerHTML = `<section class="gh-summary">
+        <div class="gh-progress"><div style="width:${all.length ? Math.round(done * 100 / all.length) : 0}%"></div></div>
+        <div class="gh-sum-line"><b>${done}/${all.length}</b> khách đã giao${fail ? ` · <span class="gh-red">${fail} không giao được</span>` : ''} · ${D.routes.length} tuyến</div>
+      </section>
+      <div class="gh-tabs">${tabs.map(([k, l]) => `<button class="gh-tab ${st.filter === k ? 'on' : ''}" data-f="${k}">${esc(l)}</button>`).join('')}</div>
+      <input class="gh-search" id="gh-search" placeholder="Tìm khách, mã CRM, địa chỉ, SĐT…" value="${esc(st.search)}">
+      <div id="gh-routes"></div>${otherDays}`;
+    $$('.gh-tab').forEach(b => b.onclick = () => { st.filter = b.dataset.f; draw(); });
+    let t;
+    $('#gh-search').oninput = () => { clearTimeout(t); t = setTimeout(() => { st.search = $('#gh-search').value; drawRoutes(); }, 200); };
+    bindDays();
+    drawRoutes();
+  }
+  function bindDays() { $$('.gh-day').forEach(b => b.onclick = () => { setDate(b.dataset.date); window.scrollTo(0, 0); }); }
+  function visible(r) {
+    const s = (statusOf(r) || {}).status || '';
+    if (st.filter === 'todo' && s) return false;
+    if (st.filter === 'ok' && s !== 'ok') return false;
+    if (st.filter === 'fail' && s !== 'fail') return false;
+    return !st.search || matches(st.search, [r.crm, r.cust, r.q, r.addr, r.phone, r.note].join(' '));
+  }
+  function drawRoutes() {
+    const box = $('#gh-routes');
+    box.innerHTML = st.data.routes.map(g => {
+      const rows = g.rows.map((r, i) => [r, i]).filter(([r]) => visible(r));
+      const done = g.rows.filter(r => (statusOf(r) || {}).status === 'ok').length;
+      return `<section class="gh-route">
+        <div class="gh-route-head"><div><div class="gh-route-code">${esc(g.code)}</div><div class="gh-route-name">${esc(g.name || 'Tuyến ' + g.code)}</div></div>
+          <div class="gh-route-count"><b>${done}/${g.rows.length}</b><small>đã giao</small></div></div>
+        <details class="gh-load"><summary>Hàng cần mang theo tuyến</summary>${qtyChips(sumQty(g.rows), 'big') || '<p class="gh-muted">Không có số lượng.</p>'}</details>
+        ${rows.map(([r, i]) => stopCard(g, r, i)).join('') || '<p class="gh-muted gh-pad">Không có khách nào ở mục đang xem.</p>'}
+      </section>`;
+    }).join('');
+    $$('[data-act]', box).forEach(b => b.onclick = () => act(b.dataset.key, b.dataset.act, b));
+  }
+  function stopCard(g, r, i) {
+    const key = custKey(r), s = statusOf(r);
+    const status = s ? (s.status === 'ok' ? `<span class="gh-badge ok">✓ Đã giao ${esc((s.at || '').slice(11, 16))}</span>`
+      : `<span class="gh-badge bad">✗ Không giao được${s.note ? ': ' + esc(s.note) : ''}</span>`) : '';
+    const pay = r.pay ? `<span class="gh-badge ${/chua|no/.test(noAccent(r.pay)) ? 'warn' : 'info'}">${esc(r.pay)}</span>` : '';
+    const failing = st.failing === key;
+    return `<article class="gh-stop ${s ? 'is-' + s.status : ''}">
+      <div class="gh-stop-top"><span class="gh-stt">${i + 1}</span><div class="gh-stop-name"><b>${esc(r.name || r.cust)}</b>
+        <div class="gh-codes">${r.crm ? `CRM <b>${esc(r.crm)}</b>` : ''}${r.code ? ` · ${esc(r.code)}` : ''}${r.q ? ` · ${esc(r.q)}` : ''}</div></div></div>
+      ${r.addr || r.q ? `<a class="gh-link gh-addr" href="${mapUrl(r)}" target="_blank" rel="noopener">📍 ${esc(r.addr || r.q)}</a>` : ''}
+      ${r.phone ? `<div class="gh-phones">${phoneLinks(r.phone)}</div>` : ''}
+      ${r.note ? `<div class="gh-note">📝 ${esc(r.note)}</div>` : ''}
+      ${qtyChips(r.qty)}
+      ${status || pay ? `<div class="gh-badges">${status}${pay}</div>` : ''}
+      ${failing ? `<div class="gh-fail-box"><div class="gh-reasons">${FAIL_REASONS.map(x => `<button class="gh-chip" data-reason="${esc(x)}">${esc(x)}</button>`).join('')}</div>
+        <input id="gh-fail-note" placeholder="Lý do khác / ghi chú…" maxlength="200">
+        <div class="gh-actions"><button class="gh-btn danger" data-act="fail-save" data-key="${esc(key)}">Xác nhận không giao được</button>
+        <button class="gh-btn" data-act="fail-cancel" data-key="${esc(key)}">Hủy</button></div></div>`
+      : `<div class="gh-actions">${s ? `<button class="gh-btn" data-act="undo" data-key="${esc(key)}">↺ Hoàn tác</button>`
+        : `<button class="gh-btn ok" data-act="ok" data-key="${esc(key)}">✓ Đã giao</button><button class="gh-btn" data-act="fail" data-key="${esc(key)}">✗ Không giao được</button>`}</div>`}
+    </article>`;
+  }
+  async function act(key, action, btn) {
+    const keepScroll = fn => { const y = window.scrollY; fn(); window.scrollTo(0, y); };
+    if (action === 'fail') { st.failing = key; keepScroll(drawRoutes); bindReasons(); return; }
+    if (action === 'fail-cancel') { st.failing = null; keepScroll(drawRoutes); return; }
+    const status = action === 'ok' ? 'ok' : action === 'fail-save' ? 'fail' : '';
+    const note = status === 'fail' ? ($('#gh-fail-note') ? $('#gh-fail-note').value.trim() : '') : '';
+    if (status === 'fail' && !note) { toast('Chọn hoặc ghi lý do không giao được', true); return; }
+    btn.disabled = true;
+    const date = st.date;
+    const ok = await guard(() => call('POST', 'deliver', { date, key, status, note }));
+    if (!ok || date !== st.date) { btn.disabled = false; return; }
+    const m = Object.assign({}, st.data.deliveries);
+    if (status) m[key] = { status, note, at: nowStr() }; else delete m[key];
+    st.data.deliveries = m;
+    st.failing = null;
+    const day = st.days.find(x => x.date === date);
+    if (day) day.done = Object.values(m).filter(x => x.status === 'ok').length;
+    toast(status === 'ok' ? 'Đã ghi: đã giao' : status === 'fail' ? 'Đã ghi: không giao được' : 'Đã hoàn tác');
+    keepScroll(draw);
+  }
+  function bindReasons() {
+    $$('[data-reason]').forEach(b => b.onclick = () => { $('#gh-fail-note').value = b.dataset.reason; });
+    $$('[data-act]', $('#gh-routes')).forEach(b => b.onclick = () => act(b.dataset.key, b.dataset.act, b));
+    const inp = $('#gh-fail-note');
+    if (inp) inp.focus({ preventScroll: true });
+  }
+  function nowStr() { const d = new Date(); return `${isoDate(d)} ${z(d.getHours())}:${z(d.getMinutes())}:${z(d.getSeconds())}`; }
+
+  /* ---------------------------------------------------------- khởi động */
+  // root: phần tử chứa web giao hàng; onExit: (bản online) quay về web kho
+  async function start(root, opts = {}) {
+    st.root = root; st.onExit = opts.onExit || null;
+    document.body.classList.add('gh-mode');
+    document.title = 'Giao hàng An Tâm';
+    st.token = store('token') || ''; st.driver = store('driver') || null;
+    st.date = isoDate();
+    if (st.token) await showMain(); else drawLogin();
+  }
+  function onRemoteChange() { if (st.token && $('#gh-main') && !st.busy && !st.failing) loadDay(true); }
+  return { start, onRemoteChange, stop: stopTimer };
+})();
+
+'use strict';
 /* Web làm việc nội bộ – Kho Thành phẩm & Hàng hóa An Tâm.
    Mô phỏng quy trình của file Excel: Danh mục hàng, Danh mục tuyến, Sổ Nhập Xuất,
    Phiếu Nhập Xuất, Phiếu Điều chỉnh, Nhập Xuất Tồn, Thẻ kho, Kiểm kê, Bàn giao kho,
@@ -1628,6 +2236,7 @@ const ROUTES = [
   [/^tuyen$/, viewRoutes],
   [/^phan-tuyen$/, viewRoutingList],
   [/^phan-tuyen\/(moi|[\w-]+)$/, viewRouting],
+  [/^giao-hang-tk$/, viewDrivers],
   [/^cai-dat$/, viewSettings],
   [/^lich-su$/, viewLog],
 ];
@@ -1705,7 +2314,7 @@ async function switchWh(wh, keepPage) {
   toast('Đang làm việc: ' + S.meta.warehouse.name);
   if (keepPage) return;
   const { path } = parseHash();
-  const only = { 'tuyen': 'TP', 'phan-tuyen': 'TP', 'kh-ngay': 'NVL', 'kh-tuan': 'NVL', 'kh-thang': 'NVL' }[path.split('/')[0]];
+  const only = { 'tuyen': 'TP', 'phan-tuyen': 'TP', 'giao-hang-tk': 'TP', 'kh-ngay': 'NVL', 'kh-tuan': 'NVL', 'kh-thang': 'NVL' }[path.split('/')[0]];
   if (/\/(?!moi$)[\w-]+$/.test(path) || (only && only !== wh)) go('#/', { force: true }); else render();
 }
 
@@ -2716,6 +3325,17 @@ async function viewRouting(main, m) {
   const rName = c => { const r = routes.find(x => x.code.toLowerCase() === String(c).toLowerCase()); return r ? r.name : ''; };
   const ui = { filter: '', search: '', file: null, sheets: [], paste: null };
   const changedMemory = {};
+  // Người giao từng tuyến (chọn ở bảng tổng hợp; chưa chọn thì lấy người có tuyến thường chạy) + kết quả giao từ web giao hàng
+  d.assign = Object.assign({}, d.assign);
+  const drivers = (S.meta.drivers || []).filter(x => x.active);
+  const driverName = id => { const x = (S.meta.drivers || []).find(v => v.id === id); return x ? x.name || x.nick : ''; };
+  const routeDriver = code => routeDriverOf(d, code, S.meta.drivers || []);
+  let deliv = {};
+  async function loadDeliveries() {
+    deliv = (await guard(() => api('GET', '/deliveries?date=' + doc.date))) || {};
+    if ($('#rt-body') && d.rows.length) { const y = window.scrollY; drawBody(); window.scrollTo(0, y); }
+  }
+  const delivOf = r => deliv[custKeyOf(r)] || null;
 
   function assignAll(keepManual) {
     const cfg = routingCfg();
@@ -2759,7 +3379,7 @@ async function viewRouting(main, m) {
       ${d.rows.length ? '<button class="btn" id="rt-reauto">↻ Chia lại tự động (giữ tuyến chọn tay)</button>' : ''}</div>
       ${d.sheet ? `<p class="hint">Đang dùng: sheet <b>${esc(d.sheet)}</b> – ${d.rows.length} khách hoạt động / ${d.total} khách.</p>` : ''}</div>
       <div id="rt-body"></div>`;
-    $('#rt-date').onchange = () => { doc.date = $('#rt-date').value; setTitle('Phân tuyến giao hàng ' + vnDate(doc.date)); markDirty(); };
+    $('#rt-date').onchange = () => { doc.date = $('#rt-date').value; setTitle('Phân tuyến giao hàng ' + vnDate(doc.date)); markDirty(); loadDeliveries(); };
     const ta = $('#rt-paste');
     ta.onpaste = e => {
       const html = e.clipboardData && e.clipboardData.getData('text/html');
@@ -2812,23 +3432,29 @@ async function viewRouting(main, m) {
       <div class="kpi ${none ? 'bad' : ''}"><div class="k-label">Chưa có tuyến</div><div class="k-val">${none}</div></div>
       <div class="kpi"><div class="k-label">Khách trong sheet</div><div class="k-val">${d.total}</div></div></div>
       <h3 style="margin:14px 0 6px">Tổng hợp theo tuyến</h3>
-      <div class="table-wrap"><table class="data"><thead><tr><th>Tuyến</th><th class="num">Số khách</th>${usedCols.map(k => `<th class="num">${esc(d.cols[k])}</th>`).join('')}</tr></thead><tbody>
-      ${gs.map(([code, rows]) => { const s = sumQty(rows); return `<tr class="clickable ${code ? '' : 'row-bad'}" data-g="${esc(code)}"><td>${code ? `<b>${esc(code)}</b> ${esc(rName(code))}` : '<span class="badge bad">Chưa có tuyến</span>'}</td>
-        <td class="num">${rows.length}</td>${usedCols.map(k => `<td class="num">${fmtBlank0(s[k])}</td>`).join('')}</tr>`; }).join('')}
-      <tr class="sum"><td>Cộng</td><td class="num">${d.rows.length}</td>${usedCols.map(k => `<td class="num">${fmtBlank0(sumQty(d.rows)[k])}</td>`).join('')}</tr></tbody></table></div>
+      <div class="table-wrap"><table class="data"><thead><tr><th>Tuyến</th><th style="width:190px">Người giao</th><th class="num">Số khách</th><th class="num">Đã giao</th>${usedCols.map(k => `<th class="num">${esc(d.cols[k])}</th>`).join('')}</tr></thead><tbody>
+      ${gs.map(([code, rows]) => { const s = sumQty(rows); const ok = rows.filter(r => (delivOf(r) || {}).status === 'ok').length; const bad = rows.filter(r => (delivOf(r) || {}).status === 'fail').length;
+        return `<tr class="clickable ${code ? '' : 'row-bad'}" data-g="${esc(code)}"><td>${code ? `<b>${esc(code)}</b> ${esc(rName(code))}` : '<span class="badge bad">Chưa có tuyến</span>'}</td>
+        <td>${code ? `<select data-assign="${esc(code)}">${options([['', '— chưa có —']].concat(drivers.map(x => [x.id, x.name || x.nick])).concat(routeDriver(code) && !drivers.some(x => x.id === routeDriver(code)) ? [[routeDriver(code), driverName(routeDriver(code)) || '(đã xóa)']] : []), routeDriver(code))}</select>
+          <div class="small muted">${code in d.assign ? 'chọn cho ngày này' : routeDriver(code) ? 'tuyến thường chạy' : ''}</div>` : ''}</td>
+        <td class="num">${rows.length}</td><td class="num">${ok || bad ? `<b>${ok}</b>/${rows.length}${bad ? ` <span class="badge bad">${bad} không giao được</span>` : ''}` : ''}</td>${usedCols.map(k => `<td class="num">${fmtBlank0(s[k])}</td>`).join('')}</tr>`; }).join('')}
+      <tr class="sum"><td>Cộng</td><td></td><td class="num">${d.rows.length}</td><td class="num">${fmtBlank0(d.rows.filter(r => (delivOf(r) || {}).status === 'ok').length)}</td>${usedCols.map(k => `<td class="num">${fmtBlank0(sumQty(d.rows)[k])}</td>`).join('')}</tr></tbody></table></div>
+      ${drivers.length ? '<p class="hint">Người giao xem tuyến của mình trên <b>web giao hàng</b> sau khi bấm <b>Lưu</b>, và bấm "Đã giao" – cột Đã giao cập nhật khi mở lại trang này (hoặc bấm ↻ Kết quả giao).</p>'
+        : '<p class="hint">Chưa có tài khoản giao hàng – tạo ở <a href="#/giao-hang-tk">Danh mục › Tài khoản giao hàng</a> để mỗi người giao xem tuyến của mình trên điện thoại.</p>'}
       <div class="toolbar" style="margin-top:14px"><label class="field">Xem<select id="rt-filter">${options([['', 'Tất cả khách'], ['-', 'Chưa có tuyến']].concat(gs.filter(g => g[0]).map(g => [g[0], `${g[0]} – ${rName(g[0])} (${g[1].length})`])), ui.filter)}</select></label>
       <label class="field">Tìm khách<input id="rt-search" value="${esc(ui.search)}" placeholder="mã, tên, địa chỉ…"></label></div>
       <div class="table-wrap"><table class="data"><thead><tr><th>STT</th><th>Quận</th><th>Mã CRM</th><th>Khách hàng</th><th>Địa chỉ</th><th>SĐT</th><th>Ghi chú</th><th>Số lượng</th><th style="width:170px">Tuyến</th></tr></thead><tbody id="rt-rows"></tbody></table></div>
       <div class="form-actions"><button class="btn primary" id="rt-save">💾 Lưu</button><button class="btn" id="rt-print">🖨 In danh sách giao theo tuyến</button>
-      <button class="btn" id="rt-print-sum">🖨 In tổng hợp tuyến</button><button class="btn" id="rt-csv">⬇ Tải danh sách mã CRM (Excel)</button>${doc.id ? '<button class="btn danger" id="rt-del">Xóa</button>' : ''}<a class="btn ghost" href="#/phan-tuyen">← Danh sách</a></div>`;
-    $$('tr[data-g]', box).forEach(tr => tr.onclick = () => { ui.filter = tr.dataset.g || '-'; $('#rt-filter').value = ui.filter; drawRows(); });
+      <button class="btn" id="rt-print-sum">🖨 In tổng hợp tuyến</button><button class="btn" id="rt-csv">⬇ Tải danh sách mã CRM (Excel)</button>${doc.id ? '<button class="btn" id="rt-deliv">↻ Kết quả giao</button>' : ''}${doc.id ? '<button class="btn danger" id="rt-del">Xóa</button>' : ''}<a class="btn ghost" href="#/phan-tuyen">← Danh sách</a></div>`;
+    $$('tr[data-g]', box).forEach(tr => tr.onclick = e => { if (e.target.closest('select')) return; ui.filter = tr.dataset.g || '-'; $('#rt-filter').value = ui.filter; drawRows(); });
+    $$('select[data-assign]', box).forEach(sel => sel.onchange = () => { d.assign[sel.dataset.assign] = sel.value; markDirty(); const y = window.scrollY; drawBody(); window.scrollTo(0, y); });
     $('#rt-filter').onchange = () => { ui.filter = $('#rt-filter').value; drawRows(); };
     $('#rt-search').oninput = debounce(() => { ui.search = $('#rt-search').value; drawRows(); }, 200);
     $('#rt-save').onclick = () => guard(save);
     $('#rt-print').onclick = () => printRoutes(ui.filter && ui.filter !== '-' ? ui.filter : null);
     $('#rt-print-sum').onclick = printSummary;
     $('#rt-csv').onclick = () => guard(exportCsv);
-    if (doc.id) $('#rt-del').onclick = () => deleteDoc(doc);
+    if (doc.id) { $('#rt-del').onclick = () => deleteDoc(doc); $('#rt-deliv').onclick = () => loadDeliveries().then(() => toast('Đã cập nhật kết quả giao')); }
     drawRows();
   }
   function drawRows() {
@@ -2841,7 +3467,7 @@ async function viewRouting(main, m) {
       <td class="small">${esc(r.phone)}</td><td class="small">${esc(r.note)}${r.pay ? `<br><span class="badge ${/chua/.test(noAccent(r.pay)) ? 'warn' : 'ok'}">${esc(r.pay)}</span>` : ''}</td>
       <td class="small">${qtyText(r)}</td>
       <td><select data-k="route">${options(opts.some(o => o[0] === r.route) ? opts : opts.concat([[r.route, r.route]]), r.route)}</select>
-      <div class="small muted">${r.src === 'tay' ? 'chọn tay' : r.src === 'nhớ' ? 'như lần chọn tay trước' : r.src ? 'tự động theo ' + esc(r.src) : ''}</div></td></tr>`).join('')
+      <div class="small muted">${r.src === 'tay' ? 'chọn tay' : r.src === 'nhớ' ? 'như lần chọn tay trước' : r.src ? 'tự động theo ' + esc(r.src) : ''}</div>${delivBadge(delivOf(r))}</td></tr>`).join('')
       || '<tr><td colspan="9" class="muted">Không có khách nào.</td></tr>';
     $$('select[data-k=route]', tb).forEach(sel => sel.onchange = () => {
       const r = d.rows[+sel.closest('tr').dataset.i];
@@ -2853,6 +3479,8 @@ async function viewRouting(main, m) {
   }
   async function save() {
     const gs = groups();
+    // chỉ giữ lựa chọn người giao của các tuyến đang có khách
+    Object.keys(d.assign).forEach(c => { if (!gs.some(g => g[0] === c)) delete d.assign[c]; });
     doc.title = `${d.rows.length} khách – ${gs.filter(g => g[0]).map(([c, r]) => `${c}: ${r.length}`).join(', ')}${gs.some(g => !g[0]) ? ` – chưa có tuyến: ${d.rows.filter(r => !r.route).length}` : ''}`;
     if (Object.keys(changedMemory).length) {
       const cfg = routingCfg();
@@ -2864,6 +3492,7 @@ async function viewRouting(main, m) {
     await saveDoc(doc);
     toast('Đã lưu phân tuyến');
     draw();
+    loadDeliveries();
   }
   function routeDoc(code, rows) {
     const s = sumQty(rows);
@@ -2871,11 +3500,12 @@ async function viewRouting(main, m) {
     return `<div class="doc landscape">${docHead('Danh sách giao hàng', 'Ngày ' + vnDate(doc.date))}
       <div class="d-title">Danh sách giao hàng – tuyến ${esc(code || 'chưa có')}</div>
       <div class="d-sub">${esc(rName(code))} · ${rows.length} khách · ${longDate(doc.date)}</div>
+      ${code && routeDriver(code) ? `<div class="d-sub">Người giao: <b>${esc(driverName(routeDriver(code)))}</b></div>` : ''}
       <table class="t"><thead><tr><th>STT</th><th>Mã CRM</th><th>Khách hàng</th><th>Địa chỉ</th><th>SĐT</th><th>Ghi chú</th>${used.map(k => `<th>${esc(d.cols[k])}</th>`).join('')}<th>Thanh toán</th><th>Ký nhận</th></tr></thead>
       <tbody>${rows.map((r, i) => `<tr><td class="c">${i + 1}</td><td class="c"><b>${esc(r.crm)}</b></td><td>${esc(r.code)} ${esc(r.name)}</td><td>${esc(r.addr || r.q)}</td><td>${esc(r.phone)}</td><td>${esc(r.note)}</td>
         ${used.map(k => `<td class="n">${fmtBlank0((r.qty || {})[k])}</td>`).join('')}<td>${esc(r.pay)}</td><td style="min-width:70px"></td></tr>`).join('')}
       <tr class="sum"><td colspan="6" class="c">CỘNG ${rows.length} khách</td>${used.map(k => `<td class="n">${fmt(s[k])}</td>`).join('')}<td></td><td></td></tr></tbody></table>
-      ${signBlock([['Người lập', S.user], ['Thủ kho', ''], ['Tài xế / người giao', '']])}</div>`;
+      ${signBlock([['Người lập', S.user], ['Thủ kho', ''], ['Tài xế / người giao', code ? driverName(routeDriver(code)) : '']])}</div>`;
   }
   // File CSV (mở bằng Excel): mã CRM, mã khách, tên, tuyến… theo bộ lọc đang xem
   function exportCsv() {
@@ -2900,6 +3530,92 @@ async function viewRouting(main, m) {
       ${gs.map(([c, rows], i) => { const s = sumQty(rows); return `<tr><td class="c">${i + 1}</td><td><b>${esc(c || '—')}</b></td><td>${esc(c ? rName(c) : 'Chưa có tuyến')}</td><td class="n">${rows.length}</td>${used.map(k => `<td class="n">${fmtBlank0(s[k])}</td>`).join('')}</tr>`; }).join('')}
       <tr class="sum"><td colspan="3" class="c">CỘNG</td><td class="n">${d.rows.length}</td>${used.map(k => `<td class="n">${fmt(all[k])}</td>`).join('')}</tr></tbody></table>
       ${signBlock([['Người lập', S.user], ['Thủ kho', ''], ['Quản lý', '']])}</div>`, 'landscape', 'tong-hop-tuyen-' + doc.date);
+  }
+  draw();
+  if (doc.id) loadDeliveries();
+}
+// Giống server.py route_driver / cust_key (web giao hàng dùng cùng cách tính)
+function routeDriverOf(data, code, drivers) {
+  const a = (data && data.assign) || {};
+  if (code in a) return a[code] || '';
+  const x = drivers.find(v => v.active && (v.routes || []).some(c => String(c).toLowerCase() === String(code).toLowerCase()));
+  return x ? x.id : '';
+}
+const custKeyOf = r => String(r.crm || '').trim() || String(r.code || '').trim() || String(r.cust || '').trim();
+function delivBadge(x) {
+  if (!x) return '';
+  return x.status === 'ok' ? `<span class="badge ok">✓ Đã giao ${esc((x.at || '').slice(11, 16))}</span>`
+    : `<span class="badge bad" title="${esc(x.note)}">✗ Không giao được${x.note ? ': ' + esc(x.note) : ''}</span>`;
+}
+
+/* ============================================================ Tài khoản giao hàng (web giao hàng) */
+function giaoHangLinks() {
+  if (ONLINE) return [];
+  const urls = (S.meta.access && S.meta.access.urls.length ? S.meta.access.urls : [location.origin]);
+  return urls.map(u => u.replace(/\/$/, '') + '/giao-hang');
+}
+function openGiaoHang() {
+  if (ONLINE) return enterGiaoMode();
+  window.open('/giao-hang', '_blank');
+}
+async function viewDrivers(main) {
+  setTitle('Tài khoản giao hàng');
+  const routes = routeList();
+  const rName = c => { const r = routes.find(x => x.code.toLowerCase() === String(c).toLowerCase()); return r ? r.name : ''; };
+  function draw() {
+    const list = (S.meta.drivers || []).slice().sort((a, b) => (b.active - a.active) || a.nick.localeCompare(b.nick));
+    const links = giaoHangLinks();
+    main.innerHTML = `<div class="toolbar"><button class="btn primary" id="g-add">+ Thêm người giao hàng</button><button class="btn" id="g-open">🚚 Mở web giao hàng</button></div>
+      <div class="callout">Mỗi người giao hàng có <b>1 nick + mã PIN</b>. Đăng nhập web giao hàng trên điện thoại sẽ thấy <b>tuyến đã sắp của từng ngày</b>
+      (lấy từ <a href="#/phan-tuyen">Phân tuyến giao hàng</a>): khách, địa chỉ (bấm để mở bản đồ), SĐT (bấm để gọi), số lượng từng loại; bấm <b>Đã giao</b> /
+      <b>Không giao được</b> và kho thấy kết quả ở bảng phân tuyến.<br>Tuyến của mỗi người = <b>tuyến thường chạy</b> dưới đây; ngày nào đổi người thì chọn lại ở cột
+      <b>Người giao</b> trong phân tuyến của ngày đó.</div>
+      ${ONLINE ? `<div class="callout small">Gửi <b>link trang Kho An Tâm này</b> cho người giao hàng (nút <i>Share</i>, quyền <b>Contributor</b> để bấm được "Đã giao").
+        Trên điện thoại: mở link → ở ô <i>Bạn là ai?</i> bấm <b>🚚 Tôi là người giao hàng</b> → đăng nhập nick + PIN. Lần sau mở link sẽ vào thẳng web giao hàng.</div>`
+      : `<div class="card"><h3>Link web giao hàng</h3><div class="toolbar">${links.map(u => `<code class="access-url">${esc(u)}</code><button class="btn sm" data-copy="${esc(u)}">Sao chép</button>`).join('')}</div>
+        <p class="hint">Điện thoại phải dùng <b>cùng wifi / mạng công ty</b> với máy chạy web. Web giao hàng không hỏi mật khẩu chung của web kho – mỗi người đăng nhập bằng nick + PIN của mình.</p></div>`}
+      ${list.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Nick</th><th>Họ tên</th><th>SĐT</th><th>Tuyến thường chạy</th><th>Trạng thái</th><th></th></tr></thead><tbody>
+      ${list.map(x => `<tr class="clickable" data-id="${esc(x.id)}" ${x.active ? '' : 'style="opacity:.55"'}><td><b>${esc(x.nick)}</b></td><td>${esc(x.name)}</td><td>${esc(x.phone)}</td>
+        <td>${x.routes.length ? x.routes.map(c => `<span class="badge" title="${esc(rName(c))}">${esc(c)}</span>`).join(' ') : '<span class="muted small">— chọn theo ngày —</span>'}</td>
+        <td>${x.active ? '<span class="badge ok">Đang dùng</span>' : '<span class="badge warn">Đã khóa</span>'}</td>
+        <td><button class="btn sm danger" data-del="${esc(x.id)}">Xóa</button></td></tr>`).join('')}</tbody></table></div>`
+      : '<p class="muted">Chưa có tài khoản giao hàng nào.</p>'}`;
+    $('#g-add').onclick = () => edit(null);
+    $('#g-open').onclick = () => openGiaoHang();
+    $$('tr[data-id]', main).forEach(tr => tr.onclick = e => { if (!e.target.closest('button')) edit(S.meta.drivers.find(x => x.id === tr.dataset.id)); });
+    $$('[data-del]', main).forEach(b => b.onclick = async () => {
+      const x = S.meta.drivers.find(v => v.id === b.dataset.del);
+      if (!(await ask(`Xóa tài khoản giao hàng "${x.nick}"? Người này sẽ không đăng nhập được nữa (kết quả giao cũ vẫn giữ).`))) return;
+      if (await guard(() => api('DELETE', '/drivers/' + encodeURIComponent(x.id)))) { toast('Đã xóa'); await loadMeta(); draw(); }
+    });
+    $$('[data-copy]', main).forEach(btn => btn.onclick = async () => {
+      try { await navigator.clipboard.writeText(btn.dataset.copy); toast('Đã sao chép ' + btn.dataset.copy); }
+      catch (e) { toast('Hãy tự bôi đen và sao chép: ' + btn.dataset.copy); }
+    });
+  }
+  function edit(x) {
+    if (VIEW) return;
+    const v = x || { id: '', nick: '', name: '', phone: '', routes: [], active: true };
+    const mine = new Set(v.routes.map(c => c.toLowerCase()));
+    const taken = {};
+    (S.meta.drivers || []).forEach(o => { if (o.id !== v.id && o.active) o.routes.forEach(c => { taken[c.toLowerCase()] = o.name || o.nick; }); });
+    openModal({
+      title: x ? 'Sửa tài khoản ' + x.nick : 'Thêm người giao hàng', wide: true,
+      body: `<div class="grid c2">
+        <label class="field">Nick đăng nhập (không dấu, viết liền, vd <i>tuan.hm</i>)<input id="g-nick" value="${esc(v.nick)}" autocapitalize="none"></label>
+        <label class="field">Họ tên<input id="g-name" value="${esc(v.name)}"></label>
+        <label class="field">SĐT<input id="g-phone" value="${esc(v.phone)}"></label>
+        <label class="field">${x ? 'Mã PIN mới (để trống = giữ PIN cũ)' : 'Mã PIN (4–8 chữ số)'}<input id="g-pin" inputmode="numeric" autocomplete="new-password" placeholder="${x ? '••••' : 'vd 2468'}"></label>
+        <label class="check span2"><input type="checkbox" id="g-active" ${v.active ? 'checked' : ''}> Đang dùng (bỏ chọn để khóa, không đăng nhập được)</label></div>
+        <div class="field" style="margin-top:12px">Tuyến thường chạy (mặc định cho mọi ngày – ngày nào khác thì chọn lại ở Phân tuyến)</div>
+        <div class="toolbar">${routes.map(r => `<label class="check"><input type="checkbox" data-route="${esc(r.code)}" ${mine.has(r.code.toLowerCase()) ? 'checked' : ''}>
+          <b>${esc(r.code)}</b> ${esc(r.name)}${taken[r.code.toLowerCase()] ? ` <span class="small muted">(${esc(taken[r.code.toLowerCase()])})</span>` : ''}</label>`).join('') || '<span class="muted small">Chưa có tuyến – thêm ở Danh mục › Tuyến / nơi nhận.</span>'}</div>`,
+      onSave: async root => {
+        await api('POST', '/drivers', { id: v.id, nick: $('#g-nick', root).value, name: $('#g-name', root).value, phone: $('#g-phone', root).value,
+          pin: $('#g-pin', root).value.trim(), active: $('#g-active', root).checked, routes: $$('input[data-route]', root).filter(i => i.checked).map(i => i.dataset.route) });
+        toast('Đã lưu tài khoản giao hàng'); await loadMeta(); draw(); return true;
+      },
+    });
   }
   draw();
 }
@@ -3409,14 +4125,54 @@ function showReadOnlyBanner() {
 /* ============================================================ khởi động */
 function askUser(force) {
   if (S.user && !force) return;
-  openModal({
+  const { root, close } = openModal({
     title: 'Bạn là ai?',
-    body: `<label class="field">Họ tên (ghi vào lịch sử thao tác và gợi ý người lập phiếu)<input id="u-name" list="dl-u" value="${esc(S.user)}"></label>${datalist('dl-u', S.meta.people)}`,
+    body: `<label class="field">Họ tên (ghi vào lịch sử thao tác và gợi ý người lập phiếu)<input id="u-name" list="dl-u" value="${esc(S.user)}"></label>${datalist('dl-u', S.meta.people)}
+      <div class="callout small" style="margin-top:12px">Người giao hàng: <button class="btn sm primary" id="u-giao">🚚 Tôi là người giao hàng</button> – đăng nhập bằng nick + mã PIN để xem tuyến của mình.</div>`,
     saveText: 'Xác nhận',
     onSave: async root => { S.user = $('#u-name', root).value.trim(); store('user', S.user); $('#user-btn').textContent = '👤 ' + (S.user || 'Khách'); return true; },
   });
+  $('#u-giao', root).onclick = () => { close(); openGiaoHang(); };
+}
+// Web giao hàng: bản chạy máy chủ mở trang /giao-hang; bản online chạy ngay trong trang này (dùng chung dữ liệu)
+function giaoRoot() {
+  let el = document.getElementById('gh-root');
+  if (!el) { el = document.createElement('div'); el.id = 'gh-root'; document.body.appendChild(el); }
+  el.hidden = false;
+  return el;
+}
+async function enterGiaoMode() {
+  if (S.dirty && !(await ask('Có thay đổi chưa lưu. Vẫn chuyển sang web giao hàng?'))) return;
+  S.dirty = false;
+  store('mode', 'giao');
+  window.scrollTo(0, 0);
+  Backend.onRemote(() => GiaoHang.onRemoteChange());
+  await GiaoHang.start(giaoRoot(), { onExit: exitGiaoMode });
+}
+async function exitGiaoMode() {
+  store('mode', '');
+  GiaoHang.stop();
+  document.body.classList.remove('gh-mode');
+  const el = document.getElementById('gh-root');
+  if (el) { el.hidden = true; el.innerHTML = ''; }
+  Backend.onRemote(() => { const b = $('#refresh-btn'); if (b) b.hidden = false; });
+  if (!S.meta) return bootKho();
+  await loadMeta();
+  document.title = 'Kho An Tâm';
+  render();
 }
 async function boot() {
+  if (ONLINE && !VIEW && store('mode') === 'giao') {
+    // điện thoại người giao hàng: vào thẳng web giao hàng, chỉ tải dữ liệu phân tuyến
+    giaoRoot().innerHTML = '<p style="padding:20px;font-family:sans-serif">Đang kết nối dữ liệu…</p>';
+    document.body.classList.add('gh-mode');
+    try { await Backend.init(); } catch (e) { giaoRoot().innerHTML = `<p style="padding:20px">Không kết nối được dữ liệu: ${esc(e.message)}</p>`; return; }
+    Backend.onRemote(() => GiaoHang.onRemoteChange());
+    return GiaoHang.start(giaoRoot(), { onExit: exitGiaoMode });
+  }
+  return bootKho();
+}
+async function bootKho() {
   S.user = store('user') || '';
   S.wh = store('wh') === 'NVL' ? 'NVL' : 'TP';
   $$('#wh-switch button').forEach(b => b.onclick = () => switchWh(b.dataset.wh));

@@ -380,6 +380,7 @@ const ROUTES = [
   [/^tuyen$/, viewRoutes],
   [/^phan-tuyen$/, viewRoutingList],
   [/^phan-tuyen\/(moi|[\w-]+)$/, viewRouting],
+  [/^giao-hang-tk$/, viewDrivers],
   [/^cai-dat$/, viewSettings],
   [/^lich-su$/, viewLog],
 ];
@@ -457,7 +458,7 @@ async function switchWh(wh, keepPage) {
   toast('Đang làm việc: ' + S.meta.warehouse.name);
   if (keepPage) return;
   const { path } = parseHash();
-  const only = { 'tuyen': 'TP', 'phan-tuyen': 'TP', 'kh-ngay': 'NVL', 'kh-tuan': 'NVL', 'kh-thang': 'NVL' }[path.split('/')[0]];
+  const only = { 'tuyen': 'TP', 'phan-tuyen': 'TP', 'giao-hang-tk': 'TP', 'kh-ngay': 'NVL', 'kh-tuan': 'NVL', 'kh-thang': 'NVL' }[path.split('/')[0]];
   if (/\/(?!moi$)[\w-]+$/.test(path) || (only && only !== wh)) go('#/', { force: true }); else render();
 }
 
@@ -1468,6 +1469,17 @@ async function viewRouting(main, m) {
   const rName = c => { const r = routes.find(x => x.code.toLowerCase() === String(c).toLowerCase()); return r ? r.name : ''; };
   const ui = { filter: '', search: '', file: null, sheets: [], paste: null };
   const changedMemory = {};
+  // Người giao từng tuyến (chọn ở bảng tổng hợp; chưa chọn thì lấy người có tuyến thường chạy) + kết quả giao từ web giao hàng
+  d.assign = Object.assign({}, d.assign);
+  const drivers = (S.meta.drivers || []).filter(x => x.active);
+  const driverName = id => { const x = (S.meta.drivers || []).find(v => v.id === id); return x ? x.name || x.nick : ''; };
+  const routeDriver = code => routeDriverOf(d, code, S.meta.drivers || []);
+  let deliv = {};
+  async function loadDeliveries() {
+    deliv = (await guard(() => api('GET', '/deliveries?date=' + doc.date))) || {};
+    if ($('#rt-body') && d.rows.length) { const y = window.scrollY; drawBody(); window.scrollTo(0, y); }
+  }
+  const delivOf = r => deliv[custKeyOf(r)] || null;
 
   function assignAll(keepManual) {
     const cfg = routingCfg();
@@ -1511,7 +1523,7 @@ async function viewRouting(main, m) {
       ${d.rows.length ? '<button class="btn" id="rt-reauto">↻ Chia lại tự động (giữ tuyến chọn tay)</button>' : ''}</div>
       ${d.sheet ? `<p class="hint">Đang dùng: sheet <b>${esc(d.sheet)}</b> – ${d.rows.length} khách hoạt động / ${d.total} khách.</p>` : ''}</div>
       <div id="rt-body"></div>`;
-    $('#rt-date').onchange = () => { doc.date = $('#rt-date').value; setTitle('Phân tuyến giao hàng ' + vnDate(doc.date)); markDirty(); };
+    $('#rt-date').onchange = () => { doc.date = $('#rt-date').value; setTitle('Phân tuyến giao hàng ' + vnDate(doc.date)); markDirty(); loadDeliveries(); };
     const ta = $('#rt-paste');
     ta.onpaste = e => {
       const html = e.clipboardData && e.clipboardData.getData('text/html');
@@ -1564,23 +1576,29 @@ async function viewRouting(main, m) {
       <div class="kpi ${none ? 'bad' : ''}"><div class="k-label">Chưa có tuyến</div><div class="k-val">${none}</div></div>
       <div class="kpi"><div class="k-label">Khách trong sheet</div><div class="k-val">${d.total}</div></div></div>
       <h3 style="margin:14px 0 6px">Tổng hợp theo tuyến</h3>
-      <div class="table-wrap"><table class="data"><thead><tr><th>Tuyến</th><th class="num">Số khách</th>${usedCols.map(k => `<th class="num">${esc(d.cols[k])}</th>`).join('')}</tr></thead><tbody>
-      ${gs.map(([code, rows]) => { const s = sumQty(rows); return `<tr class="clickable ${code ? '' : 'row-bad'}" data-g="${esc(code)}"><td>${code ? `<b>${esc(code)}</b> ${esc(rName(code))}` : '<span class="badge bad">Chưa có tuyến</span>'}</td>
-        <td class="num">${rows.length}</td>${usedCols.map(k => `<td class="num">${fmtBlank0(s[k])}</td>`).join('')}</tr>`; }).join('')}
-      <tr class="sum"><td>Cộng</td><td class="num">${d.rows.length}</td>${usedCols.map(k => `<td class="num">${fmtBlank0(sumQty(d.rows)[k])}</td>`).join('')}</tr></tbody></table></div>
+      <div class="table-wrap"><table class="data"><thead><tr><th>Tuyến</th><th style="width:190px">Người giao</th><th class="num">Số khách</th><th class="num">Đã giao</th>${usedCols.map(k => `<th class="num">${esc(d.cols[k])}</th>`).join('')}</tr></thead><tbody>
+      ${gs.map(([code, rows]) => { const s = sumQty(rows); const ok = rows.filter(r => (delivOf(r) || {}).status === 'ok').length; const bad = rows.filter(r => (delivOf(r) || {}).status === 'fail').length;
+        return `<tr class="clickable ${code ? '' : 'row-bad'}" data-g="${esc(code)}"><td>${code ? `<b>${esc(code)}</b> ${esc(rName(code))}` : '<span class="badge bad">Chưa có tuyến</span>'}</td>
+        <td>${code ? `<select data-assign="${esc(code)}">${options([['', '— chưa có —']].concat(drivers.map(x => [x.id, x.name || x.nick])).concat(routeDriver(code) && !drivers.some(x => x.id === routeDriver(code)) ? [[routeDriver(code), driverName(routeDriver(code)) || '(đã xóa)']] : []), routeDriver(code))}</select>
+          <div class="small muted">${code in d.assign ? 'chọn cho ngày này' : routeDriver(code) ? 'tuyến thường chạy' : ''}</div>` : ''}</td>
+        <td class="num">${rows.length}</td><td class="num">${ok || bad ? `<b>${ok}</b>/${rows.length}${bad ? ` <span class="badge bad">${bad} không giao được</span>` : ''}` : ''}</td>${usedCols.map(k => `<td class="num">${fmtBlank0(s[k])}</td>`).join('')}</tr>`; }).join('')}
+      <tr class="sum"><td>Cộng</td><td></td><td class="num">${d.rows.length}</td><td class="num">${fmtBlank0(d.rows.filter(r => (delivOf(r) || {}).status === 'ok').length)}</td>${usedCols.map(k => `<td class="num">${fmtBlank0(sumQty(d.rows)[k])}</td>`).join('')}</tr></tbody></table></div>
+      ${drivers.length ? '<p class="hint">Người giao xem tuyến của mình trên <b>web giao hàng</b> sau khi bấm <b>Lưu</b>, và bấm "Đã giao" – cột Đã giao cập nhật khi mở lại trang này (hoặc bấm ↻ Kết quả giao).</p>'
+        : '<p class="hint">Chưa có tài khoản giao hàng – tạo ở <a href="#/giao-hang-tk">Danh mục › Tài khoản giao hàng</a> để mỗi người giao xem tuyến của mình trên điện thoại.</p>'}
       <div class="toolbar" style="margin-top:14px"><label class="field">Xem<select id="rt-filter">${options([['', 'Tất cả khách'], ['-', 'Chưa có tuyến']].concat(gs.filter(g => g[0]).map(g => [g[0], `${g[0]} – ${rName(g[0])} (${g[1].length})`])), ui.filter)}</select></label>
       <label class="field">Tìm khách<input id="rt-search" value="${esc(ui.search)}" placeholder="mã, tên, địa chỉ…"></label></div>
       <div class="table-wrap"><table class="data"><thead><tr><th>STT</th><th>Quận</th><th>Mã CRM</th><th>Khách hàng</th><th>Địa chỉ</th><th>SĐT</th><th>Ghi chú</th><th>Số lượng</th><th style="width:170px">Tuyến</th></tr></thead><tbody id="rt-rows"></tbody></table></div>
       <div class="form-actions"><button class="btn primary" id="rt-save">💾 Lưu</button><button class="btn" id="rt-print">🖨 In danh sách giao theo tuyến</button>
-      <button class="btn" id="rt-print-sum">🖨 In tổng hợp tuyến</button><button class="btn" id="rt-csv">⬇ Tải danh sách mã CRM (Excel)</button>${doc.id ? '<button class="btn danger" id="rt-del">Xóa</button>' : ''}<a class="btn ghost" href="#/phan-tuyen">← Danh sách</a></div>`;
-    $$('tr[data-g]', box).forEach(tr => tr.onclick = () => { ui.filter = tr.dataset.g || '-'; $('#rt-filter').value = ui.filter; drawRows(); });
+      <button class="btn" id="rt-print-sum">🖨 In tổng hợp tuyến</button><button class="btn" id="rt-csv">⬇ Tải danh sách mã CRM (Excel)</button>${doc.id ? '<button class="btn" id="rt-deliv">↻ Kết quả giao</button>' : ''}${doc.id ? '<button class="btn danger" id="rt-del">Xóa</button>' : ''}<a class="btn ghost" href="#/phan-tuyen">← Danh sách</a></div>`;
+    $$('tr[data-g]', box).forEach(tr => tr.onclick = e => { if (e.target.closest('select')) return; ui.filter = tr.dataset.g || '-'; $('#rt-filter').value = ui.filter; drawRows(); });
+    $$('select[data-assign]', box).forEach(sel => sel.onchange = () => { d.assign[sel.dataset.assign] = sel.value; markDirty(); const y = window.scrollY; drawBody(); window.scrollTo(0, y); });
     $('#rt-filter').onchange = () => { ui.filter = $('#rt-filter').value; drawRows(); };
     $('#rt-search').oninput = debounce(() => { ui.search = $('#rt-search').value; drawRows(); }, 200);
     $('#rt-save').onclick = () => guard(save);
     $('#rt-print').onclick = () => printRoutes(ui.filter && ui.filter !== '-' ? ui.filter : null);
     $('#rt-print-sum').onclick = printSummary;
     $('#rt-csv').onclick = () => guard(exportCsv);
-    if (doc.id) $('#rt-del').onclick = () => deleteDoc(doc);
+    if (doc.id) { $('#rt-del').onclick = () => deleteDoc(doc); $('#rt-deliv').onclick = () => loadDeliveries().then(() => toast('Đã cập nhật kết quả giao')); }
     drawRows();
   }
   function drawRows() {
@@ -1593,7 +1611,7 @@ async function viewRouting(main, m) {
       <td class="small">${esc(r.phone)}</td><td class="small">${esc(r.note)}${r.pay ? `<br><span class="badge ${/chua/.test(noAccent(r.pay)) ? 'warn' : 'ok'}">${esc(r.pay)}</span>` : ''}</td>
       <td class="small">${qtyText(r)}</td>
       <td><select data-k="route">${options(opts.some(o => o[0] === r.route) ? opts : opts.concat([[r.route, r.route]]), r.route)}</select>
-      <div class="small muted">${r.src === 'tay' ? 'chọn tay' : r.src === 'nhớ' ? 'như lần chọn tay trước' : r.src ? 'tự động theo ' + esc(r.src) : ''}</div></td></tr>`).join('')
+      <div class="small muted">${r.src === 'tay' ? 'chọn tay' : r.src === 'nhớ' ? 'như lần chọn tay trước' : r.src ? 'tự động theo ' + esc(r.src) : ''}</div>${delivBadge(delivOf(r))}</td></tr>`).join('')
       || '<tr><td colspan="9" class="muted">Không có khách nào.</td></tr>';
     $$('select[data-k=route]', tb).forEach(sel => sel.onchange = () => {
       const r = d.rows[+sel.closest('tr').dataset.i];
@@ -1605,6 +1623,8 @@ async function viewRouting(main, m) {
   }
   async function save() {
     const gs = groups();
+    // chỉ giữ lựa chọn người giao của các tuyến đang có khách
+    Object.keys(d.assign).forEach(c => { if (!gs.some(g => g[0] === c)) delete d.assign[c]; });
     doc.title = `${d.rows.length} khách – ${gs.filter(g => g[0]).map(([c, r]) => `${c}: ${r.length}`).join(', ')}${gs.some(g => !g[0]) ? ` – chưa có tuyến: ${d.rows.filter(r => !r.route).length}` : ''}`;
     if (Object.keys(changedMemory).length) {
       const cfg = routingCfg();
@@ -1616,6 +1636,7 @@ async function viewRouting(main, m) {
     await saveDoc(doc);
     toast('Đã lưu phân tuyến');
     draw();
+    loadDeliveries();
   }
   function routeDoc(code, rows) {
     const s = sumQty(rows);
@@ -1623,11 +1644,12 @@ async function viewRouting(main, m) {
     return `<div class="doc landscape">${docHead('Danh sách giao hàng', 'Ngày ' + vnDate(doc.date))}
       <div class="d-title">Danh sách giao hàng – tuyến ${esc(code || 'chưa có')}</div>
       <div class="d-sub">${esc(rName(code))} · ${rows.length} khách · ${longDate(doc.date)}</div>
+      ${code && routeDriver(code) ? `<div class="d-sub">Người giao: <b>${esc(driverName(routeDriver(code)))}</b></div>` : ''}
       <table class="t"><thead><tr><th>STT</th><th>Mã CRM</th><th>Khách hàng</th><th>Địa chỉ</th><th>SĐT</th><th>Ghi chú</th>${used.map(k => `<th>${esc(d.cols[k])}</th>`).join('')}<th>Thanh toán</th><th>Ký nhận</th></tr></thead>
       <tbody>${rows.map((r, i) => `<tr><td class="c">${i + 1}</td><td class="c"><b>${esc(r.crm)}</b></td><td>${esc(r.code)} ${esc(r.name)}</td><td>${esc(r.addr || r.q)}</td><td>${esc(r.phone)}</td><td>${esc(r.note)}</td>
         ${used.map(k => `<td class="n">${fmtBlank0((r.qty || {})[k])}</td>`).join('')}<td>${esc(r.pay)}</td><td style="min-width:70px"></td></tr>`).join('')}
       <tr class="sum"><td colspan="6" class="c">CỘNG ${rows.length} khách</td>${used.map(k => `<td class="n">${fmt(s[k])}</td>`).join('')}<td></td><td></td></tr></tbody></table>
-      ${signBlock([['Người lập', S.user], ['Thủ kho', ''], ['Tài xế / người giao', '']])}</div>`;
+      ${signBlock([['Người lập', S.user], ['Thủ kho', ''], ['Tài xế / người giao', code ? driverName(routeDriver(code)) : '']])}</div>`;
   }
   // File CSV (mở bằng Excel): mã CRM, mã khách, tên, tuyến… theo bộ lọc đang xem
   function exportCsv() {
@@ -1652,6 +1674,92 @@ async function viewRouting(main, m) {
       ${gs.map(([c, rows], i) => { const s = sumQty(rows); return `<tr><td class="c">${i + 1}</td><td><b>${esc(c || '—')}</b></td><td>${esc(c ? rName(c) : 'Chưa có tuyến')}</td><td class="n">${rows.length}</td>${used.map(k => `<td class="n">${fmtBlank0(s[k])}</td>`).join('')}</tr>`; }).join('')}
       <tr class="sum"><td colspan="3" class="c">CỘNG</td><td class="n">${d.rows.length}</td>${used.map(k => `<td class="n">${fmt(all[k])}</td>`).join('')}</tr></tbody></table>
       ${signBlock([['Người lập', S.user], ['Thủ kho', ''], ['Quản lý', '']])}</div>`, 'landscape', 'tong-hop-tuyen-' + doc.date);
+  }
+  draw();
+  if (doc.id) loadDeliveries();
+}
+// Giống server.py route_driver / cust_key (web giao hàng dùng cùng cách tính)
+function routeDriverOf(data, code, drivers) {
+  const a = (data && data.assign) || {};
+  if (code in a) return a[code] || '';
+  const x = drivers.find(v => v.active && (v.routes || []).some(c => String(c).toLowerCase() === String(code).toLowerCase()));
+  return x ? x.id : '';
+}
+const custKeyOf = r => String(r.crm || '').trim() || String(r.code || '').trim() || String(r.cust || '').trim();
+function delivBadge(x) {
+  if (!x) return '';
+  return x.status === 'ok' ? `<span class="badge ok">✓ Đã giao ${esc((x.at || '').slice(11, 16))}</span>`
+    : `<span class="badge bad" title="${esc(x.note)}">✗ Không giao được${x.note ? ': ' + esc(x.note) : ''}</span>`;
+}
+
+/* ============================================================ Tài khoản giao hàng (web giao hàng) */
+function giaoHangLinks() {
+  if (ONLINE) return [];
+  const urls = (S.meta.access && S.meta.access.urls.length ? S.meta.access.urls : [location.origin]);
+  return urls.map(u => u.replace(/\/$/, '') + '/giao-hang');
+}
+function openGiaoHang() {
+  if (ONLINE) return enterGiaoMode();
+  window.open('/giao-hang', '_blank');
+}
+async function viewDrivers(main) {
+  setTitle('Tài khoản giao hàng');
+  const routes = routeList();
+  const rName = c => { const r = routes.find(x => x.code.toLowerCase() === String(c).toLowerCase()); return r ? r.name : ''; };
+  function draw() {
+    const list = (S.meta.drivers || []).slice().sort((a, b) => (b.active - a.active) || a.nick.localeCompare(b.nick));
+    const links = giaoHangLinks();
+    main.innerHTML = `<div class="toolbar"><button class="btn primary" id="g-add">+ Thêm người giao hàng</button><button class="btn" id="g-open">🚚 Mở web giao hàng</button></div>
+      <div class="callout">Mỗi người giao hàng có <b>1 nick + mã PIN</b>. Đăng nhập web giao hàng trên điện thoại sẽ thấy <b>tuyến đã sắp của từng ngày</b>
+      (lấy từ <a href="#/phan-tuyen">Phân tuyến giao hàng</a>): khách, địa chỉ (bấm để mở bản đồ), SĐT (bấm để gọi), số lượng từng loại; bấm <b>Đã giao</b> /
+      <b>Không giao được</b> và kho thấy kết quả ở bảng phân tuyến.<br>Tuyến của mỗi người = <b>tuyến thường chạy</b> dưới đây; ngày nào đổi người thì chọn lại ở cột
+      <b>Người giao</b> trong phân tuyến của ngày đó.</div>
+      ${ONLINE ? `<div class="callout small">Gửi <b>link trang Kho An Tâm này</b> cho người giao hàng (nút <i>Share</i>, quyền <b>Contributor</b> để bấm được "Đã giao").
+        Trên điện thoại: mở link → ở ô <i>Bạn là ai?</i> bấm <b>🚚 Tôi là người giao hàng</b> → đăng nhập nick + PIN. Lần sau mở link sẽ vào thẳng web giao hàng.</div>`
+      : `<div class="card"><h3>Link web giao hàng</h3><div class="toolbar">${links.map(u => `<code class="access-url">${esc(u)}</code><button class="btn sm" data-copy="${esc(u)}">Sao chép</button>`).join('')}</div>
+        <p class="hint">Điện thoại phải dùng <b>cùng wifi / mạng công ty</b> với máy chạy web. Web giao hàng không hỏi mật khẩu chung của web kho – mỗi người đăng nhập bằng nick + PIN của mình.</p></div>`}
+      ${list.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Nick</th><th>Họ tên</th><th>SĐT</th><th>Tuyến thường chạy</th><th>Trạng thái</th><th></th></tr></thead><tbody>
+      ${list.map(x => `<tr class="clickable" data-id="${esc(x.id)}" ${x.active ? '' : 'style="opacity:.55"'}><td><b>${esc(x.nick)}</b></td><td>${esc(x.name)}</td><td>${esc(x.phone)}</td>
+        <td>${x.routes.length ? x.routes.map(c => `<span class="badge" title="${esc(rName(c))}">${esc(c)}</span>`).join(' ') : '<span class="muted small">— chọn theo ngày —</span>'}</td>
+        <td>${x.active ? '<span class="badge ok">Đang dùng</span>' : '<span class="badge warn">Đã khóa</span>'}</td>
+        <td><button class="btn sm danger" data-del="${esc(x.id)}">Xóa</button></td></tr>`).join('')}</tbody></table></div>`
+      : '<p class="muted">Chưa có tài khoản giao hàng nào.</p>'}`;
+    $('#g-add').onclick = () => edit(null);
+    $('#g-open').onclick = () => openGiaoHang();
+    $$('tr[data-id]', main).forEach(tr => tr.onclick = e => { if (!e.target.closest('button')) edit(S.meta.drivers.find(x => x.id === tr.dataset.id)); });
+    $$('[data-del]', main).forEach(b => b.onclick = async () => {
+      const x = S.meta.drivers.find(v => v.id === b.dataset.del);
+      if (!(await ask(`Xóa tài khoản giao hàng "${x.nick}"? Người này sẽ không đăng nhập được nữa (kết quả giao cũ vẫn giữ).`))) return;
+      if (await guard(() => api('DELETE', '/drivers/' + encodeURIComponent(x.id)))) { toast('Đã xóa'); await loadMeta(); draw(); }
+    });
+    $$('[data-copy]', main).forEach(btn => btn.onclick = async () => {
+      try { await navigator.clipboard.writeText(btn.dataset.copy); toast('Đã sao chép ' + btn.dataset.copy); }
+      catch (e) { toast('Hãy tự bôi đen và sao chép: ' + btn.dataset.copy); }
+    });
+  }
+  function edit(x) {
+    if (VIEW) return;
+    const v = x || { id: '', nick: '', name: '', phone: '', routes: [], active: true };
+    const mine = new Set(v.routes.map(c => c.toLowerCase()));
+    const taken = {};
+    (S.meta.drivers || []).forEach(o => { if (o.id !== v.id && o.active) o.routes.forEach(c => { taken[c.toLowerCase()] = o.name || o.nick; }); });
+    openModal({
+      title: x ? 'Sửa tài khoản ' + x.nick : 'Thêm người giao hàng', wide: true,
+      body: `<div class="grid c2">
+        <label class="field">Nick đăng nhập (không dấu, viết liền, vd <i>tuan.hm</i>)<input id="g-nick" value="${esc(v.nick)}" autocapitalize="none"></label>
+        <label class="field">Họ tên<input id="g-name" value="${esc(v.name)}"></label>
+        <label class="field">SĐT<input id="g-phone" value="${esc(v.phone)}"></label>
+        <label class="field">${x ? 'Mã PIN mới (để trống = giữ PIN cũ)' : 'Mã PIN (4–8 chữ số)'}<input id="g-pin" inputmode="numeric" autocomplete="new-password" placeholder="${x ? '••••' : 'vd 2468'}"></label>
+        <label class="check span2"><input type="checkbox" id="g-active" ${v.active ? 'checked' : ''}> Đang dùng (bỏ chọn để khóa, không đăng nhập được)</label></div>
+        <div class="field" style="margin-top:12px">Tuyến thường chạy (mặc định cho mọi ngày – ngày nào khác thì chọn lại ở Phân tuyến)</div>
+        <div class="toolbar">${routes.map(r => `<label class="check"><input type="checkbox" data-route="${esc(r.code)}" ${mine.has(r.code.toLowerCase()) ? 'checked' : ''}>
+          <b>${esc(r.code)}</b> ${esc(r.name)}${taken[r.code.toLowerCase()] ? ` <span class="small muted">(${esc(taken[r.code.toLowerCase()])})</span>` : ''}</label>`).join('') || '<span class="muted small">Chưa có tuyến – thêm ở Danh mục › Tuyến / nơi nhận.</span>'}</div>`,
+      onSave: async root => {
+        await api('POST', '/drivers', { id: v.id, nick: $('#g-nick', root).value, name: $('#g-name', root).value, phone: $('#g-phone', root).value,
+          pin: $('#g-pin', root).value.trim(), active: $('#g-active', root).checked, routes: $$('input[data-route]', root).filter(i => i.checked).map(i => i.dataset.route) });
+        toast('Đã lưu tài khoản giao hàng'); await loadMeta(); draw(); return true;
+      },
+    });
   }
   draw();
 }
@@ -2161,14 +2269,54 @@ function showReadOnlyBanner() {
 /* ============================================================ khởi động */
 function askUser(force) {
   if (S.user && !force) return;
-  openModal({
+  const { root, close } = openModal({
     title: 'Bạn là ai?',
-    body: `<label class="field">Họ tên (ghi vào lịch sử thao tác và gợi ý người lập phiếu)<input id="u-name" list="dl-u" value="${esc(S.user)}"></label>${datalist('dl-u', S.meta.people)}`,
+    body: `<label class="field">Họ tên (ghi vào lịch sử thao tác và gợi ý người lập phiếu)<input id="u-name" list="dl-u" value="${esc(S.user)}"></label>${datalist('dl-u', S.meta.people)}
+      <div class="callout small" style="margin-top:12px">Người giao hàng: <button class="btn sm primary" id="u-giao">🚚 Tôi là người giao hàng</button> – đăng nhập bằng nick + mã PIN để xem tuyến của mình.</div>`,
     saveText: 'Xác nhận',
     onSave: async root => { S.user = $('#u-name', root).value.trim(); store('user', S.user); $('#user-btn').textContent = '👤 ' + (S.user || 'Khách'); return true; },
   });
+  $('#u-giao', root).onclick = () => { close(); openGiaoHang(); };
+}
+// Web giao hàng: bản chạy máy chủ mở trang /giao-hang; bản online chạy ngay trong trang này (dùng chung dữ liệu)
+function giaoRoot() {
+  let el = document.getElementById('gh-root');
+  if (!el) { el = document.createElement('div'); el.id = 'gh-root'; document.body.appendChild(el); }
+  el.hidden = false;
+  return el;
+}
+async function enterGiaoMode() {
+  if (S.dirty && !(await ask('Có thay đổi chưa lưu. Vẫn chuyển sang web giao hàng?'))) return;
+  S.dirty = false;
+  store('mode', 'giao');
+  window.scrollTo(0, 0);
+  Backend.onRemote(() => GiaoHang.onRemoteChange());
+  await GiaoHang.start(giaoRoot(), { onExit: exitGiaoMode });
+}
+async function exitGiaoMode() {
+  store('mode', '');
+  GiaoHang.stop();
+  document.body.classList.remove('gh-mode');
+  const el = document.getElementById('gh-root');
+  if (el) { el.hidden = true; el.innerHTML = ''; }
+  Backend.onRemote(() => { const b = $('#refresh-btn'); if (b) b.hidden = false; });
+  if (!S.meta) return bootKho();
+  await loadMeta();
+  document.title = 'Kho An Tâm';
+  render();
 }
 async function boot() {
+  if (ONLINE && !VIEW && store('mode') === 'giao') {
+    // điện thoại người giao hàng: vào thẳng web giao hàng, chỉ tải dữ liệu phân tuyến
+    giaoRoot().innerHTML = '<p style="padding:20px;font-family:sans-serif">Đang kết nối dữ liệu…</p>';
+    document.body.classList.add('gh-mode');
+    try { await Backend.init(); } catch (e) { giaoRoot().innerHTML = `<p style="padding:20px">Không kết nối được dữ liệu: ${esc(e.message)}</p>`; return; }
+    Backend.onRemote(() => GiaoHang.onRemoteChange());
+    return GiaoHang.start(giaoRoot(), { onExit: exitGiaoMode });
+  }
+  return bootKho();
+}
+async function bootKho() {
   S.user = store('user') || '';
   S.wh = store('wh') === 'NVL' ? 'NVL' : 'TP';
   $$('#wh-switch button').forEach(b => b.onclick = () => switchWh(b.dataset.wh));

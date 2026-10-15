@@ -66,6 +66,7 @@ Nếu trước đây đã dùng bản web 1 kho, khi chạy bản mới dữ li�
 | Kiểm kê | **Kiểm kê kho** › nhập số đếm › **Tạo phiếu điều chỉnh (DCK)** từ chênh lệch; có *In phiếu đếm (ẩn tồn sổ)* để đếm mù | Sheet Kiểm kê + Phiếu Điều chỉnh |
 | Bàn giao ca / thủ kho | **Bàn giao kho** | Sheet Bàn giao kho |
 | Chia khách đặt hàng vào tuyến (kho TP) | **Phân tuyến giao hàng** – dán sheet ngày, tự chia, in danh sách từng tuyến | File Google Sheet báo cáo tuyến lẻ |
+| Người giao xem tuyến của mình, báo đã giao | **Web giao hàng** (mỗi người 1 nick + PIN, tạo ở **Tài khoản giao hàng**) | – |
 | Đặt hàng mua NVL (kho NVL) | **KH mua theo ngày** – nhập ngày đặt, bộ phận, mặt hàng, SL, đơn giá (tự lấy, gõ đè được), ngày cần hàng | Sheet KH Ngày |
 | Tổng hợp mua theo tuần (kho NVL) | **KH mua theo tuần** – tuần tính Thứ 2 → Chủ nhật, cắt theo tháng | Sheet KH Tuần |
 | Kế hoạch mua tháng gửi Kế toán (kho NVL) | **KH mua theo tháng** – SL Xưởng / Văn phòng, đơn giá BQ, thành tiền; in có chữ ký Thủ kho, Kế toán, Giám đốc | Sheet KH Tháng |
@@ -95,6 +96,34 @@ mã CRM thì nhớ theo mã ở đầu tên khách.
 
 Quận nào thuộc tuyến nào được chỉnh ở nút **⚙ Quy tắc chia tuyến**: mỗi tuyến ghi các quận/khu vực, cách nhau bằng
 dấu phẩy.
+
+## Web giao hàng (mỗi người giao hàng 1 tài khoản)
+
+Người giao hàng xem **tuyến đã được sắp của từng ngày** (lấy từ mục Phân tuyến giao hàng) trên điện thoại:
+
+1. Kho TP: **Danh mục › Tài khoản giao hàng › + Thêm người giao hàng** – đặt **nick** (không dấu, viết liền, vd `tuan.hm`),
+   họ tên, SĐT, **mã PIN** (4–8 chữ số) và **tuyến thường chạy**. Khóa / đổi PIN / xóa ở cùng trang.
+2. Mỗi ngày, sau khi chia tuyến ở **Phân tuyến giao hàng**, cột **Người giao** của bảng tổng hợp tự điền người có tuyến
+   thường chạy là tuyến đó; ngày nào đổi người thì chọn lại rồi bấm **Lưu**. Người giao chỉ thấy tuyến sau khi bảng đã **Lưu**.
+3. Người giao mở web giao hàng, đăng nhập nick + PIN (trình duyệt nhớ đăng nhập), chọn ngày (◀ ▶, mặc định hôm nay):
+   - mỗi tuyến: tổng **hàng cần mang**, danh sách khách theo thứ tự trong bảng phân tuyến – mã CRM, địa chỉ (bấm mở Google Maps),
+     SĐT (bấm để gọi), ghi chú, tình trạng thanh toán, số lượng từng loại bánh;
+   - bấm **✓ Đã giao** hoặc **✗ Không giao được** (chọn/ghi lý do); bấm **Hoàn tác** nếu bấm nhầm;
+   - danh sách "Các ngày có tuyến của bạn" để xem lại ngày khác.
+4. Kho thấy kết quả ở bảng Phân tuyến của ngày đó: cột **Đã giao** từng tuyến và nhãn ✓ / ✗ cạnh từng khách
+   (nút **↻ Kết quả giao** để cập nhật). Bản in danh sách tuyến ghi sẵn tên người giao.
+
+Link web giao hàng:
+
+- **Bản chạy trên máy**: `http://<IP-máy-chạy-web>:8000/giao-hang` (xem ở **Tài khoản giao hàng › Link web giao hàng**), điện thoại
+  dùng cùng wifi công ty. Trang này **không hỏi mật khẩu chung** (`mat-khau.txt`) của web kho – chỉ đăng nhập bằng nick + PIN, và chỉ
+  xem/ghi được tuyến của chính mình.
+- **Bản online**: gửi link trang Kho An Tâm (nút *Share*, quyền **Contributor** để bấm được "Đã giao"; Viewer chỉ xem được). Trên điện
+  thoại mở link → ô *Bạn là ai?* bấm **🚚 Tôi là người giao hàng** → đăng nhập. Lần sau mở link sẽ vào thẳng web giao hàng
+  (nút **Web kho** để quay lại). Ở bản online nick + PIN dùng để mỗi người chỉ thấy tuyến của mình, không phải lớp bảo mật: ai được
+  chia sẻ trang vẫn có quyền như trên claude.ai.
+
+Tài khoản giao hàng và kết quả giao nằm trong file dữ liệu **.json**, chuyển qua lại giữa 2 bản như các dữ liệu khác.
 
 Ghi chú:
 
@@ -126,7 +155,7 @@ Chỉ nên nhập phiếu ở **một** bản tại một thời điểm, để 
 
 - `server.py` – máy chủ web + API + SQLite (thư viện chuẩn Python).
 - `xlsx_import.py` – đọc file .xlsx (không cần openpyxl).
-- `static/` – giao diện (HTML/CSS/JS thuần), gồm cả mẫu in phiếu.
+- `static/` – giao diện (HTML/CSS/JS thuần), gồm cả mẫu in phiếu; `static/giao-hang.*` – web giao hàng (trang `/giao-hang`).
 
 ## Bản online (không cần cài đặt)
 
@@ -139,6 +168,7 @@ và dùng chung cho mọi người được chia sẻ trang (nút *Share* trên 
 - Xuất CSV và tải bản sao lưu (.json) ở **Cài đặt & dữ liệu**.
 - Khi người khác vừa thay đổi dữ liệu, nút **↻ Có dữ liệu mới** hiện trên đầu trang để tải lại.
 
-Mã nguồn bản online: `online/backend.js` (thay cho server.py, chạy trong trình duyệt) + giao diện chung `static/`.
+Mã nguồn bản online: `online/backend.js` (thay cho server.py, chạy trong trình duyệt) + giao diện chung `static/`
+(web giao hàng được nhúng vào cùng trang để dùng chung dữ liệu).
 Đóng gói lại thành một trang: `python online/build.py` → `online/kho-antam.html`.
 

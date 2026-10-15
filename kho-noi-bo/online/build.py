@@ -31,6 +31,9 @@ def parts():
     css = read(ROOT, "static", "style.css")
     backend = read(HERE, "backend.js")
     app = read(ROOT, "static", "app.js")
+    # web giao hàng chạy ngay trong trang (dùng chung dữ liệu): CSS nối sau, JS đặt trước app.js
+    css += "\n" + read(ROOT, "static", "giao-hang.css")
+    app = read(ROOT, "static", "giao-hang.js") + "\n" + app
     for name, code, tag in (("backend.js", backend, "</script"), ("app.js", app, "</script"), ("style.css", css, "</style")):
         if tag in code.lower():
             raise SystemExit("%s chứa %s – không nhúng được" % (name, tag))

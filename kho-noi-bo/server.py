@@ -11,13 +11,17 @@ Biến môi trường (tùy chọn):
 """
 import base64
 import csv
+import hashlib
+import hmac
 import io
 import json
 import mimetypes
 import os
 import re
+import secrets
 import sqlite3
 import threading
+import time
 import traceback
 from datetime import date, datetime
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
@@ -119,6 +123,8 @@ DEFAULT_SETTINGS = {
     "paper": "A4",
     # Phân tuyến giao hàng: quy tắc từ khóa quận/địa chỉ -> mã tuyến, và tuyến đã chọn tay theo mã khách
     "routing": {"rules": [], "memory": {}},
+    # Tài khoản web giao hàng: {id: {nick, name, phone, routes: [mã tuyến], active, salt, pin}} – pin = sha256(salt:PIN)
+    "drivers": {},
 }
 
 SCHEMA = """
@@ -153,6 +159,10 @@ CREATE TABLE IF NOT EXISTS plans (
   id INTEGER PRIMARY KEY AUTOINCREMENT, wh TEXT NOT NULL DEFAULT 'NVL', date TEXT NOT NULL, dept TEXT DEFAULT '',
   product_code TEXT NOT NULL, qty REAL DEFAULT 0, price REAL DEFAULT 0, need_date TEXT DEFAULT '',
   proposer TEXT DEFAULT '', note TEXT DEFAULT '', created_at TEXT, updated_at TEXT
+);
+CREATE TABLE IF NOT EXISTS deliveries (
+  date TEXT NOT NULL, cust_key TEXT NOT NULL, route TEXT DEFAULT '', driver TEXT DEFAULT '', status TEXT DEFAULT '',
+  note TEXT DEFAULT '', at TEXT, PRIMARY KEY (date, cust_key)
 );
 CREATE TABLE IF NOT EXISTS log (
   id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT, who TEXT, action TEXT, target TEXT, detail TEXT
@@ -230,6 +240,7 @@ def init_db():
     con.executescript(SCHEMA)
     migrate(con)
     con.executescript(INDEXES)
+    con.execute("INSERT OR IGNORE INTO settings(key, value) VALUES ('_gh_secret', ?)", (secrets.token_hex(32),))
     con.commit()
     con.close()
 
@@ -663,7 +674,10 @@ def export_backup_json(con):
            "settings": {k: v for k, v in s.items() if k in DEFAULT_SETTINGS},
            "routes": {str(r["id"]): {"name": r["name"], "code": r["code"], "note": r["note"] or "", "sort": r["sort"] or 0}
                       for r in con.execute("SELECT * FROM routes")},
-           "warehouses": {}}
+           "warehouses": {}, "deliveries": {}}
+    for r in con.execute("SELECT * FROM deliveries"):
+        out["deliveries"].setdefault(r["date"], {"date": r["date"], "d": {}})["d"][r["cust_key"]] = {
+            "status": r["status"], "note": r["note"] or "", "at": r["at"] or "", "driver": r["driver"] or "", "route": r["route"] or ""}
     for wh in WAREHOUSE_CODES:
         products = {r["code"]: {"name": r["name"], "unit": r["unit"] or "", "grp": r["grp"] or "", "price": r["price"] or 0,
                                 "supplier": r["supplier"] or "", "note": r["note"] or "", "opening_qty": r["opening_qty"] or 0,
@@ -695,8 +709,13 @@ def import_backup_json(con, snap, who=""):
     if not isinstance(snap, dict) or snap.get("format") != "kho-antam-backup" or not isinstance(snap.get("warehouses"), dict):
         raise ApiError(400, "File không đúng: hãy dùng file 'Tải dữ liệu' (.json) của web Kho An Tâm")
     live = lambda m: [(k, v) for k, v in (m or {}).items() if v is not None]
-    for t in ("voucher_lines", "vouchers", "products", "routes", "docs", "plans"):
+    for t in ("voucher_lines", "vouchers", "products", "routes", "docs", "plans", "deliveries"):
         con.execute("DELETE FROM %s" % t)
+    for _, day in live(snap.get("deliveries")):
+        for key, r in live((day or {}).get("d")):
+            con.execute("INSERT OR REPLACE INTO deliveries(date, cust_key, route, driver, status, note, at) VALUES (?,?,?,?,?,?,?)",
+                        (text(day.get("date")), key, text(r.get("route")), text(r.get("driver")), text(r.get("status")),
+                         text(r.get("note")), text(r.get("at"))))
     for k, v in (snap.get("settings") or {}).items():
         if k in DEFAULT_SETTINGS:
             con.execute("INSERT OR REPLACE INTO settings(key, value) VALUES (?,?)", (k, json.dumps(v, ensure_ascii=False)))
@@ -760,7 +779,194 @@ def _date_range(q):
     return cond, params
 
 
+# ---------------------------------------------------------------- web giao hàng (mỗi người giao 1 tài khoản)
+
+GH_TOKEN_DAYS = 60
+
+
+def pin_hash(salt, pin):
+    """Giống online/backend.js (pinHash) để file dữ liệu .json dùng chung được."""
+    return hashlib.sha256(("%s:%s" % (salt, pin)).encode("utf-8")).hexdigest()
+
+
+def norm_nick(v):
+    return re.sub(r"\s+", "", text(v)).lower()
+
+
+def get_drivers(con):
+    # bỏ các mục null (tài khoản đã xóa ở bản online, chuyển qua file .json)
+    return {k: v for k, v in (get_settings(con).get("drivers") or {}).items() if isinstance(v, dict)}
+
+
+def public_driver(did, d):
+    return {"id": did, "nick": d.get("nick", ""), "name": d.get("name", ""), "phone": d.get("phone", ""),
+            "routes": d.get("routes") or [], "active": d.get("active", True) is not False, "has_pin": bool(d.get("pin"))}
+
+
+def save_drivers(con, drivers):
+    con.execute("INSERT OR REPLACE INTO settings(key, value) VALUES ('drivers', ?)", (json.dumps(drivers, ensure_ascii=False),))
+
+
+def save_driver(con, data, who=""):
+    drivers = get_drivers(con)
+    did = text(data.get("id")) or "g" + secrets.token_hex(4)
+    nick = norm_nick(data.get("nick"))
+    if not re.match(r"^[a-z0-9._-]{2,30}$", nick):
+        raise ApiError(400, "Tên đăng nhập (nick) 2–30 ký tự, chỉ gồm chữ không dấu, số, dấu chấm, gạch")
+    if any(norm_nick(d.get("nick")) == nick and k != did for k, d in drivers.items()):
+        raise ApiError(409, "Nick %s đã có người dùng" % nick)
+    old = drivers.get(did) or {}
+    rec = {"nick": nick, "name": text(data.get("name")) or nick, "phone": text(data.get("phone")),
+           "routes": [re.sub(r"\s+", "", text(c)) for c in (data.get("routes") or []) if text(c)],
+           "active": data.get("active", True) is not False, "salt": old.get("salt", ""), "pin": old.get("pin", "")}
+    pin = text(data.get("pin"))
+    if pin:
+        if not re.match(r"^\d{4,8}$", pin):
+            raise ApiError(400, "Mã PIN gồm 4–8 chữ số")
+        rec["salt"] = secrets.token_hex(8)
+        rec["pin"] = pin_hash(rec["salt"], pin)
+    if not rec["pin"]:
+        raise ApiError(400, "Cần đặt mã PIN cho tài khoản mới")
+    drivers[did] = rec
+    save_drivers(con, drivers)
+    write_log(con, who, "Lưu tài khoản giao hàng", nick, "đổi PIN" if pin and old else "", "TP")
+    return public_driver(did, rec)
+
+
+def _gh_secret(con):
+    """Khóa ký phiên đăng nhập web giao hàng (tạo 1 lần khi khởi động, không nằm trong file sao lưu .json)."""
+    r = con.execute("SELECT value FROM settings WHERE key='_gh_secret'").fetchone()
+    if not r:
+        raise ApiError(500, "Chưa có khóa phiên giao hàng – hãy chạy lại web")
+    return r["value"]
+
+
+def _gh_sign(con, did, d, exp):
+    msg = "%s|%s|%d" % (did, d.get("pin", ""), exp)
+    return hmac.new(_gh_secret(con).encode(), msg.encode(), hashlib.sha256).hexdigest()[:32]
+
+
+def gh_login(con, data):
+    nick, pin = norm_nick(data.get("nick")), text(data.get("pin"))
+    for did, d in get_drivers(con).items():
+        if norm_nick(d.get("nick")) == nick and d.get("active", True) is not False and d.get("pin"):
+            if hmac.compare_digest(pin_hash(d.get("salt", ""), pin), d["pin"]):
+                exp = int(time.time()) + GH_TOKEN_DAYS * 86400
+                token = "%s.%d.%s" % (did, exp, _gh_sign(con, did, d, exp))
+                return {"token": token, "driver": public_driver(did, d)}
+            break
+    time.sleep(0.5)
+    raise ApiError(401, "Sai nick hoặc mã PIN")
+
+
+def gh_auth(con, token):
+    try:
+        did, exp, sig = text(token).split(".")
+        exp = int(exp)
+    except ValueError:
+        raise ApiError(401, "Hãy đăng nhập lại")
+    d = get_drivers(con).get(did)
+    if not d or d.get("active", True) is False or exp < time.time() or not hmac.compare_digest(sig, _gh_sign(con, did, d, exp)):
+        raise ApiError(401, "Phiên đăng nhập đã hết hạn hoặc tài khoản bị khóa – hãy đăng nhập lại")
+    return did, d
+
+
+def routing_doc(con, d):
+    """Bảng phân tuyến của 1 ngày (bản cập nhật sau cùng nếu có nhiều)."""
+    r = con.execute("SELECT * FROM docs WHERE wh='TP' AND kind='routing' AND date=? ORDER BY updated_at DESC, id DESC LIMIT 1", (d,)).fetchone()
+    return json.loads(r["data"] or "{}") if r else None
+
+
+def route_driver(data, code, drivers):
+    """Người giao của 1 tuyến: chọn ở Phân tuyến ngày đó, nếu chưa chọn thì lấy người có tuyến thường chạy là tuyến này."""
+    assign = (data or {}).get("assign") or {}
+    if code in assign:
+        return assign[code] or ""
+    for did, d in drivers.items():
+        if d.get("active", True) is not False and any(text(c).lower() == code.lower() for c in d.get("routes") or []):
+            return did
+    return ""
+
+
+def cust_key(r):
+    return text(r.get("crm")) or text(r.get("code")) or text(r.get("cust"))
+
+
+def my_routes(con, did, d, drivers=None):
+    """Các tuyến được sắp cho người giao did trong ngày d: [{code, name, rows}] theo thứ tự danh mục tuyến."""
+    data = routing_doc(con, d)
+    if not data:
+        return None, []
+    drivers = drivers if drivers is not None else get_drivers(con)
+    names = {}
+    order = []
+    for r in con.execute("SELECT name, code FROM routes ORDER BY sort, id"):
+        c = re.sub(r"\s+", "", r["code"] or "")
+        if c and c.lower() not in names:
+            names[c.lower()] = r["name"]
+            order.append(c.lower())
+    groups = {}
+    for row in data.get("rows") or []:
+        code = text(row.get("route"))
+        if code and route_driver(data, code, drivers) == did:
+            groups.setdefault(code, []).append(row)
+    out = [{"code": c, "name": names.get(c.lower(), ""), "rows": rs} for c, rs in groups.items()]
+    out.sort(key=lambda g: (order.index(g["code"].lower()) if g["code"].lower() in order else 999, g["code"]))
+    return data, out
+
+
+def deliveries_of(con, d):
+    return {r["cust_key"]: {"status": r["status"], "note": r["note"], "at": r["at"], "driver": r["driver"], "route": r["route"]}
+            for r in con.execute("SELECT * FROM deliveries WHERE date=?", (d,))}
+
+
+def gh_api(con, method, action, q, body, token):
+    if action == "login" and method == "POST":
+        return gh_login(con, body)
+    did, me = gh_auth(con, token)
+    if action == "day" and method == "GET":
+        d = valid_date(q.get("date") or date.today().isoformat())
+        data, routes = my_routes(con, did, d)
+        done = deliveries_of(con, d)
+        keys = {cust_key(r) for g in routes for r in g["rows"]}
+        return {"date": d, "driver": public_driver(did, me), "planned": data is not None,
+                "cols": (data or {}).get("cols") or [], "routes": routes,
+                "deliveries": {k: v for k, v in done.items() if k in keys}}
+    if action == "days" and method == "GET":
+        drivers = get_drivers(con)
+        out = []
+        for r in con.execute("SELECT DISTINCT date FROM docs WHERE wh='TP' AND kind='routing' ORDER BY date DESC LIMIT 45"):
+            _, routes = my_routes(con, did, r["date"], drivers)
+            if routes:
+                done = deliveries_of(con, r["date"])
+                keys = [cust_key(x) for g in routes for x in g["rows"]]
+                out.append({"date": r["date"], "routes": [g["code"] for g in routes], "count": len(keys),
+                            "done": sum(1 for k in keys if k in done and done[k]["status"] == "ok")})
+        return out
+    if action == "deliver" and method == "POST":
+        d = valid_date(body.get("date"))
+        key, status = text(body.get("key")), text(body.get("status"))
+        _, routes = my_routes(con, did, d)
+        route = next((g["code"] for g in routes for r in g["rows"] if cust_key(r) == key), None)
+        if not key or route is None:
+            raise ApiError(403, "Khách này không thuộc tuyến của bạn ngày %s" % d)
+        if status in ("ok", "fail"):
+            con.execute("INSERT OR REPLACE INTO deliveries(date, cust_key, route, driver, status, note, at) VALUES (?,?,?,?,?,?,?)",
+                        (d, key, route, did, status, text(body.get("note"))[:300], now_str()))
+        elif status == "":
+            con.execute("DELETE FROM deliveries WHERE date=? AND cust_key=?", (d, key))
+        else:
+            raise ApiError(400, "Trạng thái không hợp lệ")
+        write_log(con, "🚚 " + me.get("name", ""), {"ok": "Đã giao", "fail": "Không giao được", "": "Bỏ đánh dấu giao"}[status],
+                  "%s %s" % (key, d), text(body.get("note")), "TP")
+        return {"ok": True}
+    raise ApiError(404, "Không có API này")
+
+
 # ---------------------------------------------------------------- HTTP
+
+GH_PUBLIC = ("/giao-hang", "/giao-hang/", "/giao-hang.html", "/giao-hang.js", "/giao-hang.css")
+
 
 class Handler(BaseHTTPRequestHandler):
     server_version = "AnTamKho/2.0"
@@ -835,10 +1041,11 @@ class Handler(BaseHTTPRequestHandler):
         self.dispatch("DELETE")
 
     def dispatch(self, method):
-        if not self.authorized():
-            return self.deny()
         url = urlparse(self.path)
         path = url.path
+        # Web giao hàng có đăng nhập riêng (nick + mã PIN) nên không hỏi mật khẩu chung của web kho
+        if not self.authorized() and not (path in GH_PUBLIC or path.startswith("/api/gh/")):
+            return self.deny()
         q = {k: v[-1] for k, v in parse_qs(url.query).items()}
         try:
             if path.startswith("/api/"):
@@ -855,6 +1062,8 @@ class Handler(BaseHTTPRequestHandler):
     def static(self, path):
         if path in ("", "/"):
             path = "/index.html"
+        if path.rstrip("/") == "/giao-hang":
+            path = "/giao-hang.html"
         full = os.path.normpath(os.path.join(STATIC_DIR, path.lstrip("/")))
         if not full.startswith(STATIC_DIR) or not os.path.isfile(full):
             full = os.path.join(STATIC_DIR, "index.html")
@@ -896,6 +1105,9 @@ class Handler(BaseHTTPRequestHandler):
 
     def route(self, con, method, res, arg, q, wh):
         who = self.who()
+        if res == "gh":
+            body = self.read_json() if method == "POST" else {}
+            return gh_api(con, method, arg, q, body, self.headers.get("X-GH-Token") or "")
         if res == "meta" and method == "GET":
             s = get_settings(con)
             people, parties = set(s.get("staff") or []), set(s["warehouses"][wh].get("parties") or [])
@@ -904,9 +1116,11 @@ class Handler(BaseHTTPRequestHandler):
                 parties.update(x.strip() for x in (r["c"], r["d"]) if x and x.strip())
             for r in con.execute("SELECT DISTINCT proposer FROM plans WHERE wh=? AND proposer<>''", (wh,)):
                 people.add(r[0].strip())
+            drivers = s.pop("drivers", None) or {}
             return {
                 "wh": wh,
                 "settings": s,
+                "drivers": [public_driver(k, v) for k, v in drivers.items()],
                 "warehouse": s["warehouses"][wh],
                 "products": rows(con.execute("SELECT * FROM products WHERE wh=? ORDER BY sort, code", (wh,))),
                 "routes": rows(con.execute("SELECT * FROM routes ORDER BY sort, id")),
@@ -923,6 +1137,7 @@ class Handler(BaseHTTPRequestHandler):
                     if code in cur and isinstance(d, dict):
                         cur[code].update({k: v for k, v in d.items() if k in ("name", "department", "parties")})
                 data["warehouses"] = cur
+            data.pop("drivers", None)  # tài khoản giao hàng sửa ở API /drivers
             for k, v in data.items():
                 if k in DEFAULT_SETTINGS:
                     con.execute("INSERT OR REPLACE INTO settings(key, value) VALUES (?,?)", (k, json.dumps(v, ensure_ascii=False)))
@@ -988,6 +1203,21 @@ class Handler(BaseHTTPRequestHandler):
                 con.execute("DELETE FROM routes WHERE id=?", (int(arg),))
                 write_log(con, who, "Xóa tuyến", arg)
                 return {"ok": True}
+
+        # ---- tài khoản web giao hàng + kết quả giao
+        if res == "drivers":
+            if method == "GET":
+                return [public_driver(k, v) for k, v in get_drivers(con).items()]
+            if method == "POST":
+                return save_driver(con, self.read_json(), who)
+            if method == "DELETE" and arg:
+                drivers = get_drivers(con)
+                d = drivers.pop(arg, None)
+                save_drivers(con, drivers)
+                write_log(con, who, "Xóa tài khoản giao hàng", (d or {}).get("nick", arg), "", "TP")
+                return {"ok": True}
+        if res == "deliveries" and method == "GET":
+            return deliveries_of(con, valid_date(q.get("date")))
 
         # ---- phiếu
         if res == "next-number" and method == "GET":

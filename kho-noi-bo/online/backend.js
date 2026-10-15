@@ -10,7 +10,9 @@
      kho/<kho>/days/<yyyy-mm-dd>  {date, v: {id: phiếu|null}}       – các phiếu của 1 ngày
      kho/<kho>/docs/<id>          biên bản kiểm kê / bàn giao / kebab / kê đơn
      kho/<kho>/plans/<yyyy-mm>    {ym, p: {id: dòng kế hoạch|null}}
+     kho/TP/giao/<yyyy-mm-dd>     {date, d: {mã khách: kết quả giao|null}}  – web giao hàng ghi
      log/<yyyy-mm-dd>             {date, e: {id: thao tác}}
+   Tài khoản giao hàng nằm trong cài đặt: s.drivers {id: {nick, name, phone, routes, active, salt, pin}|null}
    null = đã xóa (ghi gộp từng phần nên mỗi người sửa phiếu riêng không đè lên nhau). */
 window.ANTAM_ONLINE = true;
 
@@ -54,6 +56,7 @@ const Backend = (() => {
     staff: [], stocktake_threshold: 0.01, kebab_sizes: [50, 45, 40, 35, 30, 25, 20, 15, 10, 5],
     plan_depts: ['Xưởng', 'Văn phòng'], paper: 'A4',
     routing: { rules: [], memory: {} },
+    drivers: {},
   };
 
   const st = {
@@ -109,6 +112,8 @@ const Backend = (() => {
     doc: (wh, id) => dbx().doc(`kho/${wh}/docs/${id}`),
     plans: wh => dbx().collection(`kho/${wh}/plans`),
     planMonth: (wh, ym) => dbx().doc(`kho/${wh}/plans/${ym}`),
+    giao: d => dbx().doc(`kho/TP/giao/${d}`),
+    giaoAll: () => dbx().collection('kho/TP/giao'),
     logs: () => dbx().collection('log'),
     logDay: d => dbx().doc('log/' + d),
   };
@@ -177,7 +182,12 @@ const Backend = (() => {
     }
     st.snapshotAt = snap.at || '';
   }
-  async function init() {
+  // gọi nhiều lần được (web giao hàng → web kho): chỉ kết nối 1 lần
+  function init() {
+    if (!st.initP) st.initP = doInit().then(() => { st.ready = true; }, e => { st.initP = null; throw e; });
+    return st.initP;
+  }
+  async function doInit() {
     if (VIEW) {
       const el = document.getElementById('antam-snapshot');
       loadSnapshot(JSON.parse(el ? el.textContent : '{}'));
@@ -604,8 +614,9 @@ const Backend = (() => {
   }
   // Toàn bộ dữ liệu 2 kho (đọc mới từ kho dữ liệu): dùng để sao lưu và để cập nhật trang xem công khai
   async function exportBackup() {
-    const out = { format: 'kho-antam-backup', version: 1, at: nowStr(), settings: st.settings, routes: st.routes, warehouses: {} };
+    const out = { format: 'kho-antam-backup', version: 1, at: nowStr(), settings: st.settings, routes: st.routes, warehouses: {}, deliveries: {} };
     const asMap = snap => Object.fromEntries(snap.docs.map(d => [d.id, d.data()]));
+    if (!VIEW) out.deliveries = asMap(await ref.giaoAll().orderBy('date', 'desc').limit(400).get());
     for (const w of WAREHOUSES) {
       if (VIEW) { out.warehouses[w] = { products: st.products[w], days: st.days[w], docs: st.docs[w], plans: st.plans[w] }; continue; }
       const [p, days, docs, plans] = await Promise.all([ref.products(w).get(), ref.days(w).orderBy('date', 'desc').limit(1000).get(),
@@ -615,14 +626,156 @@ const Backend = (() => {
     return JSON.stringify(out);
   }
 
+  /* ---------------------------------------------------------- web giao hàng (mỗi người giao 1 nick + mã PIN) */
+  // Giống server.py: pin = sha256("salt:PIN"), người giao của tuyến = chọn ở phân tuyến ngày đó, không thì người có tuyến thường chạy
+  async function pinHash(salt, pin) {
+    const buf = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${salt}:${pin}`));
+    return Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+  }
+  const randHex = n => Array.from(crypto.getRandomValues(new Uint8Array(n))).map(b => b.toString(16).padStart(2, '0')).join('');
+  const normNick = v => text(v).replace(/\s+/g, '').toLowerCase();
+  const drivers = () => Object.fromEntries(live(settings().drivers));
+  const publicDriver = (id, d) => ({ id, nick: d.nick || '', name: d.name || '', phone: d.phone || '', routes: d.routes || [],
+    active: d.active !== false, has_pin: !!d.pin });
+  const custKey = r => text(r.crm) || text(r.code) || text(r.cust);
+  function routingDoc(d) {
+    let best = null;
+    for (const doc of Object.values(st.docs.TP || {})) {
+      if (!doc || doc.kind !== 'routing' || doc.date !== d) continue;
+      if (!best || (doc.updated_at || '') > (best.updated_at || '')) best = doc;
+    }
+    return best ? best.data || {} : null;
+  }
+  function routeDriver(data, code, drv) {
+    const a = (data && data.assign) || {};
+    if (code in a) return a[code] || '';
+    const hit = Object.entries(drv).find(([, d]) => d.active !== false && (d.routes || []).some(c => text(c).toLowerCase() === code.toLowerCase()));
+    return hit ? hit[0] : '';
+  }
+  function myRoutes(id, d, drv) {
+    const data = routingDoc(d);
+    if (!data) return { data: null, routes: [] };
+    const names = {}, order = [];
+    live(st.routes).map(([, r]) => r).sort((a, b) => (a.sort || 0) - (b.sort || 0)).forEach(r => {
+      const c = text(r.code).replace(/\s+/g, '').toLowerCase();
+      if (c && !(c in names)) { names[c] = r.name || ''; order.push(c); }
+    });
+    const groups = new Map();
+    for (const row of data.rows || []) {
+      const code = text(row.route);
+      if (code && routeDriver(data, code, drv) === id) { if (!groups.has(code)) groups.set(code, []); groups.get(code).push(row); }
+    }
+    const pos = c => { const i = order.indexOf(c.toLowerCase()); return i < 0 ? 999 : i; };
+    const routes = Array.from(groups, ([code, rows]) => ({ code, name: names[code.toLowerCase()] || '', rows }))
+      .sort((a, b) => pos(a.code) - pos(b.code) || a.code.localeCompare(b.code));
+    return { data, routes };
+  }
+  async function deliveriesOf(d) {
+    if (VIEW) return {};
+    try { return Object.fromEntries(live((docData(await ref.giao(d).get()) || {}).d)); } catch (e) { throw dbError(e); }
+  }
+  // dữ liệu phân tuyến kho TP (điện thoại người giao chỉ tải phần này)
+  async function ensureGiaoData() {
+    if (VIEW || st.giaoLive || (st.wh === 'TP' && st.loaded)) return;
+    st.giaoLive = true;
+    await subscribe(st.globalSubs, ref.docs('TP').orderBy('date', 'desc').limit(500), s => {
+      const m = {}; s.docs.forEach(d => { m[d.id] = d.data(); }); st.docs.TP = m;
+    }, 'giao-docs');
+    st.loaded = true;
+  }
+  function ghAuth(token) {
+    const [id, sig] = text(token).split('.');
+    const d = drivers()[id];
+    if (!d || d.active === false || !sig || sig !== String(d.pin || '').slice(0, 24)) throw new ApiError(401, 'Phiên đăng nhập đã hết hạn hoặc tài khoản bị khóa – hãy đăng nhập lại');
+    return [id, d];
+  }
+  async function ghApi(method, action, q, body, token) {
+    if (action === 'login' && method === 'POST') {
+      const nick = normNick(body.nick), pin = text(body.pin);
+      const hit = Object.entries(drivers()).find(([, d]) => normNick(d.nick) === nick && d.active !== false && d.pin);
+      if (!hit || (await pinHash(hit[1].salt || '', pin)) !== hit[1].pin) { await sleep(500); throw new ApiError(401, 'Sai nick hoặc mã PIN'); }
+      return { token: `${hit[0]}.${hit[1].pin.slice(0, 24)}`, driver: publicDriver(hit[0], hit[1]) };
+    }
+    const [id, me] = ghAuth(token);
+    await ensureGiaoData();
+    const drv = drivers();
+    if (action === 'day' && method === 'GET') {
+      const d = validDate(q.date || today());
+      const { data, routes } = myRoutes(id, d, drv);
+      const done = routes.length ? await deliveriesOf(d) : {};
+      const keys = new Set(routes.flatMap(g => g.rows.map(custKey)));
+      return { date: d, driver: publicDriver(id, me), planned: !!data, cols: (data && data.cols) || [], routes,
+        deliveries: Object.fromEntries(Object.entries(done).filter(([k]) => keys.has(k))) };
+    }
+    if (action === 'days' && method === 'GET') {
+      const dates = Array.from(new Set(Object.values(st.docs.TP || {}).filter(x => x && x.kind === 'routing').map(x => x.date))).sort().reverse().slice(0, 45);
+      const mine = dates.map(d => [d, myRoutes(id, d, drv).routes]).filter(([, r]) => r.length);
+      let done = {};
+      if (mine.length && !VIEW) {
+        try { (await ref.giaoAll().orderBy('date', 'desc').limit(60).get()).docs.forEach(x => { done[x.id] = Object.fromEntries(live((x.data() || {}).d)); }); }
+        catch (e) { done = {}; }
+      }
+      return mine.map(([d, routes]) => {
+        const keys = routes.flatMap(g => g.rows.map(custKey));
+        return { date: d, routes: routes.map(g => g.code), count: keys.length, done: keys.filter(k => ((done[d] || {})[k] || {}).status === 'ok').length };
+      });
+    }
+    if (action === 'deliver' && method === 'POST') {
+      const d = validDate(body.date), key = text(body.key), status = text(body.status), note = text(body.note).slice(0, 300);
+      const g = myRoutes(id, d, drv).routes.find(x => x.rows.some(r => custKey(r) === key));
+      if (!key || !g) throw new ApiError(403, `Khách này không thuộc tuyến của bạn ngày ${d}`);
+      if (!['ok', 'fail', ''].includes(status)) throw new ApiError(400, 'Trạng thái không hợp lệ');
+      const rec = status ? { status, note, at: nowStr(), driver: id, route: g.code } : null;
+      await mergeInto(ref.giao(d), { d: { [key]: rec } }, { date: d });
+      const who = st.who; st.who = '🚚 ' + (me.name || me.nick);
+      await log({ ok: 'Đã giao', fail: 'Không giao được', '': 'Bỏ đánh dấu giao' }[status], `${key} ${d}`, note, 'TP');
+      st.who = who;
+      return { ok: true };
+    }
+    throw new ApiError(404, 'Không có chức năng này');
+  }
+  async function saveDriver(data) {
+    const all = drivers();
+    const id = text(data.id) || newId('g');
+    const nick = normNick(data.nick);
+    if (!/^[a-z0-9._-]{2,30}$/.test(nick)) throw new ApiError(400, 'Tên đăng nhập (nick) 2–30 ký tự, chỉ gồm chữ không dấu, số, dấu chấm, gạch');
+    if (Object.entries(all).some(([k, d]) => normNick(d.nick) === nick && k !== id)) throw new ApiError(409, `Nick ${nick} đã có người dùng`);
+    const old = all[id] || {};
+    const rec = { nick, name: text(data.name) || nick, phone: text(data.phone), routes: (data.routes || []).map(c => text(c).replace(/\s+/g, '')).filter(Boolean),
+      active: data.active !== false, salt: old.salt || '', pin: old.pin || '' };
+    const pin = text(data.pin);
+    if (pin) {
+      if (!/^\d{4,8}$/.test(pin)) throw new ApiError(400, 'Mã PIN gồm 4–8 chữ số');
+      rec.salt = randHex(8); rec.pin = await pinHash(rec.salt, pin);
+    }
+    if (!rec.pin) throw new ApiError(400, 'Cần đặt mã PIN cho tài khoản mới');
+    await mergeInto(ref.settings(), { s: { drivers: { [id]: rec } } }, { s: {} });
+    st.settings = deepMerge(clone(st.settings || {}), { drivers: { [id]: rec } });
+    await log('Lưu tài khoản giao hàng', nick, pin && old.pin ? 'đổi PIN' : '', 'TP');
+    return publicDriver(id, rec);
+  }
+
   /* ---------------------------------------------------------- bộ định tuyến API (giống server.py) */
-  async function handle(method, fullPath, body) {
+  async function handle(method, fullPath, body, opts = {}) {
     const [pathPart, qs] = fullPath.split('?');
     const q = Object.fromEntries(new URLSearchParams(qs || ''));
     const parts = pathPart.replace(/^\/+|\/+$/g, '').split('/');
     const res = parts[0], arg = parts[1] ? decodeURIComponent(parts[1]) : null;
     const wh = q.wh || st.wh;
     if (!WAREHOUSES.includes(wh)) throw new ApiError(400, 'Kho không hợp lệ: ' + wh);
+    if (res === 'gh') return ghApi(method, arg, q, body || {}, opts.token || '');
+    if (res === 'drivers') {
+      if (method === 'GET') return Object.entries(drivers()).map(([k, d]) => publicDriver(k, d));
+      if (method === 'POST') return saveDriver(body || {});
+      if (method === 'DELETE' && arg) {
+        const d = drivers()[arg];
+        await mergeInto(ref.settings(), { s: { drivers: { [arg]: null } } }, { s: {} });
+        st.settings = deepMerge(clone(st.settings || {}), { drivers: { [arg]: null } });
+        await log('Xóa tài khoản giao hàng', (d && d.nick) || arg, '', 'TP');
+        return { ok: true };
+      }
+    }
+    if (res === 'deliveries' && method === 'GET') return deliveriesOf(validDate(q.date));
     if (!st.days[wh] && !VIEW && res !== 'meta' && res !== 'settings' && res !== 'routes') throw new ApiError(400, 'Chưa tải dữ liệu kho ' + wh);
 
     if (res === 'meta' && method === 'GET') {
@@ -634,8 +787,11 @@ const Backend = (() => {
       }
       planRows(wh).forEach(r => { if (r.proposer) people.add(r.proposer.trim()); });
       const sortVi = a => [...a].sort((x, y) => x.toLowerCase().localeCompare(y.toLowerCase(), 'vi'));
+      const drv = drivers();
+      delete s.drivers;
       return {
         wh, settings: s, warehouse: s.warehouses[wh], products: products(wh),
+        drivers: Object.entries(drv).map(([k, d]) => publicDriver(k, d)),
         routes: live(st.routes).map(([id, r]) => Object.assign({ id }, r)).sort((a, b) => (a.sort || 0) - (b.sort || 0)),
         people: sortVi(people), parties: sortVi(parties),
         counts: Object.fromEntries(WAREHOUSES.map(w => [w, st.days[w] ? vouchers(w).length : 0])),
@@ -650,7 +806,7 @@ const Backend = (() => {
           const whs = cur.warehouses;
           for (const [code, d] of Object.entries(v || {})) if (whs[code]) ['name', 'department', 'parties'].forEach(f => { if (d[f] !== undefined) whs[code][f] = d[f]; });
           next.warehouses = Object.fromEntries(WAREHOUSES.map(c => [c, { name: whs[c].name, department: whs[c].department, parties: whs[c].parties }]));
-        } else if (k in DEFAULT_SETTINGS) next[k] = v;
+        } else if (k in DEFAULT_SETTINGS && k !== 'drivers') next[k] = v; // tài khoản giao hàng sửa ở /drivers
       }
       await write(() => ref.settings().set({ s: next }));
       st.settings = next;
@@ -852,6 +1008,11 @@ const Backend = (() => {
       const summary = {};
       if (snap.settings && Object.keys(snap.settings).length) { await write(() => ref.settings().set({ s: snap.settings })); st.settings = snap.settings; }
       await write(() => ref.routes().set({ r: snap.routes || {} })); st.routes = snap.routes || {};
+      if (snap.deliveries) {
+        const oldG = (await ref.giaoAll().limit(1000).get()).docs.map(x => x.id);
+        for (const id of oldG) if (!snap.deliveries[id]) await write(() => ref.giao(id).delete());
+        for (const [id, doc] of Object.entries(snap.deliveries)) if (doc) await write(() => ref.giao(id).set(doc));
+      }
       for (const w of WAREHOUSES) {
         const d = snap.warehouses[w];
         if (!d) continue;
@@ -906,6 +1067,7 @@ const Backend = (() => {
 
   return {
     init, setWh, handle,
+    get ready() { return !!st.ready; },
     set who(v) { st.who = v; },
     get myName() { return st.myName || ''; },
     get canWrite() { return VIEW ? false : st.canWrite; },
