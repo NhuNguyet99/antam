@@ -134,16 +134,19 @@ Link web giao hàng:
 - **Bản chạy trên máy**: `http://<IP-máy-chạy-web>:8000/giao-hang` (xem ở **Tài khoản giao hàng › Link web giao hàng**), điện thoại
   dùng cùng wifi công ty. Trang này **không hỏi mật khẩu chung** (`mat-khau.txt`) của web kho – chỉ đăng nhập bằng nick + PIN, và chỉ
   xem/ghi được tuyến của chính mình.
-- **Bản online**: trang riêng **Giao hàng An Tâm** (https://claude.ai/artifact/6bVzsWLxPdkdCKF687Bnky), dữ liệu riêng, không có
-  phần kho. Web Kho An Tâm online không còn mục Phân tuyến / Tài khoản giao hàng mà có link **🚚 Giao hàng An Tâm ↗** sang trang này.
+- **Bản online**: trang riêng **Giao hàng An Tâm** (https://claude.ai/artifact/6bVzsWLxPdkdCKF687Bnky), không có phần kho.
+  **Phân tuyến giao hàng** và **Tài khoản giao hàng** vẫn làm ở web Kho An Tâm như cũ; trang Giao hàng An Tâm chỉ nhận dữ liệu:
+  - Web kho › Phân tuyến giao hàng: chia tuyến, chọn người giao, **💾 Lưu** → **📤 Gửi sang Giao hàng An Tâm** (dữ liệu được sao chép:
+    bảng phân tuyến của ngày + tài khoản người giao + danh mục tuyến). Hai trang trên claude.ai không đọc dữ liệu của nhau được nên
+    cần bước dán này; sửa phân tuyến thì Lưu và gửi lại (thay bảng cũ cùng ngày, kết quả đã giao vẫn giữ).
+  - Trang Giao hàng An Tâm › **🗂 Quản lý phân tuyến** (mật khẩu quản lý, chủ trang đặt lần đầu) › **Nhận phân tuyến từ kho**:
+    bấm vào ô → `Ctrl+V` → **Nhận dữ liệu**. Kết quả giao (ảnh, vị trí lúc giao) xem ở **Người giao & kết quả giao** của trang này.
+  - Người giao mở trang → **🚚 Tôi là người giao hàng** → nick + PIN (lần sau vào thẳng tuyến của mình).
   - Mời người giao **chỉ vào trang Giao hàng An Tâm** bằng email ở nút *Share*, quyền **Editor**, và tắt "Anyone with the link"
     (tài khoản claude.ai cá nhân không có quyền Contributor; Viewer/Commenter chỉ xem, không bấm "Đã giao" hay gửi ảnh được).
     Không mời người giao vào web Kho An Tâm.
-  - Mở trang: **🚚 Tôi là người giao hàng** → nick + PIN (lần sau vào thẳng tuyến của mình); hoặc **🗂 Quản lý phân tuyến** →
-    mật khẩu quản lý (chủ trang đặt lần đầu, đổi ở *Cài đặt & mật khẩu*) để phân tuyến, quản lý người giao, xem kết quả giao.
   - Nick + PIN và mật khẩu quản lý được kiểm tra ở trình duyệt: chúng giữ mỗi người ở đúng phần của mình trên giao diện, không phải
     lớp bảo mật như bản chạy trên máy – người được mời Editor vẫn có quyền Editor của trang Giao hàng An Tâm trên claude.ai.
-  - Danh mục tuyến của trang Giao hàng An Tâm là bản riêng (đã chép từ web kho lúc tách); thêm/sửa tuyến thì sửa ở cả hai nơi.
   - Đóng gói lại: `python online/build.py --giao` → `online/giao-hang-antam.html`.
 
 Tài khoản giao hàng và kết quả giao nằm trong file dữ liệu **.json**, chuyển qua lại giữa 2 bản như các dữ liệu khác.

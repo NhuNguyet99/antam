@@ -812,6 +812,47 @@ const Backend = (() => {
     }
     throw new ApiError(404, 'Không có chức năng này');
   }
+  // Chuyển dữ liệu Phân tuyến (web kho) sang trang Giao hàng An Tâm: 2 trang claude.ai không đọc dữ liệu của nhau được,
+  // nên web kho đóng gói (GET) để người dùng dán vào trang giao hàng (POST).
+  const SYNC_FORMAT = 'antam-giao-sync';
+  async function giaoSync(method, q, body) {
+    if (method === 'GET') {
+      const doc = (st.docs.TP || {})[q.id];
+      if (!doc || doc.kind !== 'routing') throw new ApiError(404, 'Không tìm thấy bảng phân tuyến (hãy Lưu trước).');
+      const routes = live(st.routes).map(([, r]) => r).sort((a, b) => (a.sort || 0) - (b.sort || 0))
+        .map(r => ({ code: text(r.code), name: text(r.name) })).filter(r => r.code);
+      return { format: SYNC_FORMAT, version: 1, at: nowStr(), date: doc.date,
+        doc: { date: doc.date, title: doc.title || '', data: { cols: doc.data.cols || [], rows: doc.data.rows || [], assign: doc.data.assign || {} } },
+        routes, drivers: drivers() };
+    }
+    if (method === 'POST') {
+      if (body.format !== SYNC_FORMAT || !body.doc || !Array.isArray((body.doc.data || {}).rows)) throw new ApiError(400, 'Dữ liệu không đúng. Hãy bấm "📤 Gửi sang Giao hàng An Tâm" ở web kho rồi dán lại.');
+      const d = validDate(body.doc.date);
+      // tài khoản người giao: thay bằng danh sách của web kho (tài khoản đã xóa bên kho thì xóa ở đây)
+      const patch = {};
+      Object.keys(drivers()).forEach(k => { patch[k] = null; });
+      for (const [k, v] of Object.entries(body.drivers || {})) if (v && typeof v === 'object' && v.nick && v.pin) {
+        patch[k] = { nick: text(v.nick), name: text(v.name), phone: text(v.phone), routes: (v.routes || []).map(text), active: v.active !== false, salt: text(v.salt), pin: text(v.pin) };
+      }
+      await mergeInto(ref.settings(), { s: { drivers: patch } }, { s: {} });
+      st.settings = deepMerge(clone(st.settings || {}), { drivers: patch });
+      const routes = Object.fromEntries((body.routes || []).map((r, i) => ['r' + i, { name: text(r.name), code: text(r.code), note: '', sort: i + 1 }]));
+      await write(() => ref.routes().set({ r: routes }));
+      st.routes = routes;
+      const id = 'rt-' + d;
+      const old = (st.docs.TP || {})[id];
+      const rec = { kind: 'routing', date: d, title: text(body.doc.title), data: body.doc.data, created_at: old ? old.created_at : nowStr(), updated_at: nowStr() };
+      if (JSON.stringify(rec).length > 240000) throw new ApiError(413, 'Bảng phân tuyến quá lớn để lưu');
+      await write(() => ref.doc('TP', id).set(rec));
+      // bảng cùng ngày nhận trước đó dưới mã khác: bỏ, để người giao chỉ thấy một bảng
+      for (const [k, x] of Object.entries(st.docs.TP || {})) if (k !== id && x && x.kind === 'routing' && x.date === d) await write(() => ref.doc('TP', k).delete());
+      st.docs.TP = Object.fromEntries(Object.entries(Object.assign({}, st.docs.TP, { [id]: rec })).filter(([k, x]) => k === id || !(x && x.kind === 'routing' && x.date === d)));
+      const n = body.doc.data.rows.length;
+      await log('Nhận phân tuyến từ web kho', d, `${n} khách`, 'TP');
+      return { date: d, rows: n, routes: new Set(body.doc.data.rows.map(r => r.route).filter(Boolean)).size, drivers: Object.values(patch).filter(Boolean).length };
+    }
+    throw new ApiError(404, 'Không có chức năng này');
+  }
   // Mật khẩu quản lý của web Giao hàng An Tâm: người giao (cũng là Editor của trang) không vào được phần quản lý.
   // Kiểm tra ở trình duyệt – là khóa giao diện, không thay được phân quyền của claude.ai.
   async function adminApi(method, action, body) {
@@ -869,6 +910,7 @@ const Backend = (() => {
     if (!WAREHOUSES.includes(wh)) throw new ApiError(400, 'Kho không hợp lệ: ' + wh);
     if (res === 'gh') return ghApi(method, arg, q, body || {}, opts.token || '');
     if (res === 'admin') return adminApi(method, arg, body || {});
+    if (res === 'giao-sync') return giaoSync(method, q, body || {});
     if (res === 'drivers') {
       if (method === 'GET') return Object.entries(drivers()).map(([k, d]) => publicDriver(k, d));
       if (method === 'POST') return saveDriver(body || {});
