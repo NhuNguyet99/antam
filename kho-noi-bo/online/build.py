@@ -2,6 +2,8 @@
 """Ghép giao diện (static/) + online/backend.js thành trang HTML cho bản online trên claude.ai.
 
     python online/build.py                        -> online/kho-antam.html      (web chính, dữ liệu dùng chung)
+    python online/build.py --giao                 -> online/giao-hang-antam.html (web Giao hàng An Tâm: trang riêng cho
+                                                     người giao + quản lý phân tuyến, dữ liệu riêng, không có phần kho)
     python online/build.py --view du-lieu.json    -> online/kho-antam-xem.html  (trang xem công khai, chỉ xem,
                                                      chứa sẵn số liệu – KHÔNG commit file này)
 `du-lieu.json` là file "Tải dữ liệu" ở mục Cài đặt & dữ liệu của web chính.
@@ -18,6 +20,10 @@ MAIN_TITLE = "Kho An Tâm"
 MAIN_DESC = "Web làm việc nội bộ kho Thành phẩm - Hàng hóa và Nguyên vật liệu"
 VIEW_TITLE = "Sổ Kho An Tâm"
 VIEW_DESC = "Trang xem công khai số liệu kho Thành phẩm - Hàng hóa và Nguyên vật liệu (chỉ xem)"
+GIAO_TITLE = "Giao hàng An Tâm"
+GIAO_DESC = "Web giao hàng: mỗi người giao 1 nick xem tuyến của mình, báo đã giao kèm ảnh và vị trí; quản lý phân tuyến"
+# Link trang Giao hàng An Tâm trên claude.ai: web kho online ẩn Phân tuyến / Tài khoản giao hàng và trỏ sang đó
+GIAO_URL = "https://claude.ai/artifact/6bVzsWLxPdkdCKF687Bnky"
 
 
 def read(*p):
@@ -40,13 +46,18 @@ def parts():
     return markup, css, backend, app
 
 
-def build_main():
+def build_main(giao=False):
     markup, css, backend, app = parts()
+    if giao:
+        title, desc, boot = GIAO_TITLE, GIAO_DESC, "window.ANTAM_GIAO_APP=true;"
+    else:
+        title, desc, boot = MAIN_TITLE, MAIN_DESC, ("window.ANTAM_GIAO_URL=%s;" % json.dumps(GIAO_URL)) if "__" not in GIAO_URL else ""
     return "\n".join([
-        "<title>%s</title>" % MAIN_TITLE,
-        '<meta name="description" content="%s">' % MAIN_DESC,
+        "<title>%s</title>" % title,
+        '<meta name="description" content="%s">' % desc,
         '<style id="app-style">%s</style>' % css,
         markup,
+        '<script id="antam-boot">%s</script>' % boot,
         '<script src="%s"></script>' % SHEETJS,
         '<script id="antam-backend">%s</script>' % backend,
         '<script id="antam-app">%s</script>' % app,
@@ -78,7 +89,9 @@ def build_view(snapshot_path):
 
 
 def main():
-    if len(sys.argv) >= 3 and sys.argv[1] == "--view":
+    if len(sys.argv) >= 2 and sys.argv[1] == "--giao":
+        page, out = build_main(giao=True), os.path.join(HERE, "giao-hang-antam.html")
+    elif len(sys.argv) >= 3 and sys.argv[1] == "--view":
         page, out = build_view(sys.argv[2]), os.path.join(HERE, "kho-antam-xem.html")
     else:
         page, out = build_main(), os.path.join(HERE, "kho-antam.html")

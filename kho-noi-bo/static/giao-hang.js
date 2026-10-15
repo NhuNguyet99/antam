@@ -80,7 +80,7 @@ const GiaoHang = (() => {
         <button class="gh-btn primary big" type="submit">Đăng nhập</button>
         <p class="gh-err" id="gh-login-err">${esc(msg || '')}</p>
       </form>
-      ${st.onExit ? '<button class="gh-btn ghost" id="gh-exit">← Về web kho</button>' : ''}
+      ${st.onExit ? `<button class="gh-btn ghost" id="gh-exit">${esc(st.exitLabel)}</button>` : ''}
     </div><div id="gh-toasts" class="gh-toasts"></div>`;
     const nick = $('#gh-nick'), pin = $('#gh-pin');
     (nick.value ? pin : nick).focus();
@@ -113,7 +113,7 @@ const GiaoHang = (() => {
     st.root.innerHTML = `<header class="gh-top">
         <div class="gh-who"><span class="gh-avatar">🚚</span><div><b id="gh-name"></b><div class="gh-sub">Giao hàng An Tâm</div></div></div>
         <div class="gh-top-actions"><button class="gh-btn sm" id="gh-reload" title="Tải lại">↻</button>
-        <button class="gh-btn sm" id="gh-logout">Đăng xuất</button>${st.onExit ? '<button class="gh-btn sm ghost" id="gh-exit">Web kho</button>' : ''}</div>
+        <button class="gh-btn sm" id="gh-logout">Đăng xuất</button>${st.onExit && st.exitInHeader ? '<button class="gh-btn sm ghost" id="gh-exit">Web kho</button>' : ''}</div>
       </header>
       <nav class="gh-datebar">
         <button class="gh-btn sm" id="gh-prev" aria-label="Ngày trước">◀</button>
@@ -125,7 +125,7 @@ const GiaoHang = (() => {
       <div id="gh-toasts" class="gh-toasts"></div>`;
     $('#gh-name').textContent = st.driver ? st.driver.name || st.driver.nick : '';
     $('#gh-logout').onclick = () => logout();
-    if (st.onExit) $('#gh-exit').onclick = () => exit();
+    if (st.onExit && st.exitInHeader) $('#gh-exit').onclick = () => exit();
     $('#gh-reload').onclick = () => loadDay();
     $('#gh-prev').onclick = () => setDate(addDays(st.date, -1));
     $('#gh-next').onclick = () => setDate(addDays(st.date, 1));
@@ -489,6 +489,7 @@ const GiaoHang = (() => {
   // root: phần tử chứa web giao hàng; onExit: (bản online) quay về web kho
   async function start(root, opts = {}) {
     st.root = root; st.onExit = opts.onExit || null;
+    st.exitLabel = opts.exitLabel || '← Về web kho'; st.exitInHeader = opts.exitInHeader !== false;
     document.body.classList.add('gh-mode');
     document.title = 'Giao hàng An Tâm';
     st.token = store('token') || ''; st.driver = store('driver') || null;

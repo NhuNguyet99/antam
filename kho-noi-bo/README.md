@@ -134,11 +134,17 @@ Link web giao hàng:
 - **Bản chạy trên máy**: `http://<IP-máy-chạy-web>:8000/giao-hang` (xem ở **Tài khoản giao hàng › Link web giao hàng**), điện thoại
   dùng cùng wifi công ty. Trang này **không hỏi mật khẩu chung** (`mat-khau.txt`) của web kho – chỉ đăng nhập bằng nick + PIN, và chỉ
   xem/ghi được tuyến của chính mình.
-- **Bản online**: mời người giao bằng email ở nút *Share* với quyền **Editor** và tắt "Anyone with the link" (tài khoản claude.ai
-  cá nhân không có quyền Contributor; người được mời quyền Viewer/Commenter chỉ xem, không bấm "Đã giao" hay gửi ảnh được). Trên điện
-  thoại mở link → ô *Bạn là ai?* bấm **🚚 Tôi là người giao hàng** → đăng nhập. Lần sau mở link sẽ vào thẳng web giao hàng
-  (nút **Web kho** để quay lại). Ở bản online nick + PIN dùng để mỗi người chỉ thấy tuyến của mình, không phải lớp bảo mật: ai được
-  chia sẻ trang vẫn có quyền như trên claude.ai.
+- **Bản online**: trang riêng **Giao hàng An Tâm** (https://claude.ai/artifact/6bVzsWLxPdkdCKF687Bnky), dữ liệu riêng, không có
+  phần kho. Web Kho An Tâm online không còn mục Phân tuyến / Tài khoản giao hàng mà có link **🚚 Giao hàng An Tâm ↗** sang trang này.
+  - Mời người giao **chỉ vào trang Giao hàng An Tâm** bằng email ở nút *Share*, quyền **Editor**, và tắt "Anyone with the link"
+    (tài khoản claude.ai cá nhân không có quyền Contributor; Viewer/Commenter chỉ xem, không bấm "Đã giao" hay gửi ảnh được).
+    Không mời người giao vào web Kho An Tâm.
+  - Mở trang: **🚚 Tôi là người giao hàng** → nick + PIN (lần sau vào thẳng tuyến của mình); hoặc **🗂 Quản lý phân tuyến** →
+    mật khẩu quản lý (chủ trang đặt lần đầu, đổi ở *Cài đặt & mật khẩu*) để phân tuyến, quản lý người giao, xem kết quả giao.
+  - Nick + PIN và mật khẩu quản lý được kiểm tra ở trình duyệt: chúng giữ mỗi người ở đúng phần của mình trên giao diện, không phải
+    lớp bảo mật như bản chạy trên máy – người được mời Editor vẫn có quyền Editor của trang Giao hàng An Tâm trên claude.ai.
+  - Danh mục tuyến của trang Giao hàng An Tâm là bản riêng (đã chép từ web kho lúc tách); thêm/sửa tuyến thì sửa ở cả hai nơi.
+  - Đóng gói lại: `python online/build.py --giao` → `online/giao-hang-antam.html`.
 
 Tài khoản giao hàng và kết quả giao nằm trong file dữ liệu **.json**, chuyển qua lại giữa 2 bản như các dữ liệu khác.
 

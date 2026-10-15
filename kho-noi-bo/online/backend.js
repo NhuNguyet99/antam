@@ -59,6 +59,7 @@ const Backend = (() => {
     plan_depts: ['Xưởng', 'Văn phòng'], paper: 'A4',
     routing: { rules: [], memory: {} },
     drivers: {},
+    admin: {}, // web Giao hàng An Tâm: mật khẩu quản lý {salt, pin}
   };
 
   const st = {
@@ -811,6 +812,32 @@ const Backend = (() => {
     }
     throw new ApiError(404, 'Không có chức năng này');
   }
+  // Mật khẩu quản lý của web Giao hàng An Tâm: người giao (cũng là Editor của trang) không vào được phần quản lý.
+  // Kiểm tra ở trình duyệt – là khóa giao diện, không thay được phân quyền của claude.ai.
+  async function adminApi(method, action, body) {
+    const a = settings().admin || {};
+    const tok = () => (a.pin ? 'adm.' + a.pin.slice(0, 24) : '');
+    const isOwner = async () => { try { return !!(st.user && await st.user.isOwner()); } catch (e) { return false; } };
+    if (method === 'GET') return { set: !!a.pin, owner: await isOwner() };
+    if (action === 'check') return { ok: !!a.pin && text(body.token) === tok() };
+    if (action === 'login') {
+      if (!a.pin) throw new ApiError(400, 'Chưa đặt mật khẩu quản lý – chủ trang mở trang này để đặt.');
+      if ((await pinHash(a.salt || '', text(body.pin))) !== a.pin) { await sleep(500); throw new ApiError(401, 'Sai mật khẩu quản lý'); }
+      return { token: tok() };
+    }
+    if (action === 'set') {
+      if (!(a.pin ? text(body.token) === tok() : await isOwner())) throw new ApiError(403, 'Chỉ chủ trang (lần đầu) hoặc người đang quản lý mới đặt được mật khẩu quản lý.');
+      const pin = text(body.pin);
+      if (pin.length < 4 || pin.length > 40) throw new ApiError(400, 'Mật khẩu quản lý 4–40 ký tự');
+      const rec = { salt: randHex(8) };
+      rec.pin = await pinHash(rec.salt, pin);
+      await mergeInto(ref.settings(), { s: { admin: rec } }, { s: {} });
+      st.settings = deepMerge(clone(st.settings || {}), { admin: rec });
+      await log('Đặt mật khẩu quản lý web giao hàng', '', '');
+      return { token: 'adm.' + rec.pin.slice(0, 24) };
+    }
+    throw new ApiError(404, 'Không có chức năng này');
+  }
   async function saveDriver(data) {
     const all = drivers();
     const id = text(data.id) || newId('g');
@@ -841,6 +868,7 @@ const Backend = (() => {
     const wh = q.wh || st.wh;
     if (!WAREHOUSES.includes(wh)) throw new ApiError(400, 'Kho không hợp lệ: ' + wh);
     if (res === 'gh') return ghApi(method, arg, q, body || {}, opts.token || '');
+    if (res === 'admin') return adminApi(method, arg, body || {});
     if (res === 'drivers') {
       if (method === 'GET') return Object.entries(drivers()).map(([k, d]) => publicDriver(k, d));
       if (method === 'POST') return saveDriver(body || {});
@@ -866,7 +894,7 @@ const Backend = (() => {
       planRows(wh).forEach(r => { if (r.proposer) people.add(r.proposer.trim()); });
       const sortVi = a => [...a].sort((x, y) => x.toLowerCase().localeCompare(y.toLowerCase(), 'vi'));
       const drv = drivers();
-      delete s.drivers;
+      delete s.drivers; delete s.admin;
       return {
         wh, settings: s, warehouse: s.warehouses[wh], products: products(wh),
         drivers: Object.entries(drv).map(([k, d]) => publicDriver(k, d)),
@@ -884,7 +912,7 @@ const Backend = (() => {
           const whs = cur.warehouses;
           for (const [code, d] of Object.entries(v || {})) if (whs[code]) ['name', 'department', 'parties'].forEach(f => { if (d[f] !== undefined) whs[code][f] = d[f]; });
           next.warehouses = Object.fromEntries(WAREHOUSES.map(c => [c, { name: whs[c].name, department: whs[c].department, parties: whs[c].parties }]));
-        } else if (k in DEFAULT_SETTINGS && k !== 'drivers') next[k] = v; // tài khoản giao hàng sửa ở /drivers
+        } else if (k in DEFAULT_SETTINGS && k !== 'drivers' && k !== 'admin') next[k] = v; // tài khoản giao hàng / mật khẩu quản lý sửa ở API riêng
       }
       await write(() => ref.settings().set({ s: next }));
       st.settings = next;

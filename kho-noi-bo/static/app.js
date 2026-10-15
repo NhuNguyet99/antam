@@ -10,6 +10,11 @@ const S = { meta: null, dirty: false, skipDirty: false, user: '', wh: 'TP' };
 const ONLINE = !!window.ANTAM_ONLINE;
 // Trang xem công khai: chỉ xem số liệu chụp sẵn (online/build.py --view)
 const VIEW = !!window.ANTAM_VIEW;
+// Web Giao hàng An Tâm (online/build.py --giao): trang riêng cho người giao + quản lý phân tuyến, dữ liệu riêng, không có phần kho
+const GIAO_APP = !!window.ANTAM_GIAO_APP;
+// Bản online của web kho: link trang Giao hàng An Tâm (phân tuyến và người giao đã chuyển sang đó)
+const GIAO_URL = window.ANTAM_GIAO_URL || '';
+const KHO_MOVED = ONLINE && !VIEW && !GIAO_APP && !!GIAO_URL;
 const WH_LABEL = { TP: 'Kho thành phẩm - hàng hóa', NVL: 'Kho nguyên vật liệu' };
 const TYPE_LABEL = { N: 'Nhập', X: 'Xuất', D: 'Điều chỉnh' };
 const TYPE_PREFIX = { N: 'PNK', X: 'PXK', D: 'DCK' };
@@ -362,7 +367,7 @@ async function printVouchers(query) {
 
 /* ============================================================ router */
 const ROUTES = [
-  [/^$/, viewDashboard],
+  [/^$/, (main, m, q) => (GIAO_APP ? viewRoutingList(main) : viewDashboard(main, m, q))],
   [/^phieu\/moi$/, viewVoucherForm],
   [/^phieu\/([\w-]+)$/, viewVoucherForm],
   [/^phieu$/, viewVoucherList],
@@ -1718,6 +1723,7 @@ function giaoHangLinks() {
   return urls.map(u => u.replace(/\/$/, '') + '/giao-hang');
 }
 function openGiaoHang() {
+  if (KHO_MOVED) return window.open(GIAO_URL, '_blank', 'noopener');
   if (ONLINE) return enterGiaoMode();
   window.open('/giao-hang', '_blank');
 }
@@ -1755,9 +1761,10 @@ async function viewDrivers(main) {
       (lấy từ <a href="#/phan-tuyen">Phân tuyến giao hàng</a>): khách, địa chỉ (bấm để mở bản đồ), SĐT (bấm để gọi), số lượng từng loại; bấm <b>Đã giao</b> /
       <b>Không giao được</b> và kho thấy kết quả ở bảng phân tuyến.<br>Tuyến của mỗi người = <b>tuyến thường chạy</b> dưới đây; ngày nào đổi người thì chọn lại ở cột
       <b>Người giao</b> trong phân tuyến của ngày đó.</div>
-      ${ONLINE ? `<div class="callout small">Mời người giao hàng bằng <b>email</b> ở nút <i>Share</i> của trang, chọn quyền <b>Editor</b>, và để <i>General access</i> ở chế độ
-        <b>chỉ người được mời</b> (tắt "Anyone with the link") – người được mời quyền Viewer/Commenter chỉ xem được, không bấm được "Đã giao" hay gửi ảnh.
-        Trên điện thoại: mở link → ở ô <i>Bạn là ai?</i> bấm <b>🚚 Tôi là người giao hàng</b> → đăng nhập nick + PIN. Lần sau mở link sẽ vào thẳng web giao hàng.</div>`
+      ${ONLINE ? `<div class="callout small">Người giao hàng chỉ được mời vào <b>trang Giao hàng An Tâm này</b> – <b>không mời họ vào web Kho An Tâm</b>.
+        Mời bằng <b>email</b> ở nút <i>Share</i> của trang, chọn quyền <b>Editor</b> (quyền Viewer/Commenter không bấm được "Đã giao" hay gửi ảnh), và để
+        <i>General access</i> ở chế độ <b>chỉ người được mời</b> (tắt "Anyone with the link").
+        Trên điện thoại: mở link → bấm <b>🚚 Tôi là người giao hàng</b> → đăng nhập nick + PIN. Lần sau mở link sẽ vào thẳng tuyến của mình.</div>`
       : `<div class="card"><h3>Link web giao hàng</h3><div class="toolbar">${links.map(u => `<code class="access-url">${esc(u)}</code><button class="btn sm" data-copy="${esc(u)}">Sao chép</button>`).join('')}</div>
         <p class="hint">Điện thoại phải dùng <b>cùng wifi / mạng công ty</b> với máy chạy web. Web giao hàng không hỏi mật khẩu chung của web kho – mỗi người đăng nhập bằng nick + PIN của mình.</p></div>`}
       ${list.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Nick</th><th>Họ tên</th><th>SĐT</th><th>Tuyến thường chạy</th><th>Trạng thái</th><th></th></tr></thead><tbody>
@@ -1911,6 +1918,7 @@ async function viewRoutes(main) {
 
 /* ============================================================ Cài đặt & dữ liệu */
 async function viewSettings(main) {
+  if (GIAO_APP) return viewGiaoSettings(main);
   setTitle('Cài đặt & dữ liệu');
   const s = S.meta.settings;
   const W = S.meta.warehouse;
@@ -2324,11 +2332,12 @@ function askUser(force) {
   const { root, close } = openModal({
     title: 'Bạn là ai?',
     body: `<label class="field">Họ tên (ghi vào lịch sử thao tác và gợi ý người lập phiếu)<input id="u-name" list="dl-u" value="${esc(S.user)}"></label>${datalist('dl-u', S.meta.people)}
-      <div class="callout small" style="margin-top:12px">Người giao hàng: <button class="btn sm primary" id="u-giao">🚚 Tôi là người giao hàng</button> – đăng nhập bằng nick + mã PIN để xem tuyến của mình.</div>`,
+      ${GIAO_APP ? '' : `<div class="callout small" style="margin-top:12px">Người giao hàng: <button class="btn sm primary" id="u-giao">🚚 Tôi là người giao hàng</button> – ${KHO_MOVED ? 'mở web Giao hàng An Tâm.' : 'đăng nhập bằng nick + mã PIN để xem tuyến của mình.'}</div>`}`,
     saveText: 'Xác nhận',
     onSave: async root => { S.user = $('#u-name', root).value.trim(); store('user', S.user); $('#user-btn').textContent = '👤 ' + (S.user || 'Khách'); return true; },
   });
-  $('#u-giao', root).onclick = () => { close(); openGiaoHang(); };
+  const ug = $('#u-giao', root);
+  if (ug) ug.onclick = () => { close(); openGiaoHang(); };
 }
 // Web giao hàng: bản chạy máy chủ mở trang /giao-hang; bản online chạy ngay trong trang này (dùng chung dữ liệu)
 function giaoRoot() {
@@ -2346,6 +2355,7 @@ async function enterGiaoMode() {
   await GiaoHang.start(giaoRoot(), { onExit: exitGiaoMode });
 }
 async function exitGiaoMode() {
+  if (GIAO_APP && !S.meta) { GiaoHang.stop(); return showGiaoStart(); } // người giao bấm "Quản lý" ở màn đăng nhập
   store('mode', '');
   GiaoHang.stop();
   document.body.classList.remove('gh-mode');
@@ -2357,7 +2367,105 @@ async function exitGiaoMode() {
   document.title = 'Kho An Tâm';
   render();
 }
+/* ---------- web Giao hàng An Tâm: màn hình chọn "Người giao hàng" / "Quản lý" */
+const ADMIN_KEY = 'giaoAdminToken';
+function applyGiaoApp() {
+  document.title = 'Giao hàng An Tâm';
+  $('.brand-mark').textContent = '🚚';
+  $('.brand-name').textContent = 'Giao hàng An Tâm';
+  $('.brand-sub').textContent = 'Quản lý phân tuyến & giao hàng';
+  $('#wh-switch').hidden = true;
+  $('#wh-badge').hidden = true;
+  $('#nav').innerHTML = `<a href="#/phan-tuyen" data-route="phan-tuyen">Phân tuyến giao hàng</a>
+    <a href="#/giao-hang-tk" data-route="giao-hang-tk">Người giao & kết quả giao</a>
+    <a href="#/tuyen" data-route="tuyen">Tuyến / nơi nhận</a>
+    <div class="nav-group">Hệ thống</div>
+    <a href="#/cai-dat" data-route="cai-dat">Cài đặt & mật khẩu</a>
+    <a href="#/lich-su" data-route="lich-su">Lịch sử thao tác</a>
+    <a href="#" id="nav-admin-out">↩ Thoát quản lý</a>`;
+  $('#nav-admin-out').onclick = e => { e.preventDefault(); store(ADMIN_KEY, ''); location.reload(); };
+}
+async function bootGiaoApp() {
+  document.title = 'Giao hàng An Tâm';
+  document.body.classList.add('gh-mode');
+  giaoRoot().innerHTML = '<p style="padding:20px;font-family:sans-serif">Đang kết nối dữ liệu…</p>';
+  try { await Backend.init(); } catch (e) { giaoRoot().innerHTML = `<p style="padding:20px">Không kết nối được dữ liệu: ${esc(e.message)}</p>`; return; }
+  if (store('mode') === 'giao') return startDriverMode();
+  const tok = store(ADMIN_KEY);
+  if (tok && (await api('POST', '/admin/check', { token: tok }).catch(() => ({}))).ok) return enterAdmin();
+  return showGiaoStart();
+}
+function startDriverMode() {
+  store('mode', 'giao');
+  document.body.classList.add('gh-mode');
+  Backend.onRemote(() => GiaoHang.onRemoteChange());
+  return GiaoHang.start(giaoRoot(), { onExit: exitGiaoMode, exitLabel: 'Quản lý (dành cho kho)', exitInHeader: false });
+}
+async function showGiaoStart(msg) {
+  store('mode', '');
+  document.body.classList.add('gh-mode');
+  document.title = 'Giao hàng An Tâm';
+  const st = await api('GET', '/admin').catch(() => ({ set: true, owner: false }));
+  const root = giaoRoot();
+  root.innerHTML = `<div class="gh-login"><div class="gh-logo">🚚</div><h1>Giao hàng An Tâm</h1>
+    <p class="gh-muted">Web dành cho nhân viên giao hàng và bộ phận phân tuyến.</p>
+    <button class="gh-btn primary big" id="gs-driver" style="margin-top:18px">🚚 Tôi là người giao hàng</button>
+    <form id="gs-admin" class="gh-admin-form">
+      <div class="gh-panel-title">🗂 Quản lý phân tuyến (kho)</div>
+      ${st.set ? `<label>Mật khẩu quản lý<input id="gs-pin" type="password" autocomplete="current-password" required></label>
+        <button class="gh-btn big" type="submit">Vào quản lý</button>`
+      : st.owner ? `<p class="gh-muted gh-small">Lần đầu: đặt mật khẩu quản lý (4–40 ký tự). Chỉ người phân tuyến biết mật khẩu này; người giao hàng không vào được phần quản lý.</p>
+        <label>Mật khẩu quản lý mới<input id="gs-pin" type="password" autocomplete="new-password" minlength="4" required></label>
+        <button class="gh-btn big" type="submit">Đặt mật khẩu và vào quản lý</button>`
+      : '<p class="gh-muted gh-small">Chủ trang chưa đặt mật khẩu quản lý.</p>'}
+      <p class="gh-err" id="gs-err">${esc(msg || '')}</p>
+    </form></div>`;
+  $('#gs-driver', root).onclick = () => startDriverMode();
+  $('#gs-admin', root).onsubmit = async e => {
+    e.preventDefault();
+    const pin = $('#gs-pin', root);
+    if (!pin) return;
+    try {
+      const res = await api('POST', st.set ? '/admin/login' : '/admin/set', { pin: pin.value });
+      store(ADMIN_KEY, res.token);
+      enterAdmin();
+    } catch (err) { $('#gs-err', root).textContent = err.message; }
+  };
+}
+function enterAdmin() {
+  store('mode', '');
+  document.body.classList.remove('gh-mode');
+  const el = giaoRoot(); el.hidden = true; el.innerHTML = '';
+  store('wh', 'TP');
+  applyGiaoApp();
+  return bootKho();
+}
+async function viewGiaoSettings(main) {
+  setTitle('Cài đặt & mật khẩu');
+  main.innerHTML = `<div class="card"><h3>Mật khẩu quản lý</h3>
+      <p class="small" style="margin-top:0">Mật khẩu để vào phần quản lý (phân tuyến, tài khoản người giao, kết quả giao). Người giao hàng chỉ dùng nick + PIN của mình.</p>
+      <div class="toolbar"><label class="field">Mật khẩu mới<input id="ad-pin" type="password" autocomplete="new-password"></label>
+      <button class="btn primary" id="ad-save">Đổi mật khẩu quản lý</button></div></div>
+    <div class="card"><h3>Sao lưu</h3><div class="toolbar"><button class="btn" id="ex-backup">⬇ Tải dữ liệu (.json)</button></div>
+      <p class="hint">Gồm danh mục tuyến, quy tắc chia tuyến, tài khoản người giao, các bảng phân tuyến, kết quả giao và vị trí khách (không gồm file ảnh).</p></div>`;
+  $('#ad-save').onclick = () => guard(async () => {
+    const res = await api('POST', '/admin/set', { pin: $('#ad-pin').value, token: store(ADMIN_KEY) });
+    store(ADMIN_KEY, res.token); $('#ad-pin').value = ''; toast('Đã đổi mật khẩu quản lý');
+  });
+  $('#ex-backup').onclick = () => guard(async () => saveTextFile(`giao-hang-antam-sao-luu-${isoDate()}.json`, await api('GET', '/export/backup')));
+}
+// Web kho online: người giao đã chuyển sang trang riêng
+function showMovedNotice() {
+  store('mode', '');
+  document.body.classList.add('gh-mode');
+  giaoRoot().innerHTML = `<div class="gh-login"><div class="gh-logo">🚚</div><h1>Web giao hàng đã chuyển</h1>
+    <p>Người giao hàng dùng trang riêng <b>Giao hàng An Tâm</b>:</p><p><a class="gh-link" href="${esc(GIAO_URL)}" target="_blank" rel="noopener">${esc(GIAO_URL)}</a></p>
+    <button class="gh-btn" id="mv-kho">Tôi là nhân viên kho – vào web kho</button></div>`;
+  $('#mv-kho').onclick = () => { document.body.classList.remove('gh-mode'); const el = giaoRoot(); el.hidden = true; el.innerHTML = ''; bootKho(); };
+}
 async function boot() {
+  if (GIAO_APP) return bootGiaoApp();
+  if (KHO_MOVED && store('mode') === 'giao') return showMovedNotice();
   if (ONLINE && !VIEW && store('mode') === 'giao') {
     // điện thoại người giao hàng: vào thẳng web giao hàng, chỉ tải dữ liệu phân tuyến
     giaoRoot().innerHTML = '<p style="padding:20px;font-family:sans-serif">Đang kết nối dữ liệu…</p>';
@@ -2370,7 +2478,15 @@ async function boot() {
 }
 async function bootKho() {
   S.user = store('user') || '';
-  S.wh = store('wh') === 'NVL' ? 'NVL' : 'TP';
+  S.wh = !GIAO_APP && store('wh') === 'NVL' ? 'NVL' : 'TP';
+  if (KHO_MOVED) {
+    // phân tuyến + người giao đã chuyển sang trang Giao hàng An Tâm
+    $$('#nav a[data-route="phan-tuyen"], #nav a[data-route="giao-hang-tk"]').forEach(a => a.remove());
+    const a = document.createElement('a');
+    a.href = GIAO_URL; a.target = '_blank'; a.rel = 'noopener'; a.dataset.only = 'TP';
+    a.textContent = '🚚 Giao hàng An Tâm ↗';
+    $('#nav a[data-route="so-nx"]').after(a);
+  }
   $$('#wh-switch button').forEach(b => b.onclick = () => switchWh(b.dataset.wh));
   $('#menu-btn').onclick = () => document.body.classList.toggle('nav-open');
   $('#user-btn').onclick = () => askUser(true);
