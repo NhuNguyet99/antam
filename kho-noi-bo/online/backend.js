@@ -645,14 +645,28 @@ const Backend = (() => {
   const drivers = () => Object.fromEntries(live(settings().drivers));
   const publicDriver = (id, d) => ({ id, nick: d.nick || '', name: d.name || '', phone: d.phone || '', routes: d.routes || [],
     active: d.active !== false, has_pin: !!d.pin });
-  const custKey = r => text(r.crm) || text(r.code) || text(r.cust);
-  function routingDoc(d) {
-    let best = null;
-    for (const doc of Object.values(st.docs.TP || {})) {
-      if (!doc || doc.kind !== 'routing' || doc.date !== d) continue;
-      if (!best || (doc.updated_at || '') > (best.updated_at || '')) best = doc;
+  // mã dòng khách (ghi kết quả giao): mã CRM / mã khách / tên; khách có nhiều dòng trong ngày thì thêm #2, #3… (key gán ở mergeRouting)
+  const custKey = r => text(r.key) || text(r.crm) || text(r.code) || text(r.cust);
+  // Một ngày có thể có nhiều bảng phân tuyến (tuyến lẻ, khách tuyến 1-2-3…): gộp lại, cột sản phẩm trùng tên thì cộng chung
+  function mergeRouting(list) {
+    const cols = [], idx = {}, rows = [], assign = {}, seen = {};
+    for (const data of list) {
+      const map = (data.cols || []).map(c => { const k = String(c).toLowerCase().replace(/\s+/g, ''); if (!(k in idx)) { idx[k] = cols.length; cols.push(c); } return idx[k]; });
+      Object.assign(assign, data.assign || {});
+      for (const r of data.rows || []) {
+        const qty = {};
+        Object.entries(r.qty || {}).forEach(([k, n]) => { const j = map[+k]; if (j !== undefined) qty[j] = (qty[j] || 0) + Number(n || 0); });
+        const base = text(r.crm) || text(r.code) || text(r.cust);
+        seen[base] = (seen[base] || 0) + 1;
+        rows.push(Object.assign({}, r, { qty, key: seen[base] > 1 ? `${base}#${seen[base]}` : base }));
+      }
     }
-    return best ? best.data || {} : null;
+    return { cols, rows, assign };
+  }
+  function routingDoc(d) {
+    const list = Object.values(st.docs.TP || {}).filter(doc => doc && doc.kind === 'routing' && doc.date === d)
+      .sort((a, b) => ((a.created_at || '') < (b.created_at || '') ? -1 : (a.created_at || '') > (b.created_at || '') ? 1 : 0));
+    return list.length ? mergeRouting(list.map(x => x.data || {})) : null;
   }
   function routeDriver(data, code, drv) {
     const a = (data && data.assign) || {};
@@ -821,7 +835,7 @@ const Backend = (() => {
       if (!doc || doc.kind !== 'routing') throw new ApiError(404, 'Không tìm thấy bảng phân tuyến (hãy Lưu trước).');
       const routes = live(st.routes).map(([, r]) => r).sort((a, b) => (a.sort || 0) - (b.sort || 0))
         .map(r => ({ code: text(r.code), name: text(r.name) })).filter(r => r.code);
-      return { format: SYNC_FORMAT, version: 1, at: nowStr(), date: doc.date,
+      return { format: SYNC_FORMAT, version: 1, at: nowStr(), date: doc.date, src: text(q.id),
         doc: { date: doc.date, title: doc.title || '', data: { cols: doc.data.cols || [], rows: doc.data.rows || [], assign: doc.data.assign || {} } },
         routes, drivers: drivers() };
     }
@@ -839,14 +853,17 @@ const Backend = (() => {
       const routes = Object.fromEntries((body.routes || []).map((r, i) => ['r' + i, { name: text(r.name), code: text(r.code), note: '', sort: i + 1 }]));
       await write(() => ref.routes().set({ r: routes }));
       st.routes = routes;
-      const id = 'rt-' + d;
+      // mỗi bảng phân tuyến của web kho (tuyến lẻ, tuyến 1-2-3…) là 1 bảng ở đây; gửi lại cùng bảng thì thay bản cũ
+      const src = text(body.src).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40) || 'x';
+      const id = `rt-${d}-${src}`;
       const old = (st.docs.TP || {})[id];
-      const rec = { kind: 'routing', date: d, title: text(body.doc.title), data: body.doc.data, created_at: old ? old.created_at : nowStr(), updated_at: nowStr() };
+      const rec = { kind: 'routing', date: d, src, title: text(body.doc.title), data: body.doc.data, created_at: old ? old.created_at : nowStr(), updated_at: nowStr() };
       if (JSON.stringify(rec).length > 240000) throw new ApiError(413, 'Bảng phân tuyến quá lớn để lưu');
       await write(() => ref.doc('TP', id).set(rec));
-      // bảng cùng ngày nhận trước đó dưới mã khác: bỏ, để người giao chỉ thấy một bảng
-      for (const [k, x] of Object.entries(st.docs.TP || {})) if (k !== id && x && x.kind === 'routing' && x.date === d) await write(() => ref.doc('TP', k).delete());
-      st.docs.TP = Object.fromEntries(Object.entries(Object.assign({}, st.docs.TP, { [id]: rec })).filter(([k, x]) => k === id || !(x && x.kind === 'routing' && x.date === d)));
+      // bảng cũ của chính bảng này (nhận trước khi có mã nguồn) thì bỏ
+      const stale = ([k, x]) => k !== id && x && x.kind === 'routing' && x.date === d && (!x.src || x.src === src);
+      for (const e of Object.entries(st.docs.TP || {})) if (stale(e)) await write(() => ref.doc('TP', e[0]).delete());
+      st.docs.TP = Object.fromEntries(Object.entries(Object.assign({}, st.docs.TP, { [id]: rec })).filter(e => !stale(e)));
       const n = body.doc.data.rows.length;
       await log('Nhận phân tuyến từ web kho', d, `${n} khách`, 'TP');
       return { date: d, rows: n, routes: new Set(body.doc.data.rows.map(r => r.route).filter(Boolean)).size, drivers: Object.values(patch).filter(Boolean).length };

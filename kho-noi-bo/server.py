@@ -884,10 +884,38 @@ def gh_auth(con, token):
     return did, d
 
 
+def merge_routing(datas):
+    """Gộp các bảng phân tuyến cùng ngày (tuyến lẻ, khách tuyến 1-2-3…) – giống mergeRouting ở online/backend.js:
+    cột sản phẩm trùng tên cộng chung, khách có nhiều dòng thì mã dòng thêm #2, #3…"""
+    cols, idx, rows, assign, seen = [], {}, [], {}, {}
+    for data in datas:
+        mp = []
+        for c in data.get("cols") or []:
+            k = re.sub(r"\s+", "", str(c)).lower()
+            if k not in idx:
+                idx[k] = len(cols)
+                cols.append(c)
+            mp.append(idx[k])
+        assign.update(data.get("assign") or {})
+        for r in data.get("rows") or []:
+            qty = {}
+            for k, n in (r.get("qty") or {}).items():
+                try:
+                    j = mp[int(k)]
+                except (ValueError, IndexError):
+                    continue
+                qty[str(j)] = qty.get(str(j), 0) + (n or 0)
+            base = text(r.get("crm")) or text(r.get("code")) or text(r.get("cust"))
+            seen[base] = seen.get(base, 0) + 1
+            row = dict(r, qty=qty, key=base if seen[base] == 1 else "%s#%d" % (base, seen[base]))
+            rows.append(row)
+    return {"cols": cols, "rows": rows, "assign": assign}
+
+
 def routing_doc(con, d):
-    """Bảng phân tuyến của 1 ngày (bản cập nhật sau cùng nếu có nhiều)."""
-    r = con.execute("SELECT * FROM docs WHERE wh='TP' AND kind='routing' AND date=? ORDER BY updated_at DESC, id DESC LIMIT 1", (d,)).fetchone()
-    return json.loads(r["data"] or "{}") if r else None
+    """Các bảng phân tuyến của 1 ngày, gộp lại (None nếu chưa có)."""
+    rs = con.execute("SELECT data FROM docs WHERE wh='TP' AND kind='routing' AND date=? ORDER BY created_at, id", (d,)).fetchall()
+    return merge_routing([json.loads(r["data"] or "{}") for r in rs]) if rs else None
 
 
 def route_driver(data, code, drivers):
@@ -902,7 +930,7 @@ def route_driver(data, code, drivers):
 
 
 def cust_key(r):
-    return text(r.get("crm")) or text(r.get("code")) or text(r.get("cust"))
+    return text(r.get("key")) or text(r.get("crm")) or text(r.get("code")) or text(r.get("cust"))
 
 
 def my_routes(con, did, d, drivers=None):

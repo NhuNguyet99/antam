@@ -1331,7 +1331,33 @@ function matchRule(textIn, rules, fromEnd) {
 // Mã CRM (cột CRM) dùng làm mã khách chính; dòng chưa có mã CRM thì dùng mã đầu tên khách (K1326, KH0306…)
 const crmCode = s => String(s || '').replace(/\s+/g, '').toUpperCase();
 const custKeys = row => [row.crm, row.code].map(crmCode).filter(Boolean);
+// Sheet "khách tuyến 1-2-3": tuyến ghi sẵn ở cột A (T1, T 3, "chiều … giao") -> mã tuyến trong danh mục (trùng mã, hoặc từ khóa
+// trong Quy tắc chia tuyến, vd ghi "t1, t2" cho tuyến kebab đêm); không khớp thì dùng chính nhãn trong sheet làm mã tuyến
+// Mặc định của kho: T1, T2 = tuyến kebab đêm; T3 = khách qua lấy (tuyến 3 kebab); "chiều … giao" = tuyến kebab chiều (Cương)
+const SHEET_ROUTE_DEFAULTS = [
+  [/^t\s*[12]$/, ['kebabdem', 'tuyen1+2']],
+  [/^t\s*3$/, ['tuyen3']],
+  [/^chieu/, ['kebabchieu']],
+];
+function sheetRouteCode(label, cfg) {
+  const lb = String(label || '').replace(/\s+/g, ' ').trim();
+  const tn = lb.match(/^t\s*(\d+)$/i);
+  const code = tn ? 'T' + tn[1] : lb;
+  const flat = x => noAccent(x).replace(/\s+/g, '');
+  const routes = routeList();
+  const hit = routes.find(r => flat(r.code) === flat(code));
+  if (hit) return hit.code;
+  const byRule = matchRule(code, cfg.rules, false);
+  if (byRule) return byRule;
+  for (const [re, keys] of SHEET_ROUTE_DEFAULTS) {
+    if (!re.test(noAccent(lb))) continue;
+    const r = routes.find(x => keys.some(k => flat(x.code).includes(k) || flat(x.name).includes(k)));
+    if (r) return r.code;
+  }
+  return code;
+}
 function autoRoute(row, cfg) {
+  if (row.grp) return [sheetRouteCode(row.grp, cfg), 'cột tuyến của sheet'];
   const key = custKeys(row).find(k => cfg.memory[k]);
   if (key) return [cfg.memory[key], 'nhớ'];
   let c = matchRule(row.q, cfg.rules, false);
@@ -1344,15 +1370,25 @@ function tableFromHtml(html) {
   const doc = new DOMParser().parseFromString(html, 'text/html');
   const t = doc.querySelector('table');
   if (!t) return null;
-  const rows = [];
-  for (const tr of t.querySelectorAll('tr')) {
+  // ô gộp nhiều dòng (rowspan, vd cột Tuyến của sheet tuyến 1-2-3) được chép xuống từng dòng để cột không bị lệch
+  const rows = [], carry = [];
+  t.querySelectorAll('tr').forEach((tr, ri) => {
     const r = [];
+    let ci = 0;
+    const fill = () => { while (carry[ci] && carry[ci].until > ri) { r.push(carry[ci].text); ci++; } };
     for (const td of tr.querySelectorAll('td,th')) {
-      r.push((td.innerText || td.textContent || '').trim());
-      for (let i = 1; i < (+td.getAttribute('colspan') || 1); i++) r.push('');
+      fill();
+      const text = (td.innerText || td.textContent || '').trim();
+      const cs = +td.getAttribute('colspan') || 1, rs = +td.getAttribute('rowspan') || 1;
+      for (let i = 0; i < cs; i++) {
+        r.push(i ? '' : text);
+        carry[ci] = rs > 1 ? { until: ri + rs, text: i ? '' : text } : null;
+        ci++;
+      }
     }
+    fill();
     rows.push(r);
-  }
+  });
   return rows;
 }
 function tableFromText(txt) {
@@ -1382,6 +1418,8 @@ function splitCustomer(s) {
 // Đọc bảng của 1 sheet ngày -> { cols: tên cột sản phẩm, rows: khách đang HOẠT ĐỘNG, total, skipped }
 function parseOrderSheet(table) {
   const H = c => noAccent(c).replace(/\s+/g, ' ').trim();
+  const t123 = parseRouteGroupSheet(table, H);
+  if (t123) return t123;
   let hi = table.findIndex((r, i) => i < 15 && r.some(c => H(c) === 'quan') && r.some(c => H(c).startsWith('trang thai')));
   let col, cols = [], pcols = [];
   if (hi >= 0) {
@@ -1412,6 +1450,41 @@ function parseOrderSheet(table) {
   }
   return { cols, rows, total, header: hi >= 0 };
 }
+// Mẫu "2-KHÁCH TUYẾN 123": A = tuyến (ô gộp), B CRM, C Tên khách hàng (địa chỉ), D SĐT, E trạng thái (không tiêu đề),
+// các cột sản phẩm (22CM, 25 CM, …, VÀNG, ĐEN, CÂY THỊT (KG)), GHI CHÚ; bỏ dòng TỔNG BÁNH / DOANH THU
+function parseRouteGroupSheet(table, H) {
+  const hi = table.findIndex((r, i) => i < 15 && r.some(c => H(c) === 'crm') && r.some(c => H(c).startsWith('ten khach')) && !r.some(c => H(c) === 'quan'));
+  if (hi < 0) return null;
+  const h = table[hi].map(H);
+  const find = f => h.findIndex(f);
+  const col = { crm: find(x => x === 'crm'), cust: find(x => x.startsWith('ten khach')), phone: find(x => x.includes('sdt') || x.includes('dien thoai')),
+    note: find(x => x.startsWith('ghi chu')) };
+  const body = table.slice(hi + 1);
+  // cột trạng thái: cột có nhiều ô "HOẠT ĐỘNG" / "NGHỈ" nhất
+  let status = -1, best = 0;
+  for (let c = 0; c < h.length; c++) {
+    const n = body.filter(r => /^(hoat dong|nghi)$/.test(H(r[c] || ''))).length;
+    if (n > best) { best = n; status = c; }
+  }
+  const pcols = [], cols = [];
+  h.forEach((x, i) => { if (i > Math.max(col.phone, status) && x && (col.note < 0 || i < col.note)) { pcols.push(i); cols.push(String(table[hi][i]).replace(/\s+/g, ' ').trim()); } });
+  const g = (r, i) => (i >= 0 && r[i] != null ? String(r[i]).replace(/\s+/g, ' ').trim() : '');
+  const rows = []; let total = 0, grp = '';
+  for (const r of body) {
+    if (g(r, 0)) grp = g(r, 0);
+    const cust = g(r, col.cust);
+    const hc = H(cust);
+    if (!cust || hc.startsWith('tong banh') || hc.startsWith('doanh thu')) continue;
+    total++;
+    if (status >= 0 && H(g(r, status)) !== 'hoat dong') continue;
+    const qty = {};
+    pcols.forEach((ci, k) => { const n = parseNum(String(r[ci] == null ? '' : r[ci]).replace(/\s*kg\s*$/i, '')); if (n && !isNaN(n)) qty[k] = n; });
+    const c = splitCustomer(cust);
+    rows.push({ q: '', crm: crmCode(g(r, col.crm)), cust, code: c.code, name: c.name, addr: c.addr || c.name, phone: g(r, col.phone), note: g(r, col.note),
+      pay: '', qty, route: '', src: '', grp });
+  }
+  return { cols, rows, total, header: true };
+}
 function sheetNameFor(iso) {
   const [, m, d] = iso.split('-');
   return [`${+d}.${+m}`, `${d}.${m}`, `${+d}.${m}`, `${d}.${+m}`, `${+d}/${+m}`, `${d}-${m}`];
@@ -1424,7 +1497,8 @@ async function viewRoutingList(main) {
     <button class="btn" id="rt-rules">⚙ Quy tắc chia tuyến</button></div>
     <div class="callout">Mỗi ngày: mở file báo cáo tuyến lẻ trên Google Sheet, chọn sheet của ngày (vd <b>14.10</b>), bấm <kbd>Ctrl</kbd>+<kbd>A</kbd> rồi
     <kbd>Ctrl</kbd>+<kbd>C</kbd>, vào <b>Phân tuyến ngày mới</b> và dán vào ô. Web lấy các khách có <b>TRẠNG THÁI = HOẠT ĐỘNG</b>, tự chia vào tuyến theo cột QUẬN /
-    địa chỉ, rồi in danh sách giao từng tuyến.</div>
+    địa chỉ, rồi in danh sách giao từng tuyến.<br>File <b>"2-KHÁCH TUYẾN 123"</b> (tuyến đã sắp sẵn ở cột A) làm một <b>Phân tuyến ngày mới</b> riêng cùng ngày:
+    T1, T2 → tuyến kebab đêm, T3 → tuyến 3 khách qua lấy, "chiều … giao" → kebab chiều (Cương). Người giao thấy gộp cả hai bảng của ngày.</div>
     ${list.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Ngày</th><th>Nội dung</th><th>Cập nhật</th></tr></thead><tbody>
     ${list.map(d => `<tr class="clickable" data-id="${d.id}"><td>${vnDate(d.date)}</td><td>${esc(d.title)}</td><td class="small muted">${esc(d.updated_at)}</td></tr>`).join('')}
     </tbody></table></div>` : '<p class="muted">Chưa có ngày nào được phân tuyến.</p>'}`;
@@ -1622,7 +1696,7 @@ async function viewRouting(main, m) {
       <td class="small">${esc(r.phone)}</td><td class="small">${esc(r.note)}${r.pay ? `<br><span class="badge ${/chua/.test(noAccent(r.pay)) ? 'warn' : 'ok'}">${esc(r.pay)}</span>` : ''}</td>
       <td class="small">${qtyText(r)}</td>
       <td><select data-k="route">${options(opts.some(o => o[0] === r.route) ? opts : opts.concat([[r.route, r.route]]), r.route)}</select>
-      <div class="small muted">${r.src === 'tay' ? 'chọn tay' : r.src === 'nhớ' ? 'như lần chọn tay trước' : r.src ? 'tự động theo ' + esc(r.src) : ''}</div>${delivBadge(delivOf(r))}</td></tr>`).join('')
+      <div class="small muted">${r.src === 'tay' ? 'chọn tay' : r.src === 'nhớ' ? 'như lần chọn tay trước' : r.src ? 'theo ' + esc(r.src) : ''}${r.grp ? ` (${esc(r.grp)})` : ''}</div>${delivBadge(delivOf(r))}</td></tr>`).join('')
       || '<tr><td colspan="9" class="muted">Không có khách nào.</td></tr>';
     fillPhotos(tb);
     $$('select[data-k=route]', tb).forEach(sel => sel.onchange = () => {

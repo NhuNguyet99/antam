@@ -34,7 +34,7 @@ const GiaoHang = (() => {
     return `${rel}, ${vnDate(iso)}`;
   };
   // Mã khách để ghi kết quả giao (giống server.py cust_key): mã CRM, không có thì mã đầu tên khách, không có nữa thì tên
-  const custKey = r => String(r.crm || '').trim() || String(r.code || '').trim() || String(r.cust || '').trim();
+  const custKey = r => String(r.key || '').trim() || String(r.crm || '').trim() || String(r.code || '').trim() || String(r.cust || '').trim();
   function toast(msg, err) {
     const box = $('#gh-toasts');
     if (!box) return;
