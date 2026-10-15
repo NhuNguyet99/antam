@@ -167,3 +167,9 @@ body.gh-mode #app { display: none !important; }
   .gh-top-actions .ghost { display: none; }
   .gh-datebar #gh-today { display: none; }
 }
+
+.gh-coordbox { display: grid; gap: 8px; }
+.gh-coordbox .gh-btn { text-decoration: none; text-align: center; }
+.gh-coordbox details { color: var(--gh-muted); }
+.gh-coordbox summary { cursor: pointer; color: var(--gh-info); }
+.gh-coordbox ol { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; }

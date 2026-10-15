@@ -434,6 +434,12 @@ body.gh-mode #app { display: none !important; }
   .gh-top-actions .ghost { display: none; }
   .gh-datebar #gh-today { display: none; }
 }
+
+.gh-coordbox { display: grid; gap: 8px; }
+.gh-coordbox .gh-btn { text-decoration: none; text-align: center; }
+.gh-coordbox details { color: var(--gh-muted); }
+.gh-coordbox summary { cursor: pointer; color: var(--gh-info); }
+.gh-coordbox ol { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; }
 </style>
 <div id="app">
   <aside id="sidebar">
@@ -2007,8 +2013,19 @@ const GiaoHang = (() => {
   }
   function gpsLine(p) {
     if (p.gpsState === 'wait') return '<span class="gh-muted">📍 Đang lấy vị trí…</span>';
-    if (p.gps) return `<span>📍 Đã lấy vị trí${accText(p.gps)} · <a class="gh-link" href="${gpsLink(p.gps)}" target="_blank" rel="noopener">xem</a></span>`;
+    if (p.gps) return `<span>📍 Đã có vị trí${accText(p.gps)} · <a class="gh-link" href="${gpsLink(p.gps)}" target="_blank" rel="noopener">xem</a></span>`;
     return `<span class="gh-red">📍 ${esc(p.gpsErr || 'Chưa có vị trí')}</span>`;
+  }
+  // Trang trên claude.ai thường không được đọc định vị điện thoại: lấy tọa độ ở Google Maps rồi dán vào – web tự nhận
+  function coordBox(p) {
+    return `<div class="gh-coordbox">
+      <a class="gh-btn" href="https://www.google.com/maps" target="_blank" rel="noopener">🗺 Mở Google Maps lấy tọa độ</a>
+      <input class="gh-input" data-coords inputmode="decimal" autocomplete="off" placeholder="Dán tọa độ vào đây, vd 10.8812, 106.5934" value="${esc(p.coords || '')}">
+      <details class="gh-small"><summary>Cách lấy tọa độ</summary><ol>
+        <li>Bấm <b>Mở Google Maps</b>, bấm nút ◎ để hiện chấm xanh (vị trí của bạn).</li>
+        <li>Nhấn giữ vào chấm xanh (hoặc cửa hàng của khách) – ô tìm kiếm hiện số dạng <b>10.88…, 106.59…</b> – chạm vào số đó để sao chép.</li>
+        <li>Quay lại trang này, nhấn giữ vào ô trên → <b>Dán</b>. Web tự nhận.</li></ol></details>
+    </div>`;
   }
   function confirmPanel(key, p, loc) {
     const ok = p.mode === 'ok';
@@ -2017,7 +2034,8 @@ const GiaoHang = (() => {
       ${photoStrip(p.photos, true)}
       <label class="gh-btn gh-file">📷 ${p.photos.length ? 'Chụp thêm ảnh' : (ok ? 'Chụp ảnh giao hàng' : 'Chụp ảnh (nếu có)')}<input type="file" accept="image/*" capture="environment" multiple data-pick="${esc(key)}"></label>
       ${p.uploading ? '<div class="gh-muted">Đang gửi ảnh…</div>' : ''}
-      <div class="gh-gps">${gpsLine(p)} <button class="gh-linkbtn" data-act="gps" data-key="${esc(key)}">↻ Lấy lại</button></div>
+      <div class="gh-gps">${gpsLine(p)} <button class="gh-linkbtn" data-act="gps" data-key="${esc(key)}">${st.gpsBlocked ? 'Thử lấy tự động' : '↻ Lấy lại'}</button></div>
+      ${p.gps || p.gpsState === 'wait' ? '' : coordBox(p)}
       ${ok && p.gps && !loc ? `<label class="gh-check"><input type="checkbox" data-savloc ${p.saveLoc ? 'checked' : ''}> Lưu vị trí này làm vị trí của khách (lần sau chỉ đường thẳng tới đây)</label>` : ''}
       ${ok ? '' : `<div class="gh-reasons">${FAIL_REASONS.map(x => `<button class="gh-chip ${p.note === x ? 'on' : ''}" data-reason="${esc(x)}">${esc(x)}</button>`).join('')}</div>`}
       <input class="gh-input" data-note placeholder="${ok ? 'Ghi chú (không bắt buộc)…' : 'Lý do khác / ghi chú…'}" maxlength="200" value="${esc(p.note)}">
@@ -2029,10 +2047,10 @@ const GiaoHang = (() => {
     const p = st.panel;
     return `<div class="gh-panel">
       <div class="gh-panel-title">📌 Vị trí của khách</div>
-      <p class="gh-muted gh-small">Đứng tại cửa hàng của khách rồi bấm <b>Dùng vị trí hiện tại</b>, hoặc dán tọa độ / link Google Maps (trên Google Maps nhấn giữ vào điểm → sao chép tọa độ).</p>
-      <button class="gh-btn primary" data-act="loc-gps" data-key="${esc(key)}">📍 Dùng vị trí hiện tại</button>
+      <p class="gh-muted gh-small">Đứng tại cửa hàng của khách, lấy tọa độ rồi dán vào ô dưới – web tự lưu.</p>
+      <button class="gh-btn ${st.gpsBlocked ? '' : 'primary'}" data-act="loc-gps" data-key="${esc(key)}">📍 ${st.gpsBlocked ? 'Thử lấy vị trí tự động' : 'Dùng vị trí hiện tại'}</button>
       ${p.gpsState === 'wait' ? '<div class="gh-muted">Đang lấy vị trí…</div>' : p.gpsErr ? `<div class="gh-red gh-small">${esc(p.gpsErr)}</div>` : ''}
-      <input class="gh-input" data-coords placeholder="vd 10.8812, 106.5934 hoặc link Google Maps" value="${esc(p.coords || '')}">
+      ${coordBox(p)}
       <div class="gh-actions"><button class="gh-btn ok" data-act="loc-save" data-key="${esc(key)}">Lưu tọa độ đã dán</button>
       ${loc ? `<button class="gh-btn" data-act="loc-clear" data-key="${esc(key)}">Xóa vị trí</button>` : ''}
       <button class="gh-btn" data-act="cancel" data-key="${esc(key)}">Hủy</button></div>
@@ -2042,7 +2060,16 @@ const GiaoHang = (() => {
     $$('[data-act]', box).forEach(b => b.onclick = () => act(b.dataset.key, b.dataset.act, b));
     $$('[data-reason]', box).forEach(b => b.onclick = () => { if (!st.panel) return; st.panel.note = b.dataset.reason; redraw(); });
     $$('[data-note]', box).forEach(inp => inp.oninput = () => { if (st.panel) st.panel.note = inp.value; });
-    $$('[data-coords]', box).forEach(inp => inp.oninput = () => { if (st.panel) st.panel.coords = inp.value; });
+    $$('[data-coords]', box).forEach(inp => inp.oninput = e => {
+      const p = st.panel;
+      if (!p) return;
+      p.coords = inp.value;
+      const g = parseCoords(inp.value);
+      // tự nhận khi dán (hoặc đã gõ đủ tọa độ chính xác), không nhận khi đang gõ dở
+      if (!g || !(e.inputType === 'insertFromPaste' || /\d\.\d{4,}\D+-?\d{1,3}\.\d{4,}/.test(inp.value))) return;
+      if (p.mode === 'loc') saveLocation(p.key, g); // dán xong là lưu luôn
+      else { p.gps = g; p.gpsErr = ''; toast('Đã nhận tọa độ'); redraw(); }
+    });
     $$('[data-savloc]', box).forEach(cb => cb.onchange = () => { if (st.panel) st.panel.saveLoc = cb.checked; });
     $$('[data-rm]', box).forEach(b => b.onclick = () => { if (!st.panel) return; st.panel.photos.splice(+b.dataset.rm, 1); redraw(); });
     $$('input[data-pick]', box).forEach(inp => inp.onchange = () => pickPhotos(inp.dataset.pick, inp.files));
@@ -2059,14 +2086,15 @@ const GiaoHang = (() => {
     const p = st.panel && st.panel.key === key ? st.panel : null;
     if (action === 'ok' || action === 'fail') {
       st.panel = { key, mode: action, photos: [], note: '', gps: null, gpsState: '', gpsErr: '', saveLoc: true };
-      redraw(); fetchGps(st.panel); return;
+      redraw(); if (!st.gpsBlocked) fetchGps(st.panel); else { st.panel.gpsErr = 'Chưa có vị trí – lấy tọa độ ở Google Maps rồi dán vào ô dưới'; redraw(); }
+      return;
     }
     if (action === 'loc') { st.panel = { key, mode: 'loc', coords: '', gpsState: '', gpsErr: '' }; redraw(); return; }
     if (action === 'cancel') { st.panel = null; redraw(); return; }
     if (action === 'gps' && p) { fetchGps(p); return; }
     if (action === 'loc-gps' && p) {
       p.gpsState = 'wait'; p.gpsErr = ''; redraw();
-      try { const g = await getGps(); p.gpsState = ''; await saveLocation(key, g); } catch (e) { p.gpsState = ''; p.gpsErr = e.message + ' – hãy dán tọa độ bên dưới.'; if (st.panel === p) redraw(); }
+      try { const g = await getGps(); p.gpsState = ''; await saveLocation(key, g); } catch (e) { p.gpsState = ''; p.gpsErr = e.message; if (st.panel === p) redraw(); }
       return;
     }
     if (action === 'loc-save' && p) {
@@ -2136,21 +2164,25 @@ const GiaoHang = (() => {
     p.gpsState = '';
     if (st.panel === p) redraw();
   }
+  // Định vị tự động: chỉ chạy được khi trình duyệt cho phép (bản chạy máy qua https). Trang trên claude.ai bị chặn –
+  // lần đầu bị từ chối thì nhớ lại (st.gpsBlocked) để hiện ngay cách dán tọa độ từ Google Maps.
   function getGps() {
+    const blocked = msg => { st.gpsBlocked = true; store('gpsBlocked', true); return new Error(msg); };
     return new Promise((resolve, reject) => {
-      if (!window.isSecureContext) return reject(new Error('Định vị chỉ chạy khi mở web bằng https (bản online)'));
-      if (!navigator.geolocation) return reject(new Error('Điện thoại / trình duyệt không hỗ trợ định vị'));
+      if (!window.isSecureContext) return reject(blocked('Trang này không đọc được định vị – lấy tọa độ ở Google Maps rồi dán vào'));
+      if (!navigator.geolocation) return reject(blocked('Điện thoại / trình duyệt không hỗ trợ định vị – lấy tọa độ ở Google Maps rồi dán vào'));
       navigator.geolocation.getCurrentPosition(
-        pos => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy }),
-        e => reject(new Error(e.code === 1 ? 'Chưa cho phép định vị – bật quyền Vị trí cho trình duyệt rồi bấm Lấy lại'
-          : e.code === 3 ? 'Lấy vị trí quá lâu – ra chỗ thoáng rồi bấm Lấy lại' : 'Không lấy được vị trí')),
-        { enableHighAccuracy: true, timeout: 20000, maximumAge: 30000 });
+        pos => { st.gpsBlocked = false; store('gpsBlocked', null); resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, acc: pos.coords.accuracy }); },
+        e => reject(e.code === 1 ? blocked(ONLINE ? 'Trang trên claude.ai không được đọc định vị điện thoại – lấy tọa độ ở Google Maps rồi dán vào'
+          : 'Chưa cho phép định vị – bật quyền Vị trí cho trình duyệt, hoặc lấy tọa độ ở Google Maps rồi dán vào')
+          : new Error(e.code === 3 ? 'Lấy vị trí quá lâu – thử lại, hoặc dán tọa độ từ Google Maps' : 'Không lấy được vị trí – dán tọa độ từ Google Maps')),
+        { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
     });
   }
   // "10.88, 106.59", link Google Maps (…!3d10.88!4d106.59…, …@10.88,106.59…, …?q=10.88,106.59)
   function parseCoords(s) {
     const t = String(s || '');
-    const pats = [/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/, /[?&](?:q|query|destination|ll)=(-?\d+\.\d+)(?:,|%2C)\s*(-?\d+\.\d+)/i, /@(-?\d+\.\d+),(-?\d+\.\d+)/, /(-?\d{1,2}\.\d{3,})\s*[,; ]\s*(-?\d{1,3}\.\d{3,})/];
+    const pats = [/!3d(-?\d+\.\d+)!4d(-?\d+\.\d+)/, /[?&](?:q|query|destination|ll)=(-?\d+\.\d+)(?:,|%2C)\s*(-?\d+\.\d+)/i, /@(-?\d+\.\d+),(-?\d+\.\d+)/, /(-?\d{1,2}\.\d{2,})\s*[,; ]\s*(-?\d{1,3}\.\d{2,})/];
     for (const re of pats) {
       const m = t.match(re);
       if (m) { const lat = +m[1], lng = +m[2]; if (Math.abs(lat) <= 90 && Math.abs(lng) <= 180) return { lat, lng, acc: null }; }
@@ -2224,6 +2256,7 @@ const GiaoHang = (() => {
   // root: phần tử chứa web giao hàng; onExit: (bản online) quay về web kho
   async function start(root, opts = {}) {
     st.root = root; st.onExit = opts.onExit || null;
+    st.gpsBlocked = !!store('gpsBlocked');
     st.exitLabel = opts.exitLabel || '← Về web kho'; st.exitInHeader = opts.exitInHeader !== false;
     document.body.classList.add('gh-mode');
     document.title = 'Giao hàng An Tâm';
