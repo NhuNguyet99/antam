@@ -327,8 +327,9 @@ function voucherDoc(v) {
     }).join('');
     return `<div class="doc">${docHead('Phiếu nội bộ', '(Căn cứ biên bản kiểm kê)')}
       <div class="d-title">Phiếu điều chỉnh kho</div><div class="d-sub">${longDate(v.date)}</div><div class="d-no">Số: <b>${esc(v.no)}</b></div>
+      ${v.status ? `<div class="d-sub"><b>${v.status === 'pending' ? 'CHỜ DUYỆT – chưa ghi sổ' : 'BỊ TỪ CHỐI – không ghi sổ'}</b></div>` : ''}
       <div class="d-info"><div>Kho điều chỉnh: <b>${esc(v.from_party)}</b></div><div>Căn cứ / Lý do: ${esc(v.reason)}</div>
-      <div>Người thực hiện: ${esc(v.giver)}</div></div>
+      <div>Người thực hiện: ${esc(v.giver)}${v.created_by ? ` &nbsp; · &nbsp; Người lập phiếu: ${esc(v.created_by)}` : ''}${v.approved_by && !v.status ? ` &nbsp; · &nbsp; Quản lý duyệt: <b>${esc(v.approved_by)}</b> (${esc(vnDate(String(v.approved_at || '').slice(0, 10)))})` : ''}</div></div>
       <table class="t"><thead><tr><th>STT</th><th>Mã hàng</th><th>Tên hàng hóa, vật tư</th><th>ĐVT</th><th>Tồn sổ sách</th><th>Tồn thực tế</th>
       <th>Điều chỉnh tăng (+)</th><th>Điều chỉnh giảm (−)</th><th>Giá trị điều chỉnh (đ)</th><th>Nguyên nhân / Ghi chú</th></tr></thead>
       <tbody>${body}<tr class="sum"><td colspan="6" class="c">CỘNG</td><td class="n">${fmt(up)}</td><td class="n">${fmt(down)}</td><td class="n">${money(val)}</td><td></td></tr></tbody></table>
@@ -484,7 +485,12 @@ async function viewDashboard(main) {
   const low = nxt.filter(r => r.warn === 'Dưới tồn tối thiểu');
   const value = nxt.reduce((a, r) => a + (r.value || 0), 0);
   const empty = !S.meta.products.length;
+  const pend = S.account ? (await guard(() => api('GET', '/pending'))) || {} : {};
   main.innerHTML = `
+    ${pend.count ? `<div class="callout warn">⏳ <b>${pend.count} phiếu điều chỉnh ${S.account.admin ? 'chờ bạn duyệt' : 'đang chờ Quản lý duyệt'}</b> – chưa tính vào tồn kho.
+      <a class="btn sm ${S.account.admin ? 'primary' : ''}" href="#/phieu?status=pending">${S.account.admin ? 'Xem và duyệt' : 'Xem'}</a></div>` : ''}
+    ${pend.rejected ? `<div class="callout warn">✖ <b>${pend.rejected} phiếu điều chỉnh bị từ chối</b> – người lập sửa lại rồi Lưu để gửi duyệt lại, hoặc xóa phiếu.
+      <a class="btn sm" href="#/phieu?status=rejected">Xem</a></div>` : ''}
     ${empty ? `<div class="callout"><b>Bắt đầu với ${esc(S.meta.warehouse.name)}:</b> chưa có danh mục hàng. Vào <a href="#/cai-dat">Cài đặt &amp; dữ liệu</a> để
       <b>nhập dữ liệu từ file Excel</b> của kho này (Danh mục hàng, Sổ Nhập Xuất${S.wh === 'NVL' ? ', KH Ngày' : ', Danh mục tuyến'}), hoặc thêm tay ở <a href="#/hang">Danh mục › Mặt hàng</a>.</div>` : ''}
     <div class="quick">
@@ -555,10 +561,42 @@ async function viewVoucherForm(main, m, q) {
       ? { from: 'Kho điều chỉnh', to: 'Bên liên quan', giver: 'Người thực hiện / lập phiếu', receiver: 'Thủ kho' }
       : { from: 'Bên giao (kho/bộ phận)', to: 'Bên nhận (kho/bộ phận)', giver: 'Người giao', receiver: 'Người nhận' };
   }
+  // Duyệt phiếu điều chỉnh: chỉ khi web kho dùng tài khoản nhân viên
+  const isAdmin = !!(S.account && S.account.admin);
+  const locked = () => !!(editing && S.account && !isAdmin && v.type === 'D' && v.saved_type === 'D' && !v.status);
+  v.saved_type = v.type;
+  function approvalBox() {
+    if (!S.account || v.type !== 'D') return '';
+    const by = (name, at) => `${esc(name || '—')}${at ? ' lúc ' + esc(at) : ''}`;
+    if (!editing || v.saved_type !== 'D') return isAdmin ? '' : '<div class="callout">Phiếu điều chỉnh nhân viên lập sẽ <b>chờ Quản lý duyệt</b> – chỉ tính vào tồn kho sau khi được duyệt.</div>';
+    if (v.status === 'pending') return `<div class="callout warn">⏳ <b>Chờ Quản lý duyệt</b> – chưa tính vào tồn kho. Người lập: ${by(v.created_by)}.
+      ${isAdmin ? '<div style="margin-top:8px"><button class="btn primary" id="btn-approve">✔ Duyệt phiếu</button> <button class="btn danger" id="btn-reject">✖ Từ chối</button></div>' : ''}</div>`;
+    if (v.status === 'rejected') return `<div class="callout warn">✖ <b>Bị từ chối</b> bởi ${by(v.approved_by, v.approved_at)}: <b>${esc(v.review_note)}</b>
+      <br>${isAdmin ? '<button class="btn primary sm" id="btn-approve" style="margin-top:6px">✔ Duyệt phiếu</button>' : 'Sửa lại rồi bấm Lưu để gửi Quản lý duyệt lại (hoặc xóa phiếu).'}</div>`;
+    return `<div class="callout">✔ ${v.approved_by ? `Đã duyệt bởi <b>${by(v.approved_by, v.approved_at)}</b>` : 'Đã ghi sổ'}${v.created_by ? ` · Người lập: ${esc(v.created_by)}` : ''}${locked() ? ' – chỉ Quản lý sửa / xóa được.' : ''}</div>`;
+  }
+  async function review(ok) {
+    if (S.dirty) return toast('Phiếu đang sửa dở – hãy Lưu trước khi duyệt', true);
+    let note = '';
+    if (!ok) {
+      note = await new Promise(resolve => {
+        openModal({ title: 'Từ chối phiếu ' + v.no, saveText: 'Từ chối',
+          body: '<label class="field">Lý do (người lập phiếu sẽ thấy để sửa lại)<input id="rv-note" maxlength="300"></label>',
+          onSave: root => { const t = $('#rv-note', root).value.trim(); if (!t) throw new Error('Hãy ghi lý do từ chối'); resolve(t); return true; },
+          onClose: () => resolve(null) });
+      });
+      if (!note) return;
+    }
+    const res = await guard(() => api('POST', '/review/' + editing, { ok, note }));
+    if (!res) return;
+    toast(ok ? `Đã duyệt phiếu ${v.no} – đã tính vào tồn kho` : `Đã từ chối phiếu ${v.no}`);
+    Object.assign(v, { status: res.status, approved_by: res.approved_by, approved_at: res.approved_at, review_note: res.review_note });
+    draw(); refreshStock();
+  }
   function draw() {
     setTitle(editing ? `${VIEW ? 'Phiếu' : 'Sửa phiếu'} ${v.no}` : `Lập phiếu ${TYPE_LABEL[v.type].toLowerCase()} kho`);
     const L = labels();
-    main.innerHTML = `
+    main.innerHTML = `${approvalBox()}
       <div class="toolbar"><div class="tabs" id="type-tabs">${['N', 'X', 'D'].map(t => `<button data-t="${t}" class="${v.type === t ? 'on' : ''}">${TYPE_PREFIX[t]} · ${TYPE_LABEL[t]}</button>`).join('')}</div>
         <div class="grow"></div>${editing ? `<span class="muted small">Tạo: ${esc(v.created_at || '')} · Sửa: ${esc(v.updated_at || '')}</span>` : ''}</div>
       <div class="card"><div class="grid c4">
@@ -584,11 +622,11 @@ async function viewVoucherForm(main, m, q) {
         <span class="hint">&nbsp;Mẹo: gõ vài chữ của tên hàng (không dấu) rồi Enter; bấm Enter ở ô số lượng dòng cuối để thêm dòng mới.</span></div>
       </div>
       <div class="form-actions">
-        <button class="btn primary" id="btn-save">💾 Lưu phiếu</button>
-        <button class="btn primary" id="btn-save-print">💾 Lưu &amp; In</button>
+        ${locked() ? '' : `<button class="btn primary" id="btn-save">💾 ${S.account && !isAdmin && v.type === 'D' ? 'Lưu &amp; gửi duyệt' : 'Lưu phiếu'}</button>
+        <button class="btn primary" id="btn-save-print">💾 Lưu &amp; In</button>`}
         ${editing ? '<button class="btn" id="btn-print">🖨 In phiếu</button>' : ''}
         <a class="btn" href="#/phieu/moi?type=${v.type}">+ Phiếu mới</a>
-        ${editing ? '<button class="btn" id="btn-copy">Sao chép thành phiếu mới</button><button class="btn danger" id="btn-del">Xóa phiếu</button>' : ''}
+        ${editing ? `<button class="btn" id="btn-copy">Sao chép thành phiếu mới</button>${locked() ? '' : '<button class="btn danger" id="btn-del">Xóa phiếu</button>'}` : ''}
         <a class="btn ghost" href="#/phieu">← Danh sách phiếu</a>
       </div>`;
     bindHeader();
@@ -627,14 +665,15 @@ async function viewVoucherForm(main, m, q) {
     });
     $('#btn-renum').onclick = () => { autoNo = true; markDirty(); refreshNo(); };
     $('#btn-add').onclick = () => addLine(true);
-    $('#btn-save').onclick = () => save(false);
-    $('#btn-save-print').onclick = () => save(true);
+    if ($('#btn-save')) { $('#btn-save').onclick = () => save(false); $('#btn-save-print').onclick = () => save(true); }
+    if ($('#btn-approve')) $('#btn-approve').onclick = () => review(true);
+    if ($('#btn-reject')) $('#btn-reject').onclick = () => review(false);
     if (editing) {
       $('#btn-print').onclick = () => {
         if (S.dirty) return toast('Hãy lưu phiếu trước khi in', true);
         printVouchers('ids=' + editing);
       };
-      $('#btn-del').onclick = async () => {
+      if ($('#btn-del')) $('#btn-del').onclick = async () => {
         if (!(await ask(`Xóa phiếu ${v.no}? Thao tác này không hoàn tác được (vẫn ghi trong Lịch sử).`))) return;
         if (await guard(() => api('DELETE', '/vouchers/' + editing))) { S.dirty = false; toast('Đã xóa phiếu ' + v.no); go('#/phieu'); }
       };
@@ -752,11 +791,15 @@ async function viewVoucherForm(main, m, q) {
     if (!res) return;
     S.dirty = false;
     store('lastVoucher_' + S.wh + '_' + v.type, { giver: v.giver, receiver: v.receiver });
-    toast(`Đã lưu phiếu ${res.no}`);
+    toast(res.status === 'pending' ? `Đã lưu phiếu ${res.no} – đang chờ Quản lý duyệt` : `Đã lưu phiếu ${res.no}`);
     loadMeta();
     if (andPrint) printHtml(voucherDoc(res), 'portrait', res.no);
     if (!editing) go('#/phieu/' + res.id, { force: true });
-    else { v.no = res.no; $('#f-no').value = res.no; setTitle(`Sửa phiếu ${res.no}`); }
+    else {
+      Object.assign(v, { no: res.no, status: res.status, created_by: res.created_by, approved_by: res.approved_by, approved_at: res.approved_at,
+        review_note: res.review_note, saved_type: res.type });
+      draw(); refreshStock();
+    }
   }
 
   draw();
@@ -765,9 +808,11 @@ async function viewVoucherForm(main, m, q) {
 }
 
 /* ============================================================ Danh sách phiếu */
-async function viewVoucherList(main) {
+async function viewVoucherList(main, m, q = {}) {
   setTitle('Danh sách phiếu');
   const f = Object.assign({ from: addDays(isoDate(), -6), to: isoDate(), type: '', q: '' }, store('voucherFilter') || {});
+  f.status = ['pending', 'rejected'].includes(q.status) ? q.status : ''; // lọc phiếu điều chỉnh chờ duyệt / bị từ chối (mọi ngày)
+  const STATUS = { pending: ['warn', '⏳ Chờ duyệt'], rejected: ['bad', '✖ Từ chối'] };
   main.innerHTML = `
     <div class="toolbar">
       <label class="field">Từ ngày<input type="date" id="v-from" value="${f.from}"></label>
@@ -780,6 +825,7 @@ async function viewVoucherList(main) {
       <a class="btn primary" href="#/phieu/moi?type=N">+ Phiếu nhập</a>
       <a class="btn primary" href="#/phieu/moi?type=X">+ Phiếu xuất</a>
       <a class="btn" href="#/phieu/moi?type=D">+ Phiếu điều chỉnh</a>
+      ${S.account ? `<button class="btn ${f.status === 'pending' ? 'primary' : ''}" id="v-pending">⏳ Phiếu chờ duyệt</button>` : ''}
       <div class="grow"></div>
       <button class="btn" id="v-print-sel" disabled>🖨 In phiếu đã chọn</button>
       <button class="btn" id="v-print-all">🖨 In tất cả phiếu trong danh sách</button>
@@ -788,7 +834,7 @@ async function viewVoucherList(main) {
   let list = [];
   const sel = new Set();
   async function load() {
-    const p = new URLSearchParams({ from: f.from, to: f.to, type: f.type, q: f.q });
+    const p = new URLSearchParams({ from: f.from, to: f.to, type: f.type, q: f.q, status: f.status });
     list = await guard(() => api('GET', '/vouchers?' + p)) || [];
     sel.clear();
     draw();
@@ -800,11 +846,12 @@ async function viewVoucherList(main) {
       <th><input type="checkbox" id="v-all"></th><th>Ngày</th><th>Số phiếu</th><th>Loại</th><th>Tuyến / Bên nhận</th><th>Lý do / Diễn giải</th>
       <th class="num">Dòng</th><th class="num">Tổng SL</th><th>Người giao → nhận</th><th></th></tr></thead><tbody>
       ${list.map(v => `<tr class="clickable" data-id="${v.id}"><td><input type="checkbox" data-sel="${v.id}" ${sel.has(String(v.id)) ? 'checked' : ''}></td>
-        <td class="nowrap">${vnDate(v.date)}</td><td class="nowrap"><b>${esc(v.no)}</b></td><td><span class="badge ${v.type}">${TYPE_LABEL[v.type]}</span></td>
+        <td class="nowrap">${vnDate(v.date)}</td><td class="nowrap"><b>${esc(v.no)}</b></td><td class="nowrap"><span class="badge ${v.type}">${TYPE_LABEL[v.type]}</span>${STATUS[v.status] ? ` <span class="badge ${STATUS[v.status][0]}">${STATUS[v.status][1]}</span>` : ''}</td>
         <td>${esc(v.route || v.to_party)}</td><td>${esc(v.reason)}</td><td class="num">${v.line_count}</td><td class="num">${fmt(v.total_qty)}</td>
         <td class="small">${esc(v.giver)}${v.receiver ? ' → ' + esc(v.receiver) : ''}</td>
         <td class="nowrap"><button class="btn sm" data-print="${v.id}">In</button></td></tr>`).join('')}
-      </tbody></table></div><p class="hint">${list.length} phiếu. Bấm vào dòng để xem / sửa.</p>` : '<p class="muted">Không có phiếu nào trong khoảng này.</p>';
+      </tbody></table></div><p class="hint">${list.length} phiếu${f.status ? (f.status === 'pending' ? ' chờ duyệt (mọi ngày)' : ' bị từ chối (mọi ngày)') : ''}. Bấm vào dòng để xem${f.status === 'pending' && S.account && S.account.admin ? ' và duyệt' : ' / sửa'}.${S.account ? ' Phiếu chờ duyệt / bị từ chối chưa tính vào tồn kho.' : ''}</p>`
+      : `<p class="muted">${f.status === 'pending' ? 'Không có phiếu điều chỉnh nào chờ duyệt.' : f.status === 'rejected' ? 'Không có phiếu bị từ chối.' : 'Không có phiếu nào trong khoảng này.'}</p>`;
     $$('#v-list tr[data-id]').forEach(tr => tr.onclick = e => {
       if (e.target.closest('input,button')) return;
       go('#/phieu/' + tr.dataset.id);
@@ -814,7 +861,12 @@ async function viewVoucherList(main) {
     const all = $('#v-all');
     if (all) { all.checked = sel.size && sel.size === list.length; all.onchange = () => { list.forEach(v => all.checked ? sel.add(String(v.id)) : sel.delete(String(v.id))); draw(); }; }
   }
-  const upd = () => { f.from = $('#v-from').value; f.to = $('#v-to').value; f.type = $('#v-type').value; f.q = $('#v-q').value; store('voucherFilter', f); load(); };
+  const upd = () => {
+    f.from = $('#v-from').value; f.to = $('#v-to').value; f.type = $('#v-type').value; f.q = $('#v-q').value;
+    if (f.status) { f.status = ''; setHashSilently('#/phieu'); const b = $('#v-pending'); if (b) b.classList.remove('primary'); } // đổi bộ lọc: về xem theo ngày
+    store('voucherFilter', { from: f.from, to: f.to, type: f.type, q: f.q }); load();
+  };
+  if ($('#v-pending')) $('#v-pending').onclick = () => go(f.status === 'pending' ? '#/phieu' : '#/phieu?status=pending');
   ['#v-from', '#v-to', '#v-type'].forEach(id => $(id).addEventListener('change', upd));
   $('#v-q').addEventListener('input', debounce(upd, 350));
   $('#v-today').onclick = () => { $('#v-from').value = $('#v-to').value = isoDate(); upd(); };

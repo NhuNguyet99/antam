@@ -180,6 +180,17 @@ ghi đúng tên người đăng nhập (thay cho ô "Bạn là ai?" gõ tên t�
 - Bản online: đăng nhập để ghi đúng người làm; quyền xem / sửa trang vẫn do nút *Share* của claude.ai quyết định.
 - Tài khoản nằm trong file dữ liệu **.json**, chuyển qua lại giữa 2 bản như các dữ liệu khác.
 
+### Duyệt phiếu điều chỉnh
+
+Khi đã dùng tài khoản nhân viên, **phiếu điều chỉnh (DCK)** do nhân viên lập (kể cả phiếu tạo từ biên bản kiểm kê) ở trạng thái
+**⏳ Chờ duyệt**: chưa tính vào tồn kho, Nhập – Xuất – Tồn, thẻ kho và sổ nhập – xuất.
+
+- Quản lý thấy thông báo ở **Tổng quan** và nút **⏳ Phiếu chờ duyệt** ở Danh sách phiếu; mở phiếu bấm **✔ Duyệt phiếu** (tính vào
+  tồn kho từ lúc đó) hoặc **✖ Từ chối** kèm lý do.
+- Phiếu bị từ chối: người lập sửa lại rồi **Lưu & gửi duyệt** để gửi lại, hoặc xóa phiếu.
+- Phiếu đã duyệt chỉ Quản lý sửa / xóa được. Phiếu điều chỉnh Quản lý tự lập được duyệt luôn. Phiếu nhập / xuất không cần duyệt.
+- Người lập và người duyệt ghi trên phiếu in và trong Lịch sử thao tác.
+
 ## Chuyển dữ liệu giữa bản online và bản chạy trên máy
 
 Cả hai bản dùng chung một loại file dữ liệu **.json**:

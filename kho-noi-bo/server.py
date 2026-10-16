@@ -78,6 +78,9 @@ TYPE_PREFIX = {"N": "PNK", "X": "PXK", "D": "DCK"}
 TYPE_LABEL = {"N": "Nhập", "X": "Xuất", "D": "Điều chỉnh"}
 # Ảnh hưởng đến tồn kho: nhập cộng, xuất trừ, điều chỉnh cộng theo dấu số lượng
 SIGN_SQL = "CASE v.type WHEN 'X' THEN -1 ELSE 1 END"
+# Phiếu điều chỉnh nhân viên lập phải chờ Quản lý duyệt: status 'pending' (chờ duyệt) / 'rejected' (từ chối) chưa tính vào tồn kho
+POSTED_SQL = "COALESCE(v.status, '') = ''"
+APPROVAL_COLS = ("status", "created_by", "approved_by", "approved_at", "review_note")
 
 TP_NAME = "Kho thành phẩm - hàng hóa"
 NVL_NAME = "Kho nguyên vật liệu"
@@ -146,7 +149,8 @@ CREATE TABLE IF NOT EXISTS vouchers (
   route TEXT DEFAULT '', from_party TEXT DEFAULT '', to_party TEXT DEFAULT '',
   giver TEXT DEFAULT '', receiver TEXT DEFAULT '', reason TEXT DEFAULT '',
   bill_count TEXT DEFAULT '', doc_ref TEXT DEFAULT '', note TEXT DEFAULT '',
-  created_at TEXT, updated_at TEXT
+  created_at TEXT, updated_at TEXT, status TEXT DEFAULT '', created_by TEXT DEFAULT '', approved_by TEXT DEFAULT '',
+  approved_at TEXT DEFAULT '', review_note TEXT DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS voucher_lines (
   id INTEGER PRIMARY KEY AUTOINCREMENT, voucher_id INTEGER NOT NULL REFERENCES vouchers(id) ON DELETE CASCADE,
@@ -207,6 +211,9 @@ def _columns(con, table):
 
 def migrate(con):
     """Nâng cấp dữ liệu của bản 1 kho cũ lên bản 2 kho (dữ liệu cũ thuộc kho TP)."""
+    for col in APPROVAL_COLS:
+        if col not in _columns(con, "vouchers"):
+            con.execute("ALTER TABLE vouchers ADD COLUMN %s TEXT DEFAULT ''" % col)
     if "url" not in _columns(con, "cust_locations"):
         con.execute("ALTER TABLE cust_locations ADD COLUMN url TEXT DEFAULT ''")
     # kết quả giao: thêm tên khách, ảnh giao hàng, vị trí lúc giao
@@ -349,7 +356,7 @@ def next_number(con, wh, vtype, d, route_code="", exclude_id=None):
 
 def stock_map(con, wh, until_date=None, before_date=None, exclude_voucher=None):
     """Tồn sổ sách theo mã: số dư ban đầu + phát sinh (đến hết until_date hoặc trước before_date)."""
-    cond, params = ["v.wh = ?"], [wh]
+    cond, params = ["v.wh = ?", POSTED_SQL], [wh]
     if until_date:
         cond.append("v.date <= ?")
         params.append(until_date)
@@ -372,7 +379,7 @@ def report_nxt(con, wh, d_from, d_to):
     per = {}
     sql = ("SELECT l.product_code AS code, v.type AS type, SUM(l.qty) AS q, COUNT(*) AS n "
            "FROM voucher_lines l JOIN vouchers v ON v.id = l.voucher_id "
-           "WHERE v.wh = ? AND v.date >= ? AND v.date <= ? GROUP BY l.product_code, v.type")
+           "WHERE v.wh = ? AND v.date >= ? AND v.date <= ? AND " + POSTED_SQL + " GROUP BY l.product_code, v.type")
     for r in con.execute(sql, (wh, d_from, d_to)):
         p = per.setdefault(r["code"], {"N": 0, "X": 0, "D": 0, "n": 0})
         p[r["type"]] = r["q"] or 0
@@ -407,7 +414,7 @@ def stock_card(con, wh, code, d_from, d_to):
     opening = stock_map(con, wh, before_date=d_from).get(code, 0)
     sql = ("SELECT v.id AS voucher_id, v.no, v.date, v.type, v.from_party, v.to_party, v.reason, "
            "l.qty, l.note FROM voucher_lines l JOIN vouchers v ON v.id = l.voucher_id "
-           "WHERE v.wh = ? AND l.product_code = ? AND v.date >= ? AND v.date <= ? ORDER BY v.date, v.id, l.line_no")
+           "WHERE v.wh = ? AND l.product_code = ? AND v.date >= ? AND v.date <= ? AND " + POSTED_SQL + " ORDER BY v.date, v.id, l.line_no")
     lines = rows(con.execute(sql, (wh, code, d_from, d_to)))
     bal = opening
     for ln in lines:
@@ -435,15 +442,53 @@ def voucher_full(con, vid):
     return v
 
 
-def save_voucher(con, wh, data, vid=None, who=""):
+def approval_of(old, vtype, me, who):
+    """Trạng thái duyệt của phiếu sau khi lưu. me = (id, tài khoản) đang đăng nhập, None nếu chưa dùng tài khoản nhân viên."""
+    cur = {k: (old[k] or "") if old else "" for k in APPROVAL_COLS}
+    if old and old["type"] == "D" and not cur["status"] and me and not me[1].get("admin"):
+        raise ApiError(403, "Phiếu điều chỉnh %s đã được duyệt – chỉ Quản lý sửa / xóa được" % old["no"])
+    if not old:
+        cur["created_by"] = who
+    if vtype != "D" or not me:
+        return dict(cur, status="", review_note="")
+    if me[1].get("admin"):
+        if not old:  # Quản lý tự lập: duyệt luôn
+            cur.update(approved_by=who, approved_at=now_str())
+        return cur
+    # nhân viên lập / sửa: gửi (lại) cho Quản lý duyệt
+    return dict(cur, status="pending", approved_by="", approved_at="")
+
+
+def review_voucher(con, vid, ok, note, me, who):
+    if not me or not me[1].get("admin"):
+        raise ApiError(403, "Chỉ tài khoản Quản lý mới duyệt phiếu điều chỉnh")
+    v = con.execute("SELECT * FROM vouchers WHERE id=?", (vid,)).fetchone()
+    if not v:
+        raise ApiError(404, "Không tìm thấy phiếu")
+    if v["type"] != "D":
+        raise ApiError(400, "Chỉ phiếu điều chỉnh cần duyệt")
+    if ok and not (v["status"] or ""):
+        raise ApiError(400, "Phiếu %s đã được duyệt" % v["no"])
+    note = text(note)[:300]
+    if not ok and not note:
+        raise ApiError(400, "Hãy ghi lý do từ chối để người lập phiếu sửa lại")
+    con.execute("UPDATE vouchers SET status=?, approved_by=?, approved_at=?, review_note=? WHERE id=?",
+                ("" if ok else "rejected", who, now_str(), note, vid))
+    write_log(con, who, "Duyệt phiếu điều chỉnh" if ok else "Từ chối phiếu điều chỉnh", v["no"], note, v["wh"])
+    return voucher_full(con, vid)
+
+
+def save_voucher(con, wh, data, vid=None, who="", me=None):
     vtype = text(data.get("type"))
     if vtype not in TYPE_PREFIX:
         raise ApiError(400, "Loại phiếu không hợp lệ")
+    old_row = None
     if vid:
-        old_wh = con.execute("SELECT wh FROM vouchers WHERE id=?", (vid,)).fetchone()
-        if not old_wh:
+        old_row = con.execute("SELECT * FROM vouchers WHERE id=?", (vid,)).fetchone()
+        if not old_row:
             raise ApiError(404, "Không tìm thấy phiếu")
-        wh = old_wh["wh"]  # phiếu luôn giữ kho ban đầu
+        wh = old_row["wh"]  # phiếu luôn giữ kho ban đầu
+    ap = approval_of(old_row, vtype, me, who)
     d = valid_date(data.get("date"))
     lines = data.get("lines") or []
     clean = []
@@ -468,19 +513,20 @@ def save_voucher(con, wh, data, vid=None, who=""):
          ("route", "from_party", "to_party", "giver", "receiver", "reason", "bill_count", "doc_ref", "note")}
     ts = now_str()
     vals = (no, vtype, d, f["route"], f["from_party"], f["to_party"], f["giver"], f["receiver"], f["reason"],
-            f["bill_count"], f["doc_ref"], f["note"])
+            f["bill_count"], f["doc_ref"], f["note"]) + tuple(ap[k] for k in APPROVAL_COLS)
     if vid:
         old = voucher_full(con, vid)
         con.execute("UPDATE vouchers SET no=?, type=?, date=?, route=?, from_party=?, to_party=?, giver=?, receiver=?, "
-                    "reason=?, bill_count=?, doc_ref=?, note=?, updated_at=? WHERE id=?", vals + (ts, vid))
+                    "reason=?, bill_count=?, doc_ref=?, note=?, status=?, created_by=?, approved_by=?, approved_at=?, "
+                    "review_note=?, updated_at=? WHERE id=?", vals + (ts, vid))
         con.execute("DELETE FROM voucher_lines WHERE voucher_id = ?", (vid,))
         write_log(con, who, "Sửa phiếu", no, {"trước": _summary(old), "sau": _summary_lines(clean)}, wh)
     else:
         cur = con.execute("INSERT INTO vouchers(wh, no, type, date, route, from_party, to_party, giver, receiver, reason, "
-                          "bill_count, doc_ref, note, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
-                          (wh,) + vals + (ts, ts))
+                          "bill_count, doc_ref, note, status, created_by, approved_by, approved_at, review_note, created_at, updated_at) "
+                          "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (wh,) + vals + (ts, ts))
         vid = cur.lastrowid
-        write_log(con, who, "Lập phiếu", no, _summary_lines(clean), wh)
+        write_log(con, who, "Lập phiếu" + (" (chờ duyệt)" if ap["status"] == "pending" else ""), no, _summary_lines(clean), wh)
     con.executemany("INSERT INTO voucher_lines(voucher_id, line_no, product_code, qty, price, note) VALUES (?,?,?,?,?,?)",
                     [(vid, i + 1, c, q, p, n) for i, (c, q, p, n) in enumerate(clean)])
     return vid
@@ -701,7 +747,7 @@ def export_backup_json(con):
             lines.setdefault(l["voucher_id"], []).append({"c": l["product_code"], "q": l["qty"] or 0, "p": l["price"] or 0, "n": l["note"] or ""})
         for v in con.execute("SELECT * FROM vouchers WHERE wh=?", (wh,)):
             rec = {k: (v[k] or "") for k in ("no", "type", "date", "route", "from_party", "to_party", "giver", "receiver", "reason",
-                                              "bill_count", "doc_ref", "note", "created_at", "updated_at")}
+                                              "bill_count", "doc_ref", "note", "created_at", "updated_at") + APPROVAL_COLS}
             rec["lines"] = lines.get(v["id"], [])
             days.setdefault(v["date"], {"date": v["date"], "v": {}})["v"][str(v["id"])] = rec
         docs = {str(d["id"]): {"kind": d["kind"], "date": d["date"], "title": d["title"] or "", "data": json.loads(d["data"] or "{}"),
@@ -756,9 +802,11 @@ def import_backup_json(con, snap, who=""):
         vlist.sort(key=lambda v: (v.get("date") or "", v.get("created_at") or ""))
         for v in vlist:
             cur = con.execute("INSERT INTO vouchers(wh, no, type, date, route, from_party, to_party, giver, receiver, reason, bill_count, "
-                              "doc_ref, note, created_at, updated_at) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                              "doc_ref, note, created_at, updated_at, status, created_by, approved_by, approved_at, review_note) "
+                              "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
                               (wh,) + tuple(text(v.get(k)) for k in ("no", "type", "date", "route", "from_party", "to_party", "giver",
-                                                                     "receiver", "reason", "bill_count", "doc_ref", "note", "created_at", "updated_at")))
+                                                                     "receiver", "reason", "bill_count", "doc_ref", "note", "created_at", "updated_at")
+                                                                    + APPROVAL_COLS))
             for i, l in enumerate(v.get("lines") or []):
                 code = text(l.get("c"))
                 if not con.execute("SELECT 1 FROM products WHERE wh=? AND code=?", (wh, code)).fetchone():
@@ -1383,6 +1431,7 @@ class Handler(BaseHTTPRequestHandler):
             body = self.read_json() if method == "POST" else {}
             return staff_api(con, method, arg, body, token, who)
         # đã có tài khoản nhân viên: mọi API web kho cần đăng nhập, tên người làm lấy từ tài khoản
+        me = None
         if res != "gh" and get_staff(con):
             me = staff_auth(con, token)
             if not me:
@@ -1538,6 +1587,9 @@ class Handler(BaseHTTPRequestHandler):
                 if q.get("type") in TYPE_PREFIX:
                     cond.append("v.type = ?")
                     params.append(q["type"])
+                if q.get("status") in ("pending", "rejected"):
+                    cond = ["v.wh = ?", "v.status = ?"]  # việc cần duyệt: mọi ngày
+                    params = [wh, q["status"]]
                 if q.get("q"):
                     like = "%" + q["q"].strip() + "%"
                     cond.append("(v.no LIKE ? OR v.reason LIKE ? OR v.route LIKE ? OR v.giver LIKE ? OR v.receiver LIKE ? "
@@ -1550,18 +1602,28 @@ class Handler(BaseHTTPRequestHandler):
                        "GROUP BY v.id ORDER BY v.date DESC, v.type, v.no DESC LIMIT %d" % (" AND ".join(cond), int(q.get("limit") or 1000)))
                 return rows(con.execute(sql, params))
             if method == "POST":
-                return voucher_full(con, save_voucher(con, wh, self.read_json(), who=who))
+                return voucher_full(con, save_voucher(con, wh, self.read_json(), who=who, me=me))
             if method == "PUT" and arg:
-                return voucher_full(con, save_voucher(con, wh, self.read_json(), vid=int(arg), who=who))
+                return voucher_full(con, save_voucher(con, wh, self.read_json(), vid=int(arg), who=who, me=me))
             if method == "DELETE" and arg:
                 v = voucher_full(con, int(arg))
+                if v["type"] == "D" and not v.get("status") and me and not me[1].get("admin"):
+                    raise ApiError(403, "Phiếu điều chỉnh %s đã được duyệt – chỉ Quản lý sửa / xóa được" % v["no"])
                 con.execute("DELETE FROM vouchers WHERE id=?", (int(arg),))
                 write_log(con, who, "Xóa phiếu", v["no"], _summary(v), v["wh"])
                 return {"ok": True}
 
+        if res == "review" and method == "POST" and arg:
+            body = self.read_json()
+            return review_voucher(con, int(arg), bool(body.get("ok")), body.get("note"), me, who)
+        if res == "pending" and method == "GET":
+            n = lambda s: con.execute("SELECT COUNT(*) FROM vouchers WHERE wh=? AND status=?", (wh, s)).fetchone()[0]
+            return {"count": n("pending"), "rejected": n("rejected")}
+
         # ---- sổ nhập xuất (từng dòng)
         if res == "lines" and method == "GET":
             cond, params = _date_range(q)
+            cond.insert(0, POSTED_SQL)
             cond.insert(0, "v.wh = ?")
             params.insert(0, wh)
             if q.get("code"):
@@ -1698,6 +1760,7 @@ class Handler(BaseHTTPRequestHandler):
                 w.writerow(["Số phiếu", "Ngày", "Loại", "Bên giao", "Bên nhận", "Mã hàng", "Tên hàng", "Ghi chú", "ĐVT",
                             "Số lượng", "Đơn giá", "Thành tiền", "Lý do / Diễn giải", "Người giao", "Người nhận"])
                 cond, params = _date_range(q)
+                cond.insert(0, POSTED_SQL)
                 cond.insert(0, "v.wh = ?")
                 params.insert(0, wh)
                 for r in con.execute("SELECT v.*, l.product_code, p.name, p.unit, l.qty, l.price, l.note AS lnote FROM voucher_lines l "

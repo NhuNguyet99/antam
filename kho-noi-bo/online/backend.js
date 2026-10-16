@@ -290,10 +290,12 @@ const Backend = (() => {
     return no;
   }
   const sign = v => (v.type === 'X' ? -1 : 1);
+  // phiếu điều chỉnh chờ duyệt / bị từ chối chưa tính vào tồn kho
+  const posted = wh => vouchers(wh).filter(v => !v.status);
   function stockMap(wh, { until, before, exclude } = {}) {
     const res = {};
     products(wh).forEach(p => { res[p.code] = p.opening_qty || 0; });
-    for (const v of vouchers(wh)) {
+    for (const v of posted(wh)) {
       if (until && v.date > until) continue;
       if (before && v.date >= before) continue;
       if (exclude && v.id === exclude) continue;
@@ -304,7 +306,7 @@ const Backend = (() => {
   function reportNxt(wh, from, to) {
     const opening = stockMap(wh, { before: from });
     const per = {};
-    for (const v of vouchers(wh)) {
+    for (const v of posted(wh)) {
       if (v.date < from || v.date > to) continue;
       for (const l of v.lines) {
         const p = per[l.product_code] = per[l.product_code] || { N: 0, X: 0, D: 0, n: 0 };
@@ -329,7 +331,7 @@ const Backend = (() => {
     const opening = stockMap(wh, { before: from })[code] || 0;
     let bal = opening;
     const lines = [];
-    for (const v of vouchers(wh)) {
+    for (const v of posted(wh)) {
       if (v.date < from || v.date > to) continue;
       for (const l of v.lines) {
         if (l.product_code !== code) continue;
@@ -363,6 +365,7 @@ const Backend = (() => {
     return { no: v.no, type: v.type, date: v.date, route: v.route || '', from_party: v.from_party || '', to_party: v.to_party || '',
       giver: v.giver || '', receiver: v.receiver || '', reason: v.reason || '', bill_count: v.bill_count || '', doc_ref: v.doc_ref || '',
       note: v.note || '', created_at: v.created_at || nowStr(), updated_at: nowStr(),
+      ...Object.fromEntries(APPROVAL_COLS.map(k => [k, v[k] || ''])),
       lines: v.lines.map(l => ({ c: l.product_code, q: l.qty, p: l.price || 0, n: l.note || '' })) };
   }
   function applyLocalVoucher(wh, date, id, stored) {
@@ -371,7 +374,35 @@ const Backend = (() => {
     doc.v = Object.assign({}, doc.v, { [id]: stored });
     bump(wh);
   }
-  async function saveVoucher(wh, data, vid) {
+  // Duyệt phiếu điều chỉnh (giống server.py): me = [id, tài khoản] đang đăng nhập; null khi chưa dùng tài khoản nhân viên
+  const APPROVAL_COLS = ['status', 'created_by', 'approved_by', 'approved_at', 'review_note'];
+  const lockedFor = (v, me) => v.type === 'D' && !v.status && me && !me[1].admin;
+  function approvalOf(old, type, me) {
+    const cur = Object.fromEntries(APPROVAL_COLS.map(k => [k, (old && old[k]) || '']));
+    if (old && lockedFor(old, me)) throw new ApiError(403, `Phiếu điều chỉnh ${old.no} đã được duyệt – chỉ Quản lý sửa / xóa được`);
+    if (!old) cur.created_by = st.who || '';
+    if (type !== 'D' || !me) return Object.assign(cur, { status: '', review_note: '' });
+    if (me[1].admin) {
+      if (!old) Object.assign(cur, { approved_by: st.who || '', approved_at: nowStr() }); // Quản lý tự lập: duyệt luôn
+      return cur;
+    }
+    return Object.assign(cur, { status: 'pending', approved_by: '', approved_at: '' }); // nhân viên lập / sửa: gửi (lại) Quản lý duyệt
+  }
+  async function reviewVoucher(id, ok, note, me) {
+    if (!me || !me[1].admin) throw new ApiError(403, 'Chỉ tài khoản Quản lý mới duyệt phiếu điều chỉnh');
+    const v = voucherFull(id);
+    if (v.type !== 'D') throw new ApiError(400, 'Chỉ phiếu điều chỉnh cần duyệt');
+    if (ok && !v.status) throw new ApiError(400, `Phiếu ${v.no} đã được duyệt`);
+    note = text(note).slice(0, 300);
+    if (!ok && !note) throw new ApiError(400, 'Hãy ghi lý do từ chối để người lập phiếu sửa lại');
+    const stored = storeVoucher(Object.assign({}, v, { status: ok ? '' : 'rejected', approved_by: st.who || '', approved_at: nowStr(), review_note: note }));
+    stored.updated_at = v.updated_at || stored.updated_at;
+    await mergeInto(ref.day(v.wh, v.date), { v: { [id]: stored } }, { date: v.date });
+    applyLocalVoucher(v.wh, v.date, id, stored);
+    await log(ok ? 'Duyệt phiếu điều chỉnh' : 'Từ chối phiếu điều chỉnh', v.no, note, v.wh);
+    return voucherFull(id);
+  }
+  async function saveVoucher(wh, data, vid, me) {
     const type = text(data.type);
     if (!TYPE_PREFIX[type]) throw new ApiError(400, 'Loại phiếu không hợp lệ');
     let old = null;
@@ -379,6 +410,7 @@ const Backend = (() => {
       for (const w of WAREHOUSES) { if (st.days[w]) { old = voucherById(w, vid); if (old) { wh = w; break; } } }
       if (!old) throw new ApiError(404, 'Không tìm thấy phiếu');
     }
+    const ap = approvalOf(old, type, me);
     const d = validDate(data.date);
     const pm = productMap(wh);
     const clean = [];
@@ -396,7 +428,7 @@ const Backend = (() => {
       throw new ApiError(409, `Số phiếu ${no} đã tồn tại – hãy bấm 'Cấp số mới' hoặc sửa số`);
     }
     const id = vid || newId('v');
-    const v = { no, type, date: d, lines: clean, created_at: old ? old.created_at : nowStr() };
+    const v = Object.assign({ no, type, date: d, lines: clean, created_at: old ? old.created_at : nowStr() }, ap);
     ['route', 'from_party', 'to_party', 'giver', 'receiver', 'reason', 'bill_count', 'doc_ref', 'note'].forEach(k => { v[k] = text(data[k]); });
     const stored = storeVoucher(v);
     if (old && old.date !== d) {
@@ -406,12 +438,13 @@ const Backend = (() => {
     await mergeInto(ref.day(wh, d), { v: { [id]: stored } }, { date: d });
     applyLocalVoucher(wh, d, id, stored);
     const summ = clean.map(l => `${l.product_code} x ${fmtq(l.qty)}`);
-    await log(old ? 'Sửa phiếu' : 'Lập phiếu', no,
+    await log(old ? 'Sửa phiếu' : 'Lập phiếu' + (ap.status === 'pending' ? ' (chờ duyệt)' : ''), no,
       old ? { 'trước': { 'ngày': old.date, 'dòng': old.lines.map(l => `${l.product_code} x ${fmtq(l.qty)}`) }, 'sau': summ } : summ, wh);
     return id;
   }
-  async function deleteVoucher(id) {
+  async function deleteVoucher(id, me) {
     const v = voucherFull(id);
+    if (lockedFor(v, me)) throw new ApiError(403, `Phiếu điều chỉnh ${v.no} đã được duyệt – chỉ Quản lý sửa / xóa được`);
     await mergeInto(ref.day(v.wh, v.date), { v: { [id]: null } }, { date: v.date });
     applyLocalVoucher(v.wh, v.date, id, null);
     await log('Xóa phiếu', v.no, { 'ngày': v.date, 'dòng': v.lines.map(l => `${l.product_code} x ${fmtq(l.qty)}`) }, v.wh);
@@ -608,7 +641,7 @@ const Backend = (() => {
   function exportCsv(wh, from, to) {
     const pm = productMap(wh);
     const out = [['Số phiếu', 'Ngày', 'Loại', 'Bên giao', 'Bên nhận', 'Mã hàng', 'Tên hàng', 'Ghi chú', 'ĐVT', 'Số lượng', 'Đơn giá', 'Thành tiền', 'Lý do / Diễn giải', 'Người giao', 'Người nhận']];
-    for (const v of vouchers(wh)) {
+    for (const v of posted(wh)) {
       if ((from && v.date < from) || (to && v.date > to)) continue;
       const d = `${v.date.slice(8, 10)}/${v.date.slice(5, 7)}/${v.date.slice(0, 4)}`;
       for (const l of v.lines) {
@@ -876,10 +909,14 @@ const Backend = (() => {
   }
   // Tài khoản nhân viên web kho (giống staff_api của server.py). Bản online kiểm tra ở trình duyệt: để biết ai làm gì,
   // không thay được phân quyền của claude.ai.
+  const tokenOf = (id, a) => `${id}.${String(a.pw || '').slice(0, 24)}`;
+  function staffMe(token, accounts = Object.fromEntries(live(settings().staff_accounts))) {
+    const [id] = text(token).split('.'); const a = accounts[id];
+    return a && a.active !== false && a.pw && text(token) === tokenOf(id, a) ? [id, a] : null;
+  }
   async function staffApi(method, action, body, token) {
     const accounts = Object.fromEntries(live(settings().staff_accounts));
-    const tokenOf = (id, a) => `${id}.${String(a.pw || '').slice(0, 24)}`;
-    const me = (() => { const [id] = text(token).split('.'); const a = accounts[id]; return a && a.active !== false && a.pw && text(token) === tokenOf(id, a) ? [id, a] : null; })();
+    const me = staffMe(token, accounts);
     const pub = (id, a) => ({ id, user: a.user || '', name: a.name || '', admin: !!a.admin, active: a.active !== false });
     const put = async (id, rec) => {
       await mergeInto(ref.settings(), { s: { staff_accounts: { [id]: rec } } }, { s: {} });
@@ -1001,6 +1038,9 @@ const Backend = (() => {
     if (res === 'gh') return ghApi(method, arg, q, body || {}, opts.token || '');
     if (res === 'admin') return adminApi(method, arg, body || {});
     if (res === 'staff') return staffApi(method, arg, body || {}, opts.token || '');
+    // đã có tài khoản nhân viên: người chưa đăng nhập được coi như nhân viên thường (phiếu điều chỉnh phải chờ duyệt)
+    const hasStaff = live(settings().staff_accounts).length > 0;
+    const me = hasStaff ? (staffMe(opts.token || '') || ['', {}]) : null;
     if (res === 'giao-sync') return giaoSync(method, q, body || {});
     if (res === 'drivers') {
       if (method === 'GET') return Object.entries(drivers()).map(([k, d]) => publicDriver(k, d));
@@ -1145,20 +1185,26 @@ const Backend = (() => {
       if (method === 'GET') {
         const qq = (q.q || '').trim().toLowerCase();
         const pm = productMap(wh);
-        const list = vouchers(wh).filter(v => (!q.from || v.date >= q.from) && (!q.to || v.date <= q.to) && (!TYPE_PREFIX[q.type] || v.type === q.type) &&
+        const st_ = ['pending', 'rejected'].includes(q.status) ? q.status : ''; // việc cần duyệt: mọi ngày
+        const list = vouchers(wh).filter(v => (st_ ? v.status === st_ : (!q.from || v.date >= q.from) && (!q.to || v.date <= q.to)) && (!TYPE_PREFIX[q.type] || v.type === q.type) &&
           (!qq || like(qq, v.no, v.reason, v.route, v.giver, v.receiver, v.to_party) || v.lines.some(l => like(qq, l.product_code, (pm[l.product_code] || {}).name, l.note))));
         list.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.type < b.type ? -1 : a.type > b.type ? 1 : a.no < b.no ? 1 : a.no > b.no ? -1 : 0));
         return list.slice(0, parseInt(q.limit || '1000', 10)).map(voucherSummaryRow);
       }
-      if (method === 'POST') return voucherFull(await saveVoucher(wh, body || {}, null));
-      if (method === 'PUT' && arg) return voucherFull(await saveVoucher(wh, body || {}, arg));
-      if (method === 'DELETE' && arg) { await deleteVoucher(arg); return { ok: true }; }
+      if (method === 'POST') return voucherFull(await saveVoucher(wh, body || {}, null, me));
+      if (method === 'PUT' && arg) return voucherFull(await saveVoucher(wh, body || {}, arg, me));
+      if (method === 'DELETE' && arg) { await deleteVoucher(arg, me); return { ok: true }; }
+    }
+    if (res === 'review' && method === 'POST' && arg) return reviewVoucher(arg, !!(body || {}).ok, (body || {}).note, me);
+    if (res === 'pending' && method === 'GET') {
+      const n = s_ => vouchers(wh).filter(v => v.status === s_).length;
+      return { count: n('pending'), rejected: n('rejected') };
     }
 
     if (res === 'lines' && method === 'GET') {
       const pm = productMap(wh);
       const out = [];
-      const list = vouchers(wh).filter(v => (!q.from || v.date >= q.from) && (!q.to || v.date <= q.to) && (!TYPE_PREFIX[q.type] || v.type === q.type));
+      const list = posted(wh).filter(v => (!q.from || v.date >= q.from) && (!q.to || v.date <= q.to) && (!TYPE_PREFIX[q.type] || v.type === q.type));
       for (let i = list.length - 1; i >= 0 && out.length < 5000; i--) {
         const v = list[i];
         for (const l of v.lines) {
