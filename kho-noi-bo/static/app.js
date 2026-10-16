@@ -5,7 +5,7 @@
    kho NVL có thêm Kế hoạch mua hàng (KH Ngày/Tuần/Tháng).
    Web chứa 2 kho: TP (Thành phẩm - Hàng hóa) và NVL (Nguyên vật liệu), dữ liệu tách riêng từng kho. */
 
-const S = { meta: null, dirty: false, skipDirty: false, user: '', wh: 'TP' };
+const S = { meta: null, dirty: false, skipDirty: false, user: '', wh: 'TP', account: null, staffToken: '' };
 // Bản online (trang claude.ai, online/backend.js) không có máy chủ: không in trực tiếp, không mở link tải, không dùng #url.
 const ONLINE = !!window.ANTAM_ONLINE;
 // Trang xem công khai: chỉ xem số liệu chụp sẵn (online/build.py --view)
@@ -72,9 +72,9 @@ function debounce(fn, ms = 250) { let t; return (...a) => { clearTimeout(t); t =
 async function api(method, path, body) {
   if (ONLINE) {
     Backend.who = S.user || '';
-    try { return await Backend.handle(method, path, body); } catch (e) { throw new Error(e.message || String(e)); }
+    try { return await Backend.handle(method, path, body, { token: S.staffToken }); } catch (e) { throw new Error(e.message || String(e)); }
   }
-  const opt = { method, headers: { 'X-User': encodeURIComponent(S.user || ''), 'X-Wh': S.wh } };
+  const opt = { method, headers: { 'X-User': encodeURIComponent(S.user || ''), 'X-Wh': S.wh, 'X-Staff-Token': S.staffToken || '' } };
   if (body !== undefined) {
     if (body instanceof ArrayBuffer) { opt.body = body; opt.headers['Content-Type'] = 'application/octet-stream'; }
     else { opt.body = JSON.stringify(body); opt.headers['Content-Type'] = 'application/json'; }
@@ -82,9 +82,12 @@ async function api(method, path, body) {
   const res = await fetch('/api' + path, opt);
   let data = null;
   try { data = await res.json(); } catch (e) { /* trống */ }
+  if (res.status === 401 && S.account && !path.startsWith('/staff')) { showStaffLogin('Phiên đăng nhập đã hết hạn – hãy đăng nhập lại.'); }
   if (!res.ok) throw new Error((data && data.error) || ('Lỗi ' + res.status));
   return data;
 }
+// Link tải file của bản chạy máy (không gửi được tiêu đề đăng nhập) kèm mã đăng nhập
+const withToken = url => (S.staffToken ? url + (url.includes('?') ? '&' : '?') + 'st=' + encodeURIComponent(S.staffToken) : url);
 function toast(msg, err) {
   const el = document.createElement('div');
   el.className = 'toast' + (err ? ' err' : '');
@@ -389,6 +392,7 @@ const ROUTES = [
   [/^giao-hang-tk$/, viewDrivers],
   [/^cai-dat$/, viewSettings],
   [/^lich-su$/, viewLog],
+  [/^tai-khoan$/, viewStaff],
 ];
 // Điều hướng: bản chạy máy chủ dùng #/đường-dẫn trên thanh địa chỉ; bản online giữ đường dẫn trong trang.
 let currentHash = ONLINE ? '#/' : location.hash;
@@ -835,7 +839,7 @@ async function viewLedger(main) {
     let rows = await guard(() => api('GET', '/lines?' + p)) || [];
     if (f.q) rows = rows.filter(r => matches(f.q, [r.no, r.product_code, r.name, r.note, r.reason, r.giver, r.receiver, r.to_party].join(' ')));
     if (ONLINE) $('#l-csv').onclick = () => guard(async () => saveTextFile(`so-nhap-xuat-${S.wh.toLowerCase()}-${f.from}-${f.to}.csv`, await api('GET', '/export/lines.csv?' + new URLSearchParams({ from: f.from, to: f.to }))));
-    else $('#l-csv').href = '/api/export/lines.csv?' + new URLSearchParams({ wh: S.wh, from: f.from, to: f.to });
+    else $('#l-csv').href = withToken('/api/export/lines.csv?' + new URLSearchParams({ wh: S.wh, from: f.from, to: f.to }));
     const sum = { N: 0, X: 0, D: 0 };
     rows.forEach(r => { sum[r.type] += 1; });
     $('#l-sum').innerHTML = `<div class="kpi"><div class="k-label">Số dòng</div><div class="k-val">${rows.length}</div></div>
@@ -1808,7 +1812,7 @@ function delivBadge(x, full) {
   return b + (full === false ? '' : (x.status === 'ok' && x.note ? `<div class="small muted">${esc(x.note)}</div>` : '') + photoThumbs(x.photos) + locLink(x.gps, '📍 vị trí lúc giao'));
 }
 // Ảnh giao hàng: bản chạy máy lấy từ /api/photo, bản online từ kho ảnh của trang
-function photoSrc(ref) { return ONLINE ? Backend.photoUrl(ref) : Promise.resolve('/api/photo?ref=' + encodeURIComponent(ref)); }
+function photoSrc(ref) { return ONLINE ? Backend.photoUrl(ref) : Promise.resolve(withToken('/api/photo?ref=' + encodeURIComponent(ref))); }
 function photoThumbs(refs) {
   return refs && refs.length ? `<div class="ph-row">${refs.map((r, i) => `<img class="ph-thumb" data-ref="${esc(r)}" alt="Ảnh giao hàng ${i + 1}">`).join('')}</div>` : '';
 }
@@ -2067,9 +2071,9 @@ async function viewSettings(main) {
       File này cũng dùng để chuyển dữ liệu sang bản chạy trên máy (nút Nhập file dữ liệu .json ở bản đó).</p>
       <div class="toolbar" style="margin-top:12px"><label class="field">Chuyển dữ liệu từ bản chạy trên máy (file .json "Tải dữ liệu")<input type="file" id="bk-file" accept=".json,application/json"></label>
       <button class="btn" id="bk-go">Nhập file dữ liệu .json (thay toàn bộ dữ liệu 2 kho)</button></div></div>`
-      : `<a class="btn" href="/api/export/backup">⬇ Tải bản sao lưu cả 2 kho (.db)</a>
-      <a class="btn" href="/api/export/backup.json">⬇ Tải dữ liệu (.json)</a>
-      <a class="btn" href="/api/export/lines.csv?wh=${S.wh}">⬇ Xuất sổ nhập xuất ${esc(W.name)} (CSV mở bằng Excel)</a></div>
+      : `<a class="btn" href="${esc(withToken('/api/export/backup'))}">⬇ Tải bản sao lưu cả 2 kho (.db)</a>
+      <a class="btn" href="${esc(withToken('/api/export/backup.json'))}">⬇ Tải dữ liệu (.json)</a>
+      <a class="btn" href="${esc(withToken('/api/export/lines.csv?wh=' + S.wh))}">⬇ Xuất sổ nhập xuất ${esc(W.name)} (CSV mở bằng Excel)</a></div>
       <p class="hint">Nên sao lưu mỗi cuối ngày. Để khôi phục: tắt web, chép file .db đè vào <code>kho-noi-bo/data/kho.db</code>, chạy lại.
       File <b>.json</b> dùng để chuyển dữ liệu lên web online (nút Nhập file dữ liệu .json ở web online).</p>
       <div class="toolbar" style="margin-top:12px"><label class="field">Chuyển dữ liệu từ bản online (file .json "Tải dữ liệu")<input type="file" id="bk-file" accept=".json,application/json"></label>
@@ -2637,6 +2641,7 @@ async function boot() {
 }
 async function bootKho() {
   S.user = store('user') || '';
+  S.staffToken = (!GIAO_APP && !VIEW && store('staffToken')) || '';
   S.wh = !GIAO_APP && store('wh') === 'NVL' ? 'NVL' : 'TP';
   if (GIAO_LINKED && !$('#nav-giao-link')) {
     // người giao dùng trang riêng Giao hàng An Tâm (nhận dữ liệu từ Phân tuyến của web kho)
@@ -2647,7 +2652,7 @@ async function bootKho() {
   }
   $$('#wh-switch button').forEach(b => b.onclick = () => switchWh(b.dataset.wh));
   $('#menu-btn').onclick = () => document.body.classList.toggle('nav-open');
-  $('#user-btn').onclick = () => askUser(true);
+  $('#user-btn').onclick = () => (S.account ? accountMenu() : askUser(true));
   $('#refresh-btn').onclick = async () => {
     if (S.dirty && !(await ask('Có thay đổi chưa lưu. Tải lại dữ liệu mới sẽ bỏ thay đổi đó?'))) return;
     S.dirty = false; $('#refresh-btn').hidden = true; await loadMeta(); render();
@@ -2656,6 +2661,7 @@ async function bootKho() {
     if (ONLINE) {
       $('#main').innerHTML = '<div class="callout">Đang kết nối dữ liệu dùng chung…</div>';
       await Backend.init();
+      if (!(await staffGate())) return;
       if (!S.user && Backend.myName) { S.user = Backend.myName; store('user', S.user); }
       await Backend.setWh(S.wh);
       Backend.onRemote(() => { const b = $('#refresh-btn'); if (b) b.hidden = false; });
@@ -2666,11 +2672,113 @@ async function bootKho() {
         vb.hidden = false;
         Backend.canEditPage().then(ok => { if (ok) { const b = $('#snap-btn'); b.hidden = false; b.onclick = openSnapshotUpdate; } });
       } else if (Backend.canWrite === false) showReadOnlyBanner();
-    }
+    } else if (!(await staffGate())) return;
     await loadMeta();
   } catch (e) { $('#main').innerHTML = `<div class="callout warn">Không kết nối được dữ liệu: ${esc(e.message)}</div>`; return; }
   $('#user-btn').textContent = '👤 ' + (S.user || 'Khách');
   await render();
-  if (!S.user && !VIEW) askUser();
+  if (!S.user && !VIEW && !S.account) askUser();
+}
+
+/* ============================================================ tài khoản nhân viên */
+// Đã có tài khoản: phải đăng nhập, tên người làm (phiếu, lịch sử) lấy từ tài khoản. Chưa có: dùng ô "Bạn là ai?" như cũ.
+async function staffGate() {
+  if (GIAO_APP || VIEW) return true;
+  const st = await api('GET', '/staff/status');
+  S.staffCount = st.count;
+  if (st.me) { S.account = st.me; S.user = st.me.name || st.me.user; return true; }
+  S.account = null;
+  if (!st.count) { S.staffToken = ''; return true; }
+  showStaffLogin();
+  return false;
+}
+function showStaffLogin(msg) {
+  S.account = null; S.staffToken = ''; store('staffToken', '');
+  document.body.classList.add('locked');
+  $('#main').innerHTML = `<div class="login-card card"><div class="brand-mark" style="margin:0 auto 10px">AT</div>
+    <h2>Đăng nhập Kho An Tâm</h2><p class="muted small">Mỗi nhân viên dùng tài khoản riêng – phiếu và lịch sử thao tác ghi đúng tên người đăng nhập.</p>
+    <form id="lg-form" class="grid"><label class="field">Tên đăng nhập<input id="lg-user" autocomplete="username" autocapitalize="none" spellcheck="false" value="${esc(store('staffUser') || '')}" required></label>
+    <label class="field">Mật khẩu<input id="lg-pw" type="password" autocomplete="current-password" required></label>
+    <button class="btn primary" type="submit">Đăng nhập</button><p class="small" id="lg-err" style="color:var(--danger);margin:0">${esc(msg || '')}</p></form>
+    <p class="hint">Quên mật khẩu: nhờ người có tài khoản <b>Quản lý</b> đặt lại ở Hệ thống › Tài khoản nhân viên.</p></div>`;
+  const u = $('#lg-user'), pw = $('#lg-pw');
+  (u.value ? pw : u).focus();
+  $('#lg-form').onsubmit = async e => {
+    e.preventDefault();
+    try {
+      const res = await api('POST', '/staff/login', { user: u.value, password: pw.value });
+      store('staffToken', res.token); store('staffUser', res.account.user);
+      document.body.classList.remove('locked');
+      bootKho();
+    } catch (err) { $('#lg-err').textContent = err.message; }
+  };
+}
+function accountMenu() {
+  const { root, close } = openModal({
+    title: '👤 ' + (S.account.name || S.account.user),
+    body: `<p class="small" style="margin-top:0">Tên đăng nhập: <b>${esc(S.account.user)}</b>${S.account.admin ? ' · <span class="badge ok">Quản lý</span>' : ''}</p>
+      <div class="grid c2"><label class="field">Mật khẩu hiện tại<input id="ac-old" type="password" autocomplete="current-password"></label>
+      <label class="field">Mật khẩu mới (4–40 ký tự)<input id="ac-new" type="password" autocomplete="new-password"></label></div>
+      <div class="toolbar" style="margin-top:12px"><button class="btn" id="ac-pw">Đổi mật khẩu</button><button class="btn danger" id="ac-out">Đăng xuất</button></div>`,
+  });
+  $('#ac-pw', root).onclick = () => guard(async () => {
+    const res = await api('POST', '/staff/password', { old: $('#ac-old', root).value, password: $('#ac-new', root).value });
+    S.staffToken = res.token; store('staffToken', res.token); toast('Đã đổi mật khẩu'); close();
+  });
+  $('#ac-out', root).onclick = async () => {
+    if (S.dirty && !(await ask('Có thay đổi chưa lưu. Vẫn đăng xuất?'))) return;
+    S.dirty = false; close(); showStaffLogin();
+  };
+}
+async function viewStaff(main) {
+  setTitle('Tài khoản nhân viên');
+  let list = (await api('GET', '/staff')) || [];
+  const canEdit = !list.length || (S.account && S.account.admin);
+  function draw() {
+    list.sort((a, b) => (b.active - a.active) || (b.admin - a.admin) || a.user.localeCompare(b.user));
+    main.innerHTML = `${canEdit ? '<div class="toolbar"><button class="btn primary" id="sa-add">+ Thêm tài khoản</button></div>' : ''}
+      <div class="callout">Mỗi nhân viên kho đăng nhập bằng <b>tên đăng nhập + mật khẩu</b> riêng; phiếu, phân tuyến và <b>Lịch sử thao tác</b> ghi đúng tên người đăng nhập.
+      ${list.length ? '' : '<br><b>Chưa có tài khoản nào</b> – tạo tài khoản đầu tiên (tự là <b>Quản lý</b>). Từ lúc đó mọi người vào web kho đều phải đăng nhập.'}
+      Chỉ tài khoản <b>Quản lý</b> được thêm / sửa / khóa / xóa tài khoản và đặt lại mật khẩu; ai cũng tự đổi được mật khẩu của mình (bấm tên ở góc trên phải).
+      ${ONLINE ? '<br><span class="small">Bản online: đăng nhập giữ đúng tên người làm trên web; quyền xem / sửa trang vẫn do nút <i>Share</i> của claude.ai quyết định.</span>' : ''}</div>
+      ${list.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Tên đăng nhập</th><th>Họ tên</th><th>Quyền</th><th>Trạng thái</th><th></th></tr></thead><tbody>
+      ${list.map(a => `<tr class="${canEdit ? 'clickable' : ''}" data-id="${esc(a.id)}" ${a.active ? '' : 'style="opacity:.55"'}><td><b>${esc(a.user)}</b>${S.account && S.account.id === a.id ? ' <span class="small muted">(bạn)</span>' : ''}</td><td>${esc(a.name)}</td>
+        <td>${a.admin ? '<span class="badge ok">Quản lý</span>' : 'Nhân viên'}</td><td>${a.active ? '<span class="badge ok">Đang dùng</span>' : '<span class="badge warn">Đã khóa</span>'}</td>
+        <td>${canEdit && !(S.account && S.account.id === a.id) ? `<button class="btn sm danger" data-del="${esc(a.id)}">Xóa</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : ''}`;
+    if (!canEdit) return;
+    $('#sa-add').onclick = () => edit(null);
+    $$('tr[data-id]', main).forEach(tr => tr.onclick = e => { if (!e.target.closest('button')) edit(list.find(a => a.id === tr.dataset.id)); });
+    $$('[data-del]', main).forEach(b => b.onclick = async () => {
+      const a = list.find(x => x.id === b.dataset.del);
+      if (!(await ask(`Xóa tài khoản "${a.user}"? Người này sẽ không đăng nhập được nữa (lịch sử cũ vẫn giữ).`))) return;
+      if (await guard(() => api('DELETE', '/staff/' + encodeURIComponent(a.id)))) { toast('Đã xóa'); list = await api('GET', '/staff'); draw(); }
+    });
+  }
+  function edit(a) {
+    const v = a || { id: '', user: '', name: '', admin: !list.length, active: true };
+    const first = !list.length;
+    openModal({
+      title: a ? 'Sửa tài khoản ' + a.user : (first ? 'Tạo tài khoản Quản lý đầu tiên' : 'Thêm tài khoản'),
+      body: `<div class="grid c2">
+        <label class="field">Tên đăng nhập (không dấu, viết liền, vd <i>thukho.lan</i>)<input id="sa-user" value="${esc(v.user)}" autocapitalize="none"></label>
+        <label class="field">Họ tên (ghi trên phiếu, lịch sử)<input id="sa-name" value="${esc(v.name)}"></label>
+        <label class="field">${a ? 'Mật khẩu mới (để trống = giữ mật khẩu cũ)' : 'Mật khẩu (4–40 ký tự)'}<input id="sa-pw" type="password" autocomplete="new-password"></label>
+        <div class="field" style="justify-content:flex-end;gap:8px">
+          <label class="check"><input type="checkbox" id="sa-admin" ${v.admin ? 'checked' : ''} ${first ? 'disabled' : ''}> Quản lý (quản lý tài khoản)</label>
+          <label class="check"><input type="checkbox" id="sa-active" ${v.active ? 'checked' : ''} ${first ? 'disabled' : ''}> Đang dùng (bỏ chọn để khóa)</label></div></div>
+        ${first ? '<p class="hint">Sau khi tạo, bạn được đăng nhập luôn bằng tài khoản này; những người khác phải đăng nhập.</p>' : ''}`,
+      onSave: async root => {
+        const res = await api('POST', '/staff', { id: v.id, user: $('#sa-user', root).value, name: $('#sa-name', root).value, password: $('#sa-pw', root).value,
+          admin: $('#sa-admin', root).checked, active: $('#sa-active', root).checked });
+        if (res.token) {
+          S.staffToken = res.token; store('staffToken', res.token); store('staffUser', res.account.user);
+          S.account = res.account; S.user = res.account.name; $('#user-btn').textContent = '👤 ' + S.user;
+        }
+        if (S.account && res.account.id === S.account.id) { S.account = res.account; S.user = res.account.name; $('#user-btn').textContent = '👤 ' + S.user; }
+        toast('Đã lưu tài khoản'); list = await api('GET', '/staff'); draw(); return true;
+      },
+    });
+  }
+  draw();
 }
 boot();

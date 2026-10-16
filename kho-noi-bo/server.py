@@ -126,6 +126,8 @@ DEFAULT_SETTINGS = {
     "routing": {"rules": [], "memory": {}},
     # Tài khoản web giao hàng: {id: {nick, name, phone, routes: [mã tuyến], active, salt, pin}} – pin = sha256(salt:PIN)
     "drivers": {},
+    # Tài khoản nhân viên web kho: {id: {user, name, admin, active, salt, pw}} – pw = sha256(salt:mật khẩu)
+    "staff_accounts": {},
 }
 
 SCHEMA = """
@@ -1106,6 +1108,120 @@ def gh_api(con, method, action, q, body, token):
     raise ApiError(404, "Không có API này")
 
 
+# ---------------------------------------------------------------- tài khoản nhân viên web kho
+
+STAFF_TOKEN_DAYS = 30
+
+
+def get_staff(con):
+    return {k: v for k, v in (get_settings(con).get("staff_accounts") or {}).items() if isinstance(v, dict)}
+
+
+def public_staff(sid, a):
+    return {"id": sid, "user": a.get("user", ""), "name": a.get("name", ""), "admin": bool(a.get("admin")),
+            "active": a.get("active", True) is not False}
+
+
+def _staff_sign(con, sid, a, exp):
+    msg = "staff|%s|%s|%d" % (sid, a.get("pw", ""), exp)
+    return hmac.new(_gh_secret(con).encode(), msg.encode(), hashlib.sha256).hexdigest()[:32]
+
+
+def staff_auth(con, token):
+    """(id, tài khoản) của token đăng nhập web kho, hoặc None."""
+    try:
+        sid, exp, sig = text(token).split(".")
+        exp = int(exp)
+    except ValueError:
+        return None
+    a = get_staff(con).get(sid)
+    if not a or a.get("active", True) is False or exp < time.time() or not hmac.compare_digest(sig, _staff_sign(con, sid, a, exp)):
+        return None
+    return sid, a
+
+
+def staff_api(con, method, action, body, token, who_fallback):
+    accounts = get_staff(con)
+    me = staff_auth(con, token)
+    if action == "status" and method == "GET":
+        return {"count": len(accounts), "me": public_staff(*me) if me else None}
+    if action == "login" and method == "POST":
+        user = norm_nick(body.get("user"))
+        for sid, a in accounts.items():
+            if norm_nick(a.get("user")) == user and a.get("active", True) is not False:
+                if hmac.compare_digest(pin_hash(a.get("salt", ""), text(body.get("password"))), a.get("pw", "")):
+                    exp = int(time.time()) + STAFF_TOKEN_DAYS * 86400
+                    write_log(con, a.get("name", ""), "Đăng nhập", user)
+                    return {"token": "%s.%d.%s" % (sid, exp, _staff_sign(con, sid, a, exp)), "account": public_staff(sid, a)}
+                break
+        time.sleep(0.5)
+        raise ApiError(401, "Sai tên đăng nhập hoặc mật khẩu")
+    if method == "GET" and not action:
+        if accounts and not me:
+            raise ApiError(401, "Hãy đăng nhập")
+        return [public_staff(k, v) for k, v in accounts.items()]
+    if action == "password" and method == "POST":
+        if not me:
+            raise ApiError(401, "Hãy đăng nhập")
+        sid, a = me
+        if not hmac.compare_digest(pin_hash(a.get("salt", ""), text(body.get("old"))), a.get("pw", "")):
+            raise ApiError(400, "Mật khẩu cũ không đúng")
+        pw = text(body.get("password"))
+        if not 4 <= len(pw) <= 40:
+            raise ApiError(400, "Mật khẩu 4–40 ký tự")
+        a["salt"] = secrets.token_hex(8)
+        a["pw"] = pin_hash(a["salt"], pw)
+        accounts[sid] = a
+        save_staff(con, accounts)
+        write_log(con, a.get("name", ""), "Đổi mật khẩu", a.get("user", ""))
+        exp = int(time.time()) + STAFF_TOKEN_DAYS * 86400
+        return {"token": "%s.%d.%s" % (sid, exp, _staff_sign(con, sid, a, exp))}
+    # tạo / sửa / xóa: người Quản lý; lần đầu (chưa có tài khoản nào) ai cũng tạo được tài khoản Quản lý đầu tiên
+    if accounts and not (me and me[1].get("admin")):
+        raise ApiError(403, "Chỉ tài khoản Quản lý mới tạo / sửa / xóa tài khoản")
+    who = me[1].get("name", "") if me else who_fallback
+    if method == "POST":
+        sid = text(body.get("id")) or "s" + secrets.token_hex(4)
+        user = norm_nick(body.get("user"))
+        if not re.match(r"^[a-z0-9._-]{2,30}$", user):
+            raise ApiError(400, "Tên đăng nhập 2–30 ký tự, chỉ gồm chữ không dấu, số, dấu chấm, gạch")
+        if any(norm_nick(a.get("user")) == user and k != sid for k, a in accounts.items()):
+            raise ApiError(409, "Tên đăng nhập %s đã có người dùng" % user)
+        old = accounts.get(sid) or {}
+        rec = {"user": user, "name": text(body.get("name")) or user, "admin": bool(body.get("admin")) or not accounts,
+               "active": body.get("active", True) is not False, "salt": old.get("salt", ""), "pw": old.get("pw", "")}
+        pw = text(body.get("password"))
+        if pw:
+            if not 4 <= len(pw) <= 40:
+                raise ApiError(400, "Mật khẩu 4–40 ký tự")
+            rec["salt"] = secrets.token_hex(8)
+            rec["pw"] = pin_hash(rec["salt"], pw)
+        if not rec["pw"]:
+            raise ApiError(400, "Cần đặt mật khẩu cho tài khoản mới")
+        if me and sid == me[0] and (not rec["admin"] or not rec["active"]):
+            raise ApiError(400, "Không tự bỏ quyền Quản lý hoặc tự khóa tài khoản đang đăng nhập")
+        accounts[sid] = rec
+        save_staff(con, accounts)
+        write_log(con, who or rec["name"], "Lưu tài khoản nhân viên", user, "đổi mật khẩu" if pw and old else "")
+        out = {"account": public_staff(sid, rec)}
+        if not me and len(accounts) == 1:  # tài khoản đầu tiên: đăng nhập luôn
+            exp = int(time.time()) + STAFF_TOKEN_DAYS * 86400
+            out["token"] = "%s.%d.%s" % (sid, exp, _staff_sign(con, sid, rec, exp))
+        return out
+    if method == "DELETE" and action:
+        if me and action == me[0]:
+            raise ApiError(400, "Không tự xóa tài khoản đang đăng nhập")
+        a = accounts.pop(action, None)
+        save_staff(con, accounts)
+        write_log(con, who, "Xóa tài khoản nhân viên", (a or {}).get("user", action))
+        return {"ok": True}
+    raise ApiError(404, "Không có API này")
+
+
+def save_staff(con, accounts):
+    con.execute("INSERT OR REPLACE INTO settings(key, value) VALUES ('staff_accounts', ?)", (json.dumps(accounts, ensure_ascii=False),))
+
+
 # ---------------------------------------------------------------- HTTP
 
 GH_PUBLIC = ("/giao-hang", "/giao-hang/", "/giao-hang.html", "/giao-hang.js", "/giao-hang.css")
@@ -1262,6 +1378,16 @@ class Handler(BaseHTTPRequestHandler):
 
     def route(self, con, method, res, arg, q, wh):
         who = self.who()
+        token = self.headers.get("X-Staff-Token") or q.get("st") or ""
+        if res == "staff":
+            body = self.read_json() if method == "POST" else {}
+            return staff_api(con, method, arg, body, token, who)
+        # đã có tài khoản nhân viên: mọi API web kho cần đăng nhập, tên người làm lấy từ tài khoản
+        if res != "gh" and get_staff(con):
+            me = staff_auth(con, token)
+            if not me:
+                raise ApiError(401, "Hãy đăng nhập lại")
+            who = me[1].get("name") or me[1].get("user", "")
         if res == "gh" and arg == "photo" and method == "GET":
             gh_auth(con, q.get("t") or self.headers.get("X-GH-Token") or "")
             return self.send_photo(q.get("ref"))
@@ -1279,6 +1405,7 @@ class Handler(BaseHTTPRequestHandler):
             for r in con.execute("SELECT DISTINCT proposer FROM plans WHERE wh=? AND proposer<>''", (wh,)):
                 people.add(r[0].strip())
             drivers = s.pop("drivers", None) or {}
+            s.pop("staff_accounts", None)
             return {
                 "wh": wh,
                 "settings": s,
@@ -1300,6 +1427,7 @@ class Handler(BaseHTTPRequestHandler):
                         cur[code].update({k: v for k, v in d.items() if k in ("name", "department", "parties")})
                 data["warehouses"] = cur
             data.pop("drivers", None)  # tài khoản giao hàng sửa ở API /drivers
+            data.pop("staff_accounts", None)  # tài khoản nhân viên sửa ở API /staff
             for k, v in data.items():
                 if k in DEFAULT_SETTINGS:
                     con.execute("INSERT OR REPLACE INTO settings(key, value) VALUES (?,?)", (k, json.dumps(v, ensure_ascii=False)))

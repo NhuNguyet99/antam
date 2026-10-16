@@ -60,6 +60,7 @@ const Backend = (() => {
     routing: { rules: [], memory: {} },
     drivers: {},
     admin: {}, // web Giao hàng An Tâm: mật khẩu quản lý {salt, pin}
+    staff_accounts: {}, // tài khoản nhân viên web kho {id: {user, name, admin, active, salt, pw}}
   };
 
   const st = {
@@ -873,6 +874,75 @@ const Backend = (() => {
     }
     throw new ApiError(404, 'Không có chức năng này');
   }
+  // Tài khoản nhân viên web kho (giống staff_api của server.py). Bản online kiểm tra ở trình duyệt: để biết ai làm gì,
+  // không thay được phân quyền của claude.ai.
+  async function staffApi(method, action, body, token) {
+    const accounts = Object.fromEntries(live(settings().staff_accounts));
+    const tokenOf = (id, a) => `${id}.${String(a.pw || '').slice(0, 24)}`;
+    const me = (() => { const [id] = text(token).split('.'); const a = accounts[id]; return a && a.active !== false && a.pw && text(token) === tokenOf(id, a) ? [id, a] : null; })();
+    const pub = (id, a) => ({ id, user: a.user || '', name: a.name || '', admin: !!a.admin, active: a.active !== false });
+    const put = async (id, rec) => {
+      await mergeInto(ref.settings(), { s: { staff_accounts: { [id]: rec } } }, { s: {} });
+      st.settings = deepMerge(clone(st.settings || {}), { staff_accounts: { [id]: rec } });
+    };
+    if (action === 'status' && method === 'GET') return { count: Object.keys(accounts).length, me: me ? pub(...me) : null };
+    if (action === 'login' && method === 'POST') {
+      const user = normNick(body.user);
+      const hit = Object.entries(accounts).find(([, a]) => normNick(a.user) === user && a.active !== false);
+      if (!hit || (await pinHash(hit[1].salt || '', text(body.password))) !== hit[1].pw) { await sleep(500); throw new ApiError(401, 'Sai tên đăng nhập hoặc mật khẩu'); }
+      st.who = hit[1].name; await log('Đăng nhập', user, '');
+      return { token: tokenOf(...hit), account: pub(...hit) };
+    }
+    if (method === 'GET' && !action) {
+      if (Object.keys(accounts).length && !me) throw new ApiError(401, 'Hãy đăng nhập');
+      return Object.entries(accounts).map(([k, a]) => pub(k, a));
+    }
+    if (action === 'password' && method === 'POST') {
+      if (!me) throw new ApiError(401, 'Hãy đăng nhập');
+      const [id, a] = me;
+      if ((await pinHash(a.salt || '', text(body.old))) !== a.pw) throw new ApiError(400, 'Mật khẩu cũ không đúng');
+      const pw = text(body.password);
+      if (pw.length < 4 || pw.length > 40) throw new ApiError(400, 'Mật khẩu 4–40 ký tự');
+      const rec = Object.assign({}, a, { salt: randHex(8) });
+      rec.pw = await pinHash(rec.salt, pw);
+      await put(id, rec);
+      await log('Đổi mật khẩu', a.user, '');
+      return { token: tokenOf(id, rec) };
+    }
+    // tạo / sửa / xóa: tài khoản Quản lý; lần đầu (chưa có tài khoản nào) ai cũng tạo được tài khoản Quản lý đầu tiên
+    const n = Object.keys(accounts).length;
+    if (n && !(me && me[1].admin)) throw new ApiError(403, 'Chỉ tài khoản Quản lý mới tạo / sửa / xóa tài khoản');
+    if (method === 'POST') {
+      const id = text(body.id) || newId('s');
+      const user = normNick(body.user);
+      if (!/^[a-z0-9._-]{2,30}$/.test(user)) throw new ApiError(400, 'Tên đăng nhập 2–30 ký tự, chỉ gồm chữ không dấu, số, dấu chấm, gạch');
+      if (Object.entries(accounts).some(([k, a]) => normNick(a.user) === user && k !== id)) throw new ApiError(409, `Tên đăng nhập ${user} đã có người dùng`);
+      const old = accounts[id] || {};
+      const rec = { user, name: text(body.name) || user, admin: !!body.admin || !n, active: body.active !== false, salt: old.salt || '', pw: old.pw || '' };
+      const pw = text(body.password);
+      if (pw) {
+        if (pw.length < 4 || pw.length > 40) throw new ApiError(400, 'Mật khẩu 4–40 ký tự');
+        rec.salt = randHex(8); rec.pw = await pinHash(rec.salt, pw);
+      }
+      if (!rec.pw) throw new ApiError(400, 'Cần đặt mật khẩu cho tài khoản mới');
+      if (me && id === me[0] && (!rec.admin || !rec.active)) throw new ApiError(400, 'Không tự bỏ quyền Quản lý hoặc tự khóa tài khoản đang đăng nhập');
+      await put(id, rec);
+      if (!n) st.who = rec.name; // tài khoản đầu tiên: người tạo chính là người này
+      await log('Lưu tài khoản nhân viên', user, pw && old.pw ? 'đổi mật khẩu' : '');
+      const out = { account: pub(id, rec) };
+      if (!n) out.token = tokenOf(id, rec); // tài khoản đầu tiên: đăng nhập luôn
+      return out;
+    }
+    if (method === 'DELETE' && action) {
+      if (me && action === me[0]) throw new ApiError(400, 'Không tự xóa tài khoản đang đăng nhập');
+      const a = accounts[action];
+      await mergeInto(ref.settings(), { s: { staff_accounts: { [action]: null } } }, { s: {} });
+      st.settings = deepMerge(clone(st.settings || {}), { staff_accounts: { [action]: null } });
+      await log('Xóa tài khoản nhân viên', (a && a.user) || action, '');
+      return { ok: true };
+    }
+    throw new ApiError(404, 'Không có chức năng này');
+  }
   // Mật khẩu quản lý của web Giao hàng An Tâm: người giao (cũng là Editor của trang) không vào được phần quản lý.
   // Kiểm tra ở trình duyệt – là khóa giao diện, không thay được phân quyền của claude.ai.
   async function adminApi(method, action, body) {
@@ -930,6 +1000,7 @@ const Backend = (() => {
     if (!WAREHOUSES.includes(wh)) throw new ApiError(400, 'Kho không hợp lệ: ' + wh);
     if (res === 'gh') return ghApi(method, arg, q, body || {}, opts.token || '');
     if (res === 'admin') return adminApi(method, arg, body || {});
+    if (res === 'staff') return staffApi(method, arg, body || {}, opts.token || '');
     if (res === 'giao-sync') return giaoSync(method, q, body || {});
     if (res === 'drivers') {
       if (method === 'GET') return Object.entries(drivers()).map(([k, d]) => publicDriver(k, d));
@@ -956,7 +1027,7 @@ const Backend = (() => {
       planRows(wh).forEach(r => { if (r.proposer) people.add(r.proposer.trim()); });
       const sortVi = a => [...a].sort((x, y) => x.toLowerCase().localeCompare(y.toLowerCase(), 'vi'));
       const drv = drivers();
-      delete s.drivers; delete s.admin;
+      delete s.drivers; delete s.admin; delete s.staff_accounts;
       return {
         wh, settings: s, warehouse: s.warehouses[wh], products: products(wh),
         drivers: Object.entries(drv).map(([k, d]) => publicDriver(k, d)),
@@ -974,7 +1045,7 @@ const Backend = (() => {
           const whs = cur.warehouses;
           for (const [code, d] of Object.entries(v || {})) if (whs[code]) ['name', 'department', 'parties'].forEach(f => { if (d[f] !== undefined) whs[code][f] = d[f]; });
           next.warehouses = Object.fromEntries(WAREHOUSES.map(c => [c, { name: whs[c].name, department: whs[c].department, parties: whs[c].parties }]));
-        } else if (k in DEFAULT_SETTINGS && k !== 'drivers' && k !== 'admin') next[k] = v; // tài khoản giao hàng / mật khẩu quản lý sửa ở API riêng
+        } else if (k in DEFAULT_SETTINGS && !['drivers', 'admin', 'staff_accounts'].includes(k)) next[k] = v; // tài khoản giao hàng / mật khẩu quản lý sửa ở API riêng
       }
       await write(() => ref.settings().set({ s: next }));
       st.settings = next;

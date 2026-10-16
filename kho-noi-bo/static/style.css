@@ -262,3 +262,9 @@ kbd { display: inline-block; padding: 1px 6px; border: 1px solid #c5cbd3; border
 /* ảnh giao hàng (web giao hàng) */
 .ph-row { display: flex; flex-wrap: wrap; gap: 4px; margin-top: 4px; }
 .ph-thumb { width: 48px; height: 48px; object-fit: cover; border-radius: 6px; background: var(--line); cursor: zoom-in; display: block; }
+
+/* đăng nhập tài khoản nhân viên */
+body.locked #sidebar, body.locked #topbar, body.locked #ro-banner { display: none !important; }
+.login-card { max-width: 380px; margin: 8vh auto; text-align: center; }
+.login-card h2 { margin: 0 0 6px; font-size: 20px; }
+.login-card form { text-align: left; margin-top: 16px; }

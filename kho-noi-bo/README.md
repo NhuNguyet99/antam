@@ -167,6 +167,19 @@ Ghi chú:
 - Tên kho, dòng "Bộ phận" in trên phiếu, danh sách bên giao/nhận chỉnh riêng từng kho ở **Cài đặt & dữ liệu**;
   khổ giấy (A4/A5), tên đơn vị, nhân viên… dùng chung.
 
+## Tài khoản nhân viên
+
+**Hệ thống › Tài khoản nhân viên**: mỗi nhân viên kho một **tên đăng nhập + mật khẩu**; phiếu, phân tuyến và **Lịch sử thao tác**
+ghi đúng tên người đăng nhập (thay cho ô "Bạn là ai?" gõ tên tự do).
+
+- Chưa có tài khoản nào thì web chạy như cũ. Tài khoản đầu tiên tạo ra tự là **Quản lý** và được đăng nhập luôn; từ lúc đó ai vào
+  web kho cũng phải đăng nhập.
+- Chỉ tài khoản **Quản lý** được thêm / sửa / khóa / xóa tài khoản và đặt lại mật khẩu. Mỗi người tự đổi mật khẩu hoặc đăng xuất
+  bằng cách bấm tên mình ở góc trên phải.
+- Bản chạy trên máy: máy chủ kiểm tra đăng nhập cho mọi thao tác (phiên 30 ngày); có thể dùng cùng `mat-khau.txt`.
+- Bản online: đăng nhập để ghi đúng người làm; quyền xem / sửa trang vẫn do nút *Share* của claude.ai quyết định.
+- Tài khoản nằm trong file dữ liệu **.json**, chuyển qua lại giữa 2 bản như các dữ liệu khác.
+
 ## Chuyển dữ liệu giữa bản online và bản chạy trên máy
 
 Cả hai bản dùng chung một loại file dữ liệu **.json**:
