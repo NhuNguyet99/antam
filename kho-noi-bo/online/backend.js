@@ -122,6 +122,7 @@ const Backend = (() => {
     anh: id => dbx().doc(`kho/TP/anh/${id}`),
     logs: () => dbx().collection('log'),
     logDay: d => dbx().doc('log/' + d),
+    notice: sid => dbx().doc('notice/' + sid), // thông báo cho từng tài khoản nhân viên
   };
   function dbError(e) {
     const code = e && e.code;
@@ -375,12 +376,12 @@ const Backend = (() => {
     bump(wh);
   }
   // Duyệt phiếu điều chỉnh (giống server.py): me = [id, tài khoản] đang đăng nhập; null khi chưa dùng tài khoản nhân viên
-  const APPROVAL_COLS = ['status', 'created_by', 'approved_by', 'approved_at', 'review_note'];
+  const APPROVAL_COLS = ['status', 'created_by', 'approved_by', 'approved_at', 'review_note', 'created_by_id'];
   const lockedFor = (v, me) => v.type === 'D' && !v.status && me && !me[1].admin;
   function approvalOf(old, type, me) {
     const cur = Object.fromEntries(APPROVAL_COLS.map(k => [k, (old && old[k]) || '']));
     if (old && lockedFor(old, me)) throw new ApiError(403, `Phiếu điều chỉnh ${old.no} đã được duyệt – chỉ Quản lý sửa / xóa được`);
-    if (!old) cur.created_by = st.who || '';
+    if (!old) Object.assign(cur, { created_by: st.who || '', created_by_id: me ? me[0] : '' });
     if (type !== 'D' || !me) return Object.assign(cur, { status: '', review_note: '' });
     if (me[1].admin) {
       if (!old) Object.assign(cur, { approved_by: st.who || '', approved_at: nowStr() }); // Quản lý tự lập: duyệt luôn
@@ -400,7 +401,31 @@ const Backend = (() => {
     await mergeInto(ref.day(v.wh, v.date), { v: { [id]: stored } }, { date: v.date });
     applyLocalVoucher(v.wh, v.date, id, stored);
     await log(ok ? 'Duyệt phiếu điều chỉnh' : 'Từ chối phiếu điều chỉnh', v.no, note, v.wh);
+    // báo cho người lập phiếu (phiếu lập trước khi có created_by_id: tìm theo tên)
+    const to = v.created_by_id || (live(settings().staff_accounts).find(([, a]) => v.created_by && a.name === v.created_by) || [''])[0];
+    if (to && to !== me[0]) {
+      const msg = ok ? `✔ Phiếu điều chỉnh ${v.no} đã được ${st.who || 'Quản lý'} duyệt – đã tính vào tồn kho.`
+        : `✖ Phiếu điều chỉnh ${v.no} bị ${st.who || 'Quản lý'} từ chối: ${note}. Hãy sửa lại rồi Lưu & gửi duyệt lại.`;
+      try { await addNotice(to, { at: nowStr(), text: msg, link: '#/phieu/' + id, wh: v.wh, ok, read: false }); } catch (e) { console.warn('notice', e); }
+    }
     return voucherFull(id);
+  }
+  async function addNotice(to, rec) {
+    const old = docData(await ref.notice(to).get()) || {};
+    const keep = live(old.n).sort((a, b) => (a[1].at < b[1].at ? 1 : -1)).slice(49).map(([k]) => [k, null]); // giữ 50 thông báo gần nhất
+    await mergeInto(ref.notice(to), { n: Object.assign(Object.fromEntries(keep), { [newId('n')]: rec }) }, {});
+  }
+  async function noticesApi(method, action, body, me) {
+    if (!me || !me[0]) return { unread: 0, list: [] };
+    const all = live((docData(await ref.notice(me[0]).get()) || {}).n);
+    if (method === 'POST' && action === 'read') {
+      const ids = (body.ids || []).map(String);
+      const patch = Object.fromEntries(all.filter(([k, n]) => !n.read && (!ids.length || ids.includes(k))).map(([k, n]) => [k, Object.assign({}, n, { read: true })]));
+      if (Object.keys(patch).length) await mergeInto(ref.notice(me[0]), { n: patch }, {});
+      return { ok: true };
+    }
+    const list = all.map(([id, n]) => Object.assign({ id }, n)).sort((a, b) => (a.at < b.at ? 1 : -1)).slice(0, 50);
+    return { unread: list.filter(n => !n.read).length, list };
   }
   async function saveVoucher(wh, data, vid, me) {
     const type = text(data.type);
@@ -1195,6 +1220,7 @@ const Backend = (() => {
       if (method === 'PUT' && arg) return voucherFull(await saveVoucher(wh, body || {}, arg, me));
       if (method === 'DELETE' && arg) { await deleteVoucher(arg, me); return { ok: true }; }
     }
+    if (res === 'notices') return noticesApi(method, arg, body || {}, me);
     if (res === 'review' && method === 'POST' && arg) return reviewVoucher(arg, !!(body || {}).ok, (body || {}).note, me);
     if (res === 'pending' && method === 'GET') {
       const n = s_ => vouchers(wh).filter(v => v.status === s_).length;

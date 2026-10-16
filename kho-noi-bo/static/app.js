@@ -5,7 +5,7 @@
    kho NVL có thêm Kế hoạch mua hàng (KH Ngày/Tuần/Tháng).
    Web chứa 2 kho: TP (Thành phẩm - Hàng hóa) và NVL (Nguyên vật liệu), dữ liệu tách riêng từng kho. */
 
-const S = { meta: null, dirty: false, skipDirty: false, user: '', wh: 'TP', account: null, staffToken: '' };
+const S = { meta: null, dirty: false, skipDirty: false, user: '', wh: 'TP', account: null, staffToken: '', notices: [], popped: new Set() };
 // Bản online (trang claude.ai, online/backend.js) không có máy chủ: không in trực tiếp, không mở link tải, không dùng #url.
 const ONLINE = !!window.ANTAM_ONLINE;
 // Trang xem công khai: chỉ xem số liệu chụp sẵn (online/build.py --view)
@@ -540,6 +540,8 @@ async function viewVoucherForm(main, m, q) {
   if (editing) {
     v = await api('GET', '/vouchers/' + editing);
     if (v.wh !== S.wh) await switchWh(v.wh, true);
+    const seen = S.notices.filter(n => !n.read && n.link === '#/phieu/' + editing).map(n => n.id); // đã mở phiếu = đã xem thông báo
+    if (seen.length) { readNotices(seen); $$('#toasts .toast.notice').forEach(el => { if (seen.includes(el.dataset.id)) el.remove(); }); }
   } else {
     v = newVoucher(TYPE_PREFIX[q.type] ? q.type : 'N');
     if (q.draft) {
@@ -2730,6 +2732,55 @@ async function bootKho() {
   $('#user-btn').textContent = '👤 ' + (S.user || 'Khách');
   await render();
   if (!S.user && !VIEW && !S.account) askUser();
+  checkNotices();
+}
+
+/* ============================================================ thông báo cho nhân viên (kết quả duyệt phiếu) */
+const NOTICE_EVERY = 60000;
+let noticeTimer = null;
+async function checkNotices() {
+  const b = $('#notice-btn');
+  if (!S.account) { if (b) b.hidden = true; return; }
+  if (!noticeTimer) noticeTimer = setInterval(checkNotices, NOTICE_EVERY);
+  let r;
+  try { r = await api('GET', '/notices'); } catch (e) { return; }
+  S.notices = r.list || [];
+  const unread = S.notices.filter(n => !n.read);
+  b.hidden = false;
+  b.innerHTML = '🔔' + (unread.length ? ` <span class="nb">${unread.length}</span>` : '');
+  b.title = unread.length ? `${unread.length} thông báo mới` : 'Thông báo';
+  b.onclick = openNotices;
+  unread.filter(n => !S.popped.has(n.id)).slice(0, 3).forEach(n => { S.popped.add(n.id); noticePop(n); });
+}
+async function readNotices(ids) {
+  await guard(() => api('POST', '/notices/read', { ids: ids || [] }));
+  S.notices.forEach(n => { if (!ids || ids.includes(n.id)) n.read = true; });
+  const left = S.notices.filter(n => !n.read).length;
+  $('#notice-btn').innerHTML = '🔔' + (left ? ` <span class="nb">${left}</span>` : '');
+}
+const openNoticeLink = n => go(n.link); // trang phiếu tự chuyển sang đúng kho
+// Hiện ngay ở góc màn hình, giữ đến khi bấm Xem / Đóng
+function noticePop(n) {
+  const el = document.createElement('div');
+  el.className = 'toast notice' + (n.ok ? '' : ' bad');
+  el.dataset.id = n.id;
+  el.innerHTML = `<div><b>🔔 Thông báo</b> <span class="small muted">${esc(n.at || '')}</span></div><div>${esc(n.text)}</div>
+    <div class="actions">${n.link ? '<button class="btn sm primary" data-go>Xem phiếu</button>' : ''}<button class="btn sm" data-ok>Đã biết</button></div>`;
+  $('#toasts').appendChild(el);
+  const go_ = $('[data-go]', el);
+  if (go_) go_.onclick = () => { el.remove(); readNotices([n.id]); openNoticeLink(n); };
+  $('[data-ok]', el).onclick = () => { el.remove(); readNotices([n.id]); };
+}
+function openNotices() {
+  const unread = S.notices.filter(n => !n.read).map(n => n.id);
+  const { root, close } = openModal({
+    title: '🔔 Thông báo',
+    body: S.notices.length ? `<ul class="notice-list">${S.notices.map((n, i) => `<li data-i="${i}" class="${n.read ? '' : 'unread'}">${esc(n.text)}<div class="at">${esc(n.at || '')}${n.wh ? ' · ' + esc(n.wh === 'NVL' ? 'Kho nguyên vật liệu' : 'Kho thành phẩm') : ''}</div></li>`).join('')}</ul>`
+      : '<p class="muted">Chưa có thông báo nào. Khi Quản lý duyệt hoặc từ chối phiếu điều chỉnh bạn lập, thông báo sẽ hiện ở đây.</p>',
+  });
+  $$('#toasts .toast.notice').forEach(el => el.remove());
+  $$('li[data-i]', root).forEach(li => li.onclick = () => { const n = S.notices[li.dataset.i]; close(); if (n.link) openNoticeLink(n); });
+  if (unread.length) readNotices(unread);
 }
 
 /* ============================================================ tài khoản nhân viên */
@@ -2746,6 +2797,8 @@ async function staffGate() {
 }
 function showStaffLogin(msg) {
   S.account = null; S.staffToken = ''; store('staffToken', '');
+  S.notices = []; S.popped = new Set(); $$('#toasts .toast.notice').forEach(el => el.remove());
+  if ($('#notice-btn')) $('#notice-btn').hidden = true;
   document.body.classList.add('locked');
   $('#main').innerHTML = `<div class="login-card card"><div class="brand-mark" style="margin:0 auto 10px">AT</div>
     <h2>Đăng nhập Kho An Tâm</h2><p class="muted small">Mỗi nhân viên dùng tài khoản riêng – phiếu và lịch sử thao tác ghi đúng tên người đăng nhập.</p>

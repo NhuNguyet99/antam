@@ -190,6 +190,8 @@ Khi đã dùng tài khoản nhân viên, **phiếu điều chỉnh (DCK)** do nh
 - Phiếu bị từ chối: người lập sửa lại rồi **Lưu & gửi duyệt** để gửi lại, hoặc xóa phiếu.
 - Phiếu đã duyệt chỉ Quản lý sửa / xóa được. Phiếu điều chỉnh Quản lý tự lập được duyệt luôn. Phiếu nhập / xuất không cần duyệt.
 - Người lập và người duyệt ghi trên phiếu in và trong Lịch sử thao tác.
+- Duyệt / từ chối xong, **người lập phiếu được thông báo**: chuông 🔔 kèm số thông báo mới ở góc trên phải và khung thông báo hiện
+  ở góc màn hình (ngay khi đăng nhập, hoặc trong khoảng 1 phút nếu đang mở web) với nút **Xem phiếu**. Bấm 🔔 để xem lại 50 thông báo gần nhất.
 
 ## Chuyển dữ liệu giữa bản online và bản chạy trên máy
 

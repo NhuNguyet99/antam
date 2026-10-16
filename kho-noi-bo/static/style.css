@@ -165,6 +165,15 @@ table.data tr.row-warn td { background: var(--warn-bg); }
 #toasts { position: fixed; right: 16px; bottom: 16px; display: flex; flex-direction: column; gap: 8px; z-index: 60; }
 .toast { background: #1d2433; color: #fff; padding: 10px 14px; border-radius: 8px; max-width: 420px; box-shadow: 0 6px 20px rgba(0,0,0,.2); }
 .toast.err { background: var(--danger); }
+.toast.notice { background: #fff; color: var(--text, #1d2433); border-left: 5px solid var(--in); border-top: 1px solid #ddd; border-right: 1px solid #ddd; border-bottom: 1px solid #ddd; }
+.toast.notice.bad { border-left-color: var(--danger); }
+.toast.notice .actions { display: flex; gap: 6px; margin-top: 8px; }
+.notice-btn .nb { display: inline-block; min-width: 18px; padding: 0 5px; border-radius: 999px; background: var(--danger); color: #fff; font-size: 12px; font-weight: 700; line-height: 18px; text-align: center; }
+.notice-list { list-style: none; margin: 0; padding: 0; max-height: 60vh; overflow: auto; }
+.notice-list li { padding: 10px 8px; border-bottom: 1px solid #eee; cursor: pointer; }
+.notice-list li:hover { background: #f6f8fa; }
+.notice-list li.unread { font-weight: 600; background: #fffaf0; }
+.notice-list .at { font-size: 12px; font-weight: 400; color: #777; }
 
 .lines-table td { padding: 4px 6px; }
 .lines-table .stock-hint { font-size: 12px; color: var(--muted); white-space: nowrap; }

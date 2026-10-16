@@ -80,7 +80,10 @@ TYPE_LABEL = {"N": "Nhập", "X": "Xuất", "D": "Điều chỉnh"}
 SIGN_SQL = "CASE v.type WHEN 'X' THEN -1 ELSE 1 END"
 # Phiếu điều chỉnh nhân viên lập phải chờ Quản lý duyệt: status 'pending' (chờ duyệt) / 'rejected' (từ chối) chưa tính vào tồn kho
 POSTED_SQL = "COALESCE(v.status, '') = ''"
-APPROVAL_COLS = ("status", "created_by", "approved_by", "approved_at", "review_note")
+APPROVAL_COLS = ("status", "created_by", "approved_by", "approved_at", "review_note", "created_by_id")
+_AP_SET = ", ".join("%s=?" % c for c in APPROVAL_COLS)
+_AP_LIST = ", ".join(APPROVAL_COLS)
+_AP_QS = ",".join("?" * len(APPROVAL_COLS))
 
 TP_NAME = "Kho thành phẩm - hàng hóa"
 NVL_NAME = "Kho nguyên vật liệu"
@@ -150,7 +153,7 @@ CREATE TABLE IF NOT EXISTS vouchers (
   giver TEXT DEFAULT '', receiver TEXT DEFAULT '', reason TEXT DEFAULT '',
   bill_count TEXT DEFAULT '', doc_ref TEXT DEFAULT '', note TEXT DEFAULT '',
   created_at TEXT, updated_at TEXT, status TEXT DEFAULT '', created_by TEXT DEFAULT '', approved_by TEXT DEFAULT '',
-  approved_at TEXT DEFAULT '', review_note TEXT DEFAULT ''
+  approved_at TEXT DEFAULT '', review_note TEXT DEFAULT '', created_by_id TEXT DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS voucher_lines (
   id INTEGER PRIMARY KEY AUTOINCREMENT, voucher_id INTEGER NOT NULL REFERENCES vouchers(id) ON DELETE CASCADE,
@@ -173,6 +176,10 @@ CREATE TABLE IF NOT EXISTS deliveries (
 );
 CREATE TABLE IF NOT EXISTS cust_locations (
   cust_key TEXT PRIMARY KEY, lat REAL, lng REAL, acc REAL, name TEXT DEFAULT '', driver TEXT DEFAULT '', at TEXT, url TEXT DEFAULT ''
+);
+CREATE TABLE IF NOT EXISTS notices (
+  id INTEGER PRIMARY KEY AUTOINCREMENT, to_id TEXT NOT NULL, at TEXT, text TEXT DEFAULT '', link TEXT DEFAULT '', wh TEXT DEFAULT '',
+  ok INTEGER DEFAULT 1, read INTEGER DEFAULT 0
 );
 CREATE TABLE IF NOT EXISTS log (
   id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT, who TEXT, action TEXT, target TEXT, detail TEXT
@@ -448,7 +455,7 @@ def approval_of(old, vtype, me, who):
     if old and old["type"] == "D" and not cur["status"] and me and not me[1].get("admin"):
         raise ApiError(403, "Phiếu điều chỉnh %s đã được duyệt – chỉ Quản lý sửa / xóa được" % old["no"])
     if not old:
-        cur["created_by"] = who
+        cur["created_by"], cur["created_by_id"] = who, me[0] if me else ""
     if vtype != "D" or not me:
         return dict(cur, status="", review_note="")
     if me[1].get("admin"):
@@ -475,7 +482,38 @@ def review_voucher(con, vid, ok, note, me, who):
     con.execute("UPDATE vouchers SET status=?, approved_by=?, approved_at=?, review_note=? WHERE id=?",
                 ("" if ok else "rejected", who, now_str(), note, vid))
     write_log(con, who, "Duyệt phiếu điều chỉnh" if ok else "Từ chối phiếu điều chỉnh", v["no"], note, v["wh"])
+    # báo cho người lập phiếu (phiếu lập trước khi có cột created_by_id: tìm theo tên)
+    to = v["created_by_id"] or next((k for k, a in get_staff(con).items() if v["created_by"] and a.get("name") == v["created_by"]), "")
+    if to and to != me[0]:
+        add_notice(con, to, notice_text(v["no"], ok, who, note), "#/phieu/%d" % vid, v["wh"], ok)
     return voucher_full(con, vid)
+
+
+def notice_text(no, ok, who, note):
+    if ok:
+        return "✔ Phiếu điều chỉnh %s đã được %s duyệt – đã tính vào tồn kho." % (no, who)
+    return "✖ Phiếu điều chỉnh %s bị %s từ chối: %s. Hãy sửa lại rồi Lưu & gửi duyệt lại." % (no, who, note)
+
+
+def add_notice(con, to_id, msg, link, wh, ok):
+    con.execute("INSERT INTO notices(to_id, at, text, link, wh, ok) VALUES (?,?,?,?,?,?)", (to_id, now_str(), msg, link, wh, 1 if ok else 0))
+    # giữ 50 thông báo gần nhất của mỗi người
+    con.execute("DELETE FROM notices WHERE to_id=? AND id NOT IN (SELECT id FROM notices WHERE to_id=? ORDER BY id DESC LIMIT 50)", (to_id, to_id))
+
+
+def notices_api(con, method, action, body, me):
+    if not me:
+        return {"unread": 0, "list": []}
+    if method == "POST" and action == "read":
+        ids = [int(x) for x in body.get("ids") or [] if str(x).isdigit()]
+        if ids:
+            con.execute("UPDATE notices SET read=1 WHERE to_id=? AND id IN (%s)" % ",".join("?" * len(ids)), [me[0]] + ids)
+        else:
+            con.execute("UPDATE notices SET read=1 WHERE to_id=?", (me[0],))
+        return {"ok": True}
+    lst = [dict(r, id=str(r["id"]), read=bool(r["read"]), ok=bool(r["ok"])) for r in
+           con.execute("SELECT id, at, text, link, wh, ok, read FROM notices WHERE to_id=? ORDER BY id DESC LIMIT 50", (me[0],))]
+    return {"unread": sum(1 for n in lst if not n["read"]), "list": lst}
 
 
 def save_voucher(con, wh, data, vid=None, who="", me=None):
@@ -517,14 +555,13 @@ def save_voucher(con, wh, data, vid=None, who="", me=None):
     if vid:
         old = voucher_full(con, vid)
         con.execute("UPDATE vouchers SET no=?, type=?, date=?, route=?, from_party=?, to_party=?, giver=?, receiver=?, "
-                    "reason=?, bill_count=?, doc_ref=?, note=?, status=?, created_by=?, approved_by=?, approved_at=?, "
-                    "review_note=?, updated_at=? WHERE id=?", vals + (ts, vid))
+                    "reason=?, bill_count=?, doc_ref=?, note=?, " + _AP_SET + ", updated_at=? WHERE id=?", vals + (ts, vid))
         con.execute("DELETE FROM voucher_lines WHERE voucher_id = ?", (vid,))
         write_log(con, who, "Sửa phiếu", no, {"trước": _summary(old), "sau": _summary_lines(clean)}, wh)
     else:
         cur = con.execute("INSERT INTO vouchers(wh, no, type, date, route, from_party, to_party, giver, receiver, reason, "
-                          "bill_count, doc_ref, note, status, created_by, approved_by, approved_at, review_note, created_at, updated_at) "
-                          "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)", (wh,) + vals + (ts, ts))
+                          "bill_count, doc_ref, note, " + _AP_LIST + ", created_at, updated_at) "
+                          "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?," + _AP_QS + ",?,?)", (wh,) + vals + (ts, ts))
         vid = cur.lastrowid
         write_log(con, who, "Lập phiếu" + (" (chờ duyệt)" if ap["status"] == "pending" else ""), no, _summary_lines(clean), wh)
     con.executemany("INSERT INTO voucher_lines(voucher_id, line_no, product_code, qty, price, note) VALUES (?,?,?,?,?,?)",
@@ -802,8 +839,8 @@ def import_backup_json(con, snap, who=""):
         vlist.sort(key=lambda v: (v.get("date") or "", v.get("created_at") or ""))
         for v in vlist:
             cur = con.execute("INSERT INTO vouchers(wh, no, type, date, route, from_party, to_party, giver, receiver, reason, bill_count, "
-                              "doc_ref, note, created_at, updated_at, status, created_by, approved_by, approved_at, review_note) "
-                              "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)",
+                              "doc_ref, note, created_at, updated_at, " + _AP_LIST + ") "
+                              "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?," + _AP_QS + ")",
                               (wh,) + tuple(text(v.get(k)) for k in ("no", "type", "date", "route", "from_party", "to_party", "giver",
                                                                      "receiver", "reason", "bill_count", "doc_ref", "note", "created_at", "updated_at")
                                                                     + APPROVAL_COLS))
@@ -1613,6 +1650,8 @@ class Handler(BaseHTTPRequestHandler):
                 write_log(con, who, "Xóa phiếu", v["no"], _summary(v), v["wh"])
                 return {"ok": True}
 
+        if res == "notices":
+            return notices_api(con, method, arg, self.read_json() if method == "POST" else {}, me)
         if res == "review" and method == "POST" and arg:
             body = self.read_json()
             return review_voucher(con, int(arg), bool(body.get("ok")), body.get("note"), me, who)
