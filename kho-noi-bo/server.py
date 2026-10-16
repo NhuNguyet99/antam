@@ -166,7 +166,7 @@ CREATE TABLE IF NOT EXISTS deliveries (
   note TEXT DEFAULT '', at TEXT, name TEXT DEFAULT '', photos TEXT DEFAULT '[]', gps TEXT DEFAULT '', PRIMARY KEY (date, cust_key)
 );
 CREATE TABLE IF NOT EXISTS cust_locations (
-  cust_key TEXT PRIMARY KEY, lat REAL, lng REAL, acc REAL, name TEXT DEFAULT '', driver TEXT DEFAULT '', at TEXT
+  cust_key TEXT PRIMARY KEY, lat REAL, lng REAL, acc REAL, name TEXT DEFAULT '', driver TEXT DEFAULT '', at TEXT, url TEXT DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS log (
   id INTEGER PRIMARY KEY AUTOINCREMENT, at TEXT, who TEXT, action TEXT, target TEXT, detail TEXT
@@ -205,6 +205,8 @@ def _columns(con, table):
 
 def migrate(con):
     """Nâng cấp dữ liệu của bản 1 kho cũ lên bản 2 kho (dữ liệu cũ thuộc kho TP)."""
+    if "url" not in _columns(con, "cust_locations"):
+        con.execute("ALTER TABLE cust_locations ADD COLUMN url TEXT DEFAULT ''")
     # kết quả giao: thêm tên khách, ảnh giao hàng, vị trí lúc giao
     for col, ddl in (("name", "TEXT DEFAULT ''"), ("photos", "TEXT DEFAULT '[]'"), ("gps", "TEXT DEFAULT ''")):
         if col not in _columns(con, "deliveries"):
@@ -988,16 +990,24 @@ def clean_gps(v):
 
 
 def locations_all(con):
-    return {r["cust_key"]: {"lat": r["lat"], "lng": r["lng"], "acc": r["acc"], "name": r["name"] or "", "driver": r["driver"] or "", "at": r["at"] or ""}
+    return {r["cust_key"]: {"lat": r["lat"], "lng": r["lng"], "acc": r["acc"], "url": r["url"] or "", "name": r["name"] or "",
+                            "driver": r["driver"] or "", "at": r["at"] or ""}
             for r in con.execute("SELECT * FROM cust_locations")}
 
 
+MAPS_URL_RE = re.compile(r"^https?://(?:maps\.app\.goo\.gl|goo\.gl/maps|(?:www\.)?google\.[a-z.]+/maps|maps\.google\.[a-z.]+)[^\s\"'<>]*$", re.I)
+
+
 def set_location(con, key, gps, name="", driver="", at=""):
+    """Vị trí khách: tọa độ, hoặc link chia sẻ Google Maps (maps.app.goo.gl…) khi không có tọa độ."""
     g = clean_gps(gps)
+    url = text((gps or {}).get("url"))
     if not g:
-        raise ApiError(400, "Tọa độ không hợp lệ")
-    con.execute("INSERT OR REPLACE INTO cust_locations(cust_key, lat, lng, acc, name, driver, at) VALUES (?,?,?,?,?,?,?)",
-                (key, g["lat"], g["lng"], g["acc"], name, driver, at or now_str()))
+        if not (MAPS_URL_RE.match(url) and len(url) < 500):
+            raise ApiError(400, "Vị trí không hợp lệ – dán link Google Maps hoặc tọa độ")
+        g = {"lat": None, "lng": None, "acc": None}
+    con.execute("INSERT OR REPLACE INTO cust_locations(cust_key, lat, lng, acc, name, driver, at, url) VALUES (?,?,?,?,?,?,?,?)",
+                (key, g["lat"], g["lng"], g["acc"], name, driver, at or now_str(), "" if g["lat"] is not None else url))
 
 
 PHOTO_RE = re.compile(r"^[A-Za-z0-9_.-]{1,120}\.jpg$")
@@ -1073,7 +1083,7 @@ def gh_api(con, method, action, q, body, token):
             write_log(con, "🚚 " + me.get("name", ""), "Xóa vị trí khách", key, "", "TP")
             return {"ok": True}
         set_location(con, key, body, text(row.get("name")) or text(row.get("cust")), did)
-        write_log(con, "🚚 " + me.get("name", ""), "Lưu vị trí khách", key, "%s,%s" % (body.get("lat"), body.get("lng")), "TP")
+        write_log(con, "🚚 " + me.get("name", ""), "Lưu vị trí khách", key, text(body.get("url")) or "%s,%s" % (body.get("lat"), body.get("lng")), "TP")
         return {"ok": True, "location": locations_all(con).get(key)}
     if action == "deliver" and method == "POST":
         d = valid_date(body.get("date"))

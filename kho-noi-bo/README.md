@@ -118,13 +118,15 @@ Người giao hàng xem **tuyến đã được sắp của từng ngày** (lấ
 - Bấm **✓ Đã giao** (hoặc **✗ Không giao được**) mở ô xác nhận: **📷 Chụp ảnh giao hàng** (mở camera điện thoại, chụp được
   nhiều ảnh; ảnh được thu nhỏ và in sẵn giờ chụp + mã khách ở góc), web **tự lấy vị trí điện thoại lúc giao** rồi bấm
   **Xác nhận**. Giao xong vẫn **📷 Thêm ảnh** được.
-- **📌 Lưu vị trí khách**: đứng tại cửa hàng bấm **Dùng vị trí hiện tại**, hoặc dán tọa độ / link Google Maps. Khi xác nhận
-  đã giao mà khách chưa có vị trí, web đề nghị lưu luôn vị trí lúc giao. Khách đã có vị trí thì bấm địa chỉ hoặc
-  **🧭 Chỉ đường** là mở Google Maps tới đúng điểm.
+- **📌 Lưu vị trí khách** (làm 1 lần cho mỗi khách): bấm **🗺 Mở Google Maps** (mở sẵn địa chỉ khách) → chạm vào đúng điểm cửa hàng →
+  **Chia sẻ → Sao chép đường liên kết** → quay lại dán vào ô (ô đã được chọn sẵn) – web tự lưu. Nhận link `maps.app.goo.gl/…`,
+  link Google Maps dài hoặc tọa độ. Khách đã có vị trí thì bấm địa chỉ hoặc **🧭 Chỉ đường** là mở Google Maps tới đúng điểm.
+- Bấm **Đã giao** không bắt buộc định vị: ảnh chụp (có in giờ) là bằng chứng. Vị trí lúc giao chỉ được ghi khi điện thoại cho trang
+  đọc định vị (bản chạy trên máy mở bằng https); khi đó web cũng đề nghị lưu luôn làm vị trí khách nếu khách chưa có.
 - Kho xem ở **Tài khoản giao hàng › Kết quả giao hàng theo ngày** (giờ giao, người giao, khách, ảnh, vị trí lúc giao; lọc
   theo người giao) và ở bảng Phân tuyến (ảnh nhỏ, 📍 vị trí lúc giao, 📌 vị trí khách đã lưu cạnh địa chỉ).
-- Lưu ý định vị: trình duyệt chỉ cho lấy vị trí trên trang **https** – bản online dùng được; bản chạy trên máy
-  (`http://192.168…`) không tự lấy được vị trí, người giao dán tọa độ từ Google Maps.
+- Lưu ý định vị: trang trên claude.ai (bản online) không được đọc định vị điện thoại; bản chạy trên máy chỉ đọc được khi mở bằng
+  **https** (`http://192.168…` thì không). Không đọc được thì lưu vị trí khách bằng link Google Maps như trên.
 - Ảnh ở bản chạy trên máy nằm trong thư mục `data/anh-giao/` (sao lưu cùng file `data/kho.db`; file .json không chứa ảnh).
   Ở bản online ảnh nằm trong kho ảnh của trang, nếu kho ảnh không dùng được cho người giao
   thì ảnh được lưu vào dữ liệu chung.

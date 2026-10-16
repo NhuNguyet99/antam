@@ -703,6 +703,7 @@ const Backend = (() => {
     const acc = typeof v.acc === 'number' && isFinite(v.acc) ? Math.round(v.acc * 10) / 10 : null;
     return { lat: Math.round(lat * 1e6) / 1e6, lng: Math.round(lng * 1e6) / 1e6, acc };
   }
+  const MAPS_URL = /^https?:\/\/(?:maps\.app\.goo\.gl|goo\.gl\/maps|(?:www\.)?google\.[a-z.]+\/maps|maps\.google\.[a-z.]+)[^\s"'<>]*$/i;
   async function locationsAll() {
     if (VIEW) return {};
     try { return Object.fromEntries(live((docData(await ref.vitri().get()) || {}).v)); } catch (e) { throw dbError(e); }
@@ -805,11 +806,13 @@ const Backend = (() => {
         await asDriver('Xóa vị trí khách', key, '');
         return { ok: true };
       }
-      const g = cleanGps(body);
-      if (!g) throw new ApiError(400, 'Tọa độ không hợp lệ');
+      // tọa độ, hoặc link chia sẻ Google Maps (maps.app.goo.gl…) khi không có tọa độ
+      const url = text(body.url);
+      const g = cleanGps(body) || (MAPS_URL.test(url) && url.length < 500 ? { lat: null, lng: null, acc: null, url } : null);
+      if (!g) throw new ApiError(400, 'Vị trí không hợp lệ – dán link Google Maps hoặc tọa độ');
       const rec = Object.assign(g, { name: text(row.name) || text(row.cust), driver: id, at: nowStr() });
       await mergeInto(ref.vitri(), { v: { [key]: rec } }, { v: {} });
-      await asDriver('Lưu vị trí khách', key, `${g.lat},${g.lng}`);
+      await asDriver('Lưu vị trí khách', key, g.url || `${g.lat},${g.lng}`);
       return { ok: true, location: rec };
     }
     if (action === 'deliver' && method === 'POST') {

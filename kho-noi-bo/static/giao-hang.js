@@ -237,7 +237,9 @@ const GiaoHang = (() => {
   }
   const locOf = r => (st.data.locations || {})[custKey(r)] || null;
   const coordText = g => `${g.lat},${g.lng}`;
-  const gpsLink = g => 'https://www.google.com/maps/search/?api=1&query=' + coordText(g);
+  // vị trí: tọa độ {lat, lng} hoặc link chia sẻ Google Maps {url} (maps.app.goo.gl/…)
+  const gpsLink = g => (g.lat != null ? 'https://www.google.com/maps/search/?api=1&query=' + coordText(g) : g.url);
+  const dirLink = g => (g.lat != null ? 'https://www.google.com/maps/dir/?api=1&destination=' + coordText(g) : g.url);
   const accText = g => (g && g.acc ? ` ±${Math.round(g.acc)}m` : '');
   function photoStrip(refs, removable) {
     return refs && refs.length ? `<div class="gh-photos">${refs.map((p, n) => `<span class="gh-ph"><img data-ref="${esc(p)}" alt="Ảnh giao hàng ${n + 1}">${removable ? `<button class="gh-ph-x" data-rm="${n}" aria-label="Bỏ ảnh">✕</button>` : ''}</span>`).join('')}</div>` : '';
@@ -259,9 +261,9 @@ const GiaoHang = (() => {
     return `<article class="gh-stop ${s ? 'is-' + s.status : ''}" data-stop="${esc(key)}">
       <div class="gh-stop-top"><span class="gh-stt">${i + 1}</span><div class="gh-stop-name"><b>${esc(r.name || r.cust)}</b>
         <div class="gh-codes">${r.crm ? `CRM <b>${esc(r.crm)}</b>` : ''}${r.code ? ` · ${esc(r.code)}` : ''}${r.q ? ` · ${esc(r.q)}` : ''}</div></div></div>
-      ${addr ? `<a class="gh-link gh-addr" href="${loc ? gpsLink(loc) : mapUrl(r)}" target="_blank" rel="noopener">📍 ${esc(addr)}</a>` : ''}
+      ${addr ? `<a class="gh-link gh-addr" href="${esc(loc ? gpsLink(loc) : mapUrl(r))}" target="_blank" rel="noopener">📍 ${esc(addr)}</a>` : ''}
       <div class="gh-locline">${loc ? `<span class="gh-badge info">📌 Đã lưu vị trí khách</span>
-        <a class="gh-link" href="https://www.google.com/maps/dir/?api=1&destination=${coordText(loc)}" target="_blank" rel="noopener">🧭 Chỉ đường</a>` : ''}
+        <a class="gh-link" href="${esc(dirLink(loc))}" target="_blank" rel="noopener">🧭 Chỉ đường</a>` : ''}
         ${panel ? '' : `<button class="gh-linkbtn" data-act="loc" data-key="${esc(key)}">${loc ? 'Sửa vị trí' : '📌 Lưu vị trí khách'}</button>`}</div>
       ${r.phone ? `<div class="gh-phones">${phoneLinks(r.phone)}</div>` : ''}
       ${r.note ? `<div class="gh-note">📝 ${esc(r.note)}</div>` : ''}
@@ -275,15 +277,13 @@ const GiaoHang = (() => {
     if (p.gps) return `<span>📍 Đã có vị trí${accText(p.gps)} · <a class="gh-link" href="${gpsLink(p.gps)}" target="_blank" rel="noopener">xem</a></span>`;
     return `<span class="gh-red">📍 ${esc(p.gpsErr || 'Chưa có vị trí')}</span>`;
   }
-  // Trang trên claude.ai thường không được đọc định vị điện thoại: lấy tọa độ ở Google Maps rồi dán vào – web tự nhận
-  function coordBox(p) {
+  // Trang trên claude.ai không được đọc định vị điện thoại: mở Google Maps tại địa chỉ khách → Chia sẻ → Sao chép đường liên kết
+  // → quay lại dán (nhận cả link maps.app.goo.gl lẫn tọa độ) – web tự lưu
+  function coordBox(p, r) {
     return `<div class="gh-coordbox">
-      <a class="gh-btn" href="https://www.google.com/maps" target="_blank" rel="noopener">🗺 Mở Google Maps lấy tọa độ</a>
-      <input class="gh-input" data-coords inputmode="decimal" autocomplete="off" placeholder="Dán tọa độ vào đây, vd 10.8812, 106.5934" value="${esc(p.coords || '')}">
-      <details class="gh-small"><summary>Cách lấy tọa độ</summary><ol>
-        <li>Bấm <b>Mở Google Maps</b>, bấm nút ◎ để hiện chấm xanh (vị trí của bạn).</li>
-        <li>Nhấn giữ vào chấm xanh (hoặc cửa hàng của khách) – ô tìm kiếm hiện số dạng <b>10.88…, 106.59…</b> – chạm vào số đó để sao chép.</li>
-        <li>Quay lại trang này, nhấn giữ vào ô trên → <b>Dán</b>. Web tự nhận.</li></ol></details>
+      <a class="gh-btn primary" href="${esc(mapUrl(r || {}))}" target="_blank" rel="noopener">🗺 Mở Google Maps</a>
+      <ol class="gh-steps"><li>Chạm vào đúng điểm cửa hàng của khách</li><li>Bấm <b>Chia sẻ</b> → <b>Sao chép đường liên kết</b></li><li>Quay lại đây, dán vào ô dưới – web tự lưu</li></ol>
+      <input class="gh-input" data-coords autocomplete="off" placeholder="Dán link Google Maps vào đây" value="${esc(p.coords || '')}">
     </div>`;
   }
   function confirmPanel(key, p, loc) {
@@ -293,8 +293,7 @@ const GiaoHang = (() => {
       ${photoStrip(p.photos, true)}
       <label class="gh-btn gh-file">📷 ${p.photos.length ? 'Chụp thêm ảnh' : (ok ? 'Chụp ảnh giao hàng' : 'Chụp ảnh (nếu có)')}<input type="file" accept="image/*" capture="environment" multiple data-pick="${esc(key)}"></label>
       ${p.uploading ? '<div class="gh-muted">Đang gửi ảnh…</div>' : ''}
-      <div class="gh-gps">${gpsLine(p)} <button class="gh-linkbtn" data-act="gps" data-key="${esc(key)}">${st.gpsBlocked ? 'Thử lấy tự động' : '↻ Lấy lại'}</button></div>
-      ${p.gps || p.gpsState === 'wait' ? '' : coordBox(p)}
+      ${st.gpsBlocked && !p.gps ? '' : `<div class="gh-gps">${gpsLine(p)} <button class="gh-linkbtn" data-act="gps" data-key="${esc(key)}">↻ Lấy lại</button></div>`}
       ${ok && p.gps && !loc ? `<label class="gh-check"><input type="checkbox" data-savloc ${p.saveLoc ? 'checked' : ''}> Lưu vị trí này làm vị trí của khách (lần sau chỉ đường thẳng tới đây)</label>` : ''}
       ${ok ? '' : `<div class="gh-reasons">${FAIL_REASONS.map(x => `<button class="gh-chip ${p.note === x ? 'on' : ''}" data-reason="${esc(x)}">${esc(x)}</button>`).join('')}</div>`}
       <input class="gh-input" data-note placeholder="${ok ? 'Ghi chú (không bắt buộc)…' : 'Lý do khác / ghi chú…'}" maxlength="200" value="${esc(p.note)}">
@@ -306,11 +305,11 @@ const GiaoHang = (() => {
     const p = st.panel;
     return `<div class="gh-panel">
       <div class="gh-panel-title">📌 Vị trí của khách</div>
-      <p class="gh-muted gh-small">Đứng tại cửa hàng của khách, lấy tọa độ rồi dán vào ô dưới – web tự lưu.</p>
-      <button class="gh-btn ${st.gpsBlocked ? '' : 'primary'}" data-act="loc-gps" data-key="${esc(key)}">📍 ${st.gpsBlocked ? 'Thử lấy vị trí tự động' : 'Dùng vị trí hiện tại'}</button>
+      <p class="gh-muted gh-small">Làm 1 lần cho mỗi khách – lần sau bấm địa chỉ hoặc 🧭 Chỉ đường là tới đúng chỗ.</p>
+      ${st.gpsBlocked ? '' : `<button class="gh-btn" data-act="loc-gps" data-key="${esc(key)}">📍 Dùng vị trí hiện tại (đang đứng tại khách)</button>`}
       ${p.gpsState === 'wait' ? '<div class="gh-muted">Đang lấy vị trí…</div>' : p.gpsErr ? `<div class="gh-red gh-small">${esc(p.gpsErr)}</div>` : ''}
-      ${coordBox(p)}
-      <div class="gh-actions"><button class="gh-btn ok" data-act="loc-save" data-key="${esc(key)}">Lưu tọa độ đã dán</button>
+      ${coordBox(p, rowByKey(key))}
+      <div class="gh-actions"><button class="gh-btn ok" data-act="loc-save" data-key="${esc(key)}">Lưu</button>
       ${loc ? `<button class="gh-btn" data-act="loc-clear" data-key="${esc(key)}">Xóa vị trí</button>` : ''}
       <button class="gh-btn" data-act="cancel" data-key="${esc(key)}">Hủy</button></div>
     </div>`;
@@ -323,9 +322,9 @@ const GiaoHang = (() => {
       const p = st.panel;
       if (!p) return;
       p.coords = inp.value;
-      const g = parseCoords(inp.value);
-      // tự nhận khi dán (hoặc đã gõ đủ tọa độ chính xác), không nhận khi đang gõ dở
-      if (!g || !(e.inputType === 'insertFromPaste' || /\d\.\d{4,}\D+-?\d{1,3}\.\d{4,}/.test(inp.value))) return;
+      const g = parseLoc(inp.value);
+      // tự nhận khi dán (hoặc đã có link / tọa độ đầy đủ), không nhận khi đang gõ dở
+      if (!g || !(e.inputType === 'insertFromPaste' || g.url || /\d\.\d{4,}\D+-?\d{1,3}\.\d{4,}/.test(inp.value))) return;
       if (p.mode === 'loc') saveLocation(p.key, g); // dán xong là lưu luôn
       else { p.gps = g; p.gpsErr = ''; toast('Đã nhận tọa độ'); redraw(); }
     });
@@ -345,10 +344,14 @@ const GiaoHang = (() => {
     const p = st.panel && st.panel.key === key ? st.panel : null;
     if (action === 'ok' || action === 'fail') {
       st.panel = { key, mode: action, photos: [], note: '', gps: null, gpsState: '', gpsErr: '', saveLoc: true };
-      redraw(); if (!st.gpsBlocked) fetchGps(st.panel); else { st.panel.gpsErr = 'Chưa có vị trí – lấy tọa độ ở Google Maps rồi dán vào ô dưới'; redraw(); }
+      redraw(); if (!st.gpsBlocked) fetchGps(st.panel); // định vị lúc giao: chỉ lấy khi điện thoại cho phép, không bắt buộc
       return;
     }
-    if (action === 'loc') { st.panel = { key, mode: 'loc', coords: '', gpsState: '', gpsErr: '' }; redraw(); return; }
+    if (action === 'loc') {
+      st.panel = { key, mode: 'loc', coords: '', gpsState: '', gpsErr: '' }; redraw();
+      const inp = $(`[data-stop="${CSS.escape(key)}"] [data-coords]`); if (inp) inp.focus({ preventScroll: true });
+      return;
+    }
     if (action === 'cancel') { st.panel = null; redraw(); return; }
     if (action === 'gps' && p) { fetchGps(p); return; }
     if (action === 'loc-gps' && p) {
@@ -357,8 +360,8 @@ const GiaoHang = (() => {
       return;
     }
     if (action === 'loc-save' && p) {
-      const g = parseCoords(p.coords);
-      if (!g) { toast('Không đọc được tọa độ. Dán dạng "10.88, 106.59" hoặc link Google Maps đầy đủ.', true); return; }
+      const g = parseLoc(p.coords);
+      if (!g) { toast('Chưa nhận ra vị trí. Trong Google Maps bấm Chia sẻ → Sao chép đường liên kết rồi dán vào ô.', true); return; }
       await saveLocation(key, g); return;
     }
     if (action === 'loc-clear' && p) {
@@ -414,7 +417,7 @@ const GiaoHang = (() => {
     if (!res) return;
     st.data.locations = Object.assign({}, st.data.locations, { [key]: res.location || g });
     if (st.panel && st.panel.mode === 'loc' && st.panel.key === key) st.panel = null;
-    toast(quiet ? 'Đã lưu vị trí khách' : 'Đã lưu vị trí khách' + accText(g));
+    toast('Đã lưu vị trí khách' + (quiet ? '' : accText(g)));
     if (!quiet) redraw();
   }
   async function fetchGps(p) {
@@ -437,6 +440,13 @@ const GiaoHang = (() => {
           : new Error(e.code === 3 ? 'Lấy vị trí quá lâu – thử lại, hoặc dán tọa độ từ Google Maps' : 'Không lấy được vị trí – dán tọa độ từ Google Maps')),
         { enableHighAccuracy: true, timeout: 15000, maximumAge: 30000 });
     });
+  }
+  // vị trí dán vào: tọa độ (kể cả trong link dài) hoặc link chia sẻ Google Maps (maps.app.goo.gl, goo.gl/maps, google.com/maps)
+  function parseLoc(s) {
+    const g = parseCoords(s);
+    if (g) return g;
+    const m = String(s || '').match(/https?:\/\/(?:maps\.app\.goo\.gl|goo\.gl\/maps|(?:www\.)?google\.[a-z.]+\/maps|maps\.google\.[a-z.]+)[^\s"'<>]*/i);
+    return m ? { url: m[0] } : null;
   }
   // "10.88, 106.59", link Google Maps (…!3d10.88!4d106.59…, …@10.88,106.59…, …?q=10.88,106.59)
   function parseCoords(s) {

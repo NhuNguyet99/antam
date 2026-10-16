@@ -1821,7 +1821,8 @@ function fillPhotos(root) {
   });
 }
 function locLink(g, label) {
-  return g && g.lat != null ? `<div><a class="small" href="https://www.google.com/maps/search/?api=1&query=${g.lat},${g.lng}" target="_blank" rel="noopener">${label}${g.acc ? ' ±' + Math.round(g.acc) + 'm' : ''}</a></div>` : '';
+  const href = g && (g.lat != null ? `https://www.google.com/maps/search/?api=1&query=${g.lat},${g.lng}` : g.url);
+  return href ? `<div><a class="small" href="${esc(href)}" target="_blank" rel="noopener">${label}${g.acc ? ' ±' + Math.round(g.acc) + 'm' : ''}</a></div>` : '';
 }
 
 /* ============================================================ Tài khoản giao hàng (web giao hàng) */
