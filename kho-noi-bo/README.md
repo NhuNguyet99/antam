@@ -167,6 +167,17 @@ Ghi chú:
 - Tên kho, dòng "Bộ phận" in trên phiếu, danh sách bên giao/nhận chỉnh riêng từng kho ở **Cài đặt & dữ liệu**;
   khổ giấy (A4/A5), tên đơn vị, nhân viên… dùng chung.
 
+## Tự chuyển phân tuyến sang Giao hàng An Tâm (bản online)
+
+Hai trang trên claude.ai có dữ liệu riêng, nên việc chuyển do một **tác vụ định kỳ** (scheduled task của Claude, mỗi giờ từ 6h–23h) làm:
+1. Web kho: bấm **💾 Lưu** ở Phân tuyến giao hàng → gói dữ liệu (bảng phân tuyến, tuyến, tài khoản người giao) được để ở `giaoout/<mã bảng>`
+   và `giaoout/index` (dữ liệu của trang kho).
+2. Tác vụ định kỳ so `giaoout/index` (kho) với `giaosent/index` (trang giao hàng); bảng nào mới thì chép `giaoout/<mã>` sang `giaoin/<mã>`
+   của trang Giao hàng An Tâm.
+3. Trang Giao hàng An Tâm (ai mở cũng được: người giao hoặc quản lý) tự nhận `giaoin/*` chưa nhận, ghi đã nhận vào `giaodone/index`.
+
+Cần gấp thì vẫn dùng **📤 Gửi ngay** (sao chép) rồi Ctrl+V ở trang Giao hàng An Tâm.
+
 ## Tài khoản nhân viên
 
 **Hệ thống › Tài khoản nhân viên**: mỗi nhân viên kho một **tên đăng nhập + mật khẩu**; phiếu, phân tuyến và **Lịch sử thao tác**

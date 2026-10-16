@@ -75,6 +75,7 @@ const Backend = (() => {
   const z = n => String(n).padStart(2, '0');
   function nowStr() { const d = new Date(); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())} ${z(d.getHours())}:${z(d.getMinutes())}:${z(d.getSeconds())}`; }
   const today = () => nowStr().slice(0, 10);
+  const addDays = (d, n) => { const t = new Date(d + 'T00:00:00'); t.setDate(t.getDate() + n); return `${t.getFullYear()}-${z(t.getMonth() + 1)}-${z(t.getDate())}`; };
   const newId = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
   const text = v => (v === null || v === undefined ? '' : String(v).trim());
   function num(v, dflt = 0) {
@@ -891,7 +892,41 @@ const Backend = (() => {
   // Chuyển dữ liệu Phân tuyến (web kho) sang trang Giao hàng An Tâm: 2 trang claude.ai không đọc dữ liệu của nhau được,
   // nên web kho đóng gói (GET) để người dùng dán vào trang giao hàng (POST).
   const SYNC_FORMAT = 'antam-giao-sync';
-  async function giaoSync(method, q, body) {
+  // Tự chuyển phân tuyến: web kho để gói dữ liệu ở "giaoout" (dữ liệu của trang kho); tác vụ định kỳ chép sang "giaoin"
+  // của trang Giao hàng An Tâm; trang giao hàng tự nhận khi có người mở (ghi đã nhận vào "giaodone/index").
+  const srcOf = v => text(v).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40) || 'x';
+  async function giaoOutbox(q) {
+    const pkg = await giaoSync('GET', q, {});
+    const src = srcOf(pkg.src);
+    const stamp = nowStr() + ' ' + randHex(3);
+    await write(() => dbx().doc('giaoout/' + src).set({ stamp, date: pkg.date, pkg }));
+    const idx = docData(await dbx().doc('giaoout/index').get()) || { s: {} };
+    const s_ = Object.assign({}, idx.s || {});
+    const old = addDays(today(), -7);
+    for (const [k, e] of Object.entries(s_)) if (e && e.date < old) { s_[k] = null; await write(() => dbx().doc('giaoout/' + k).delete()).catch(() => {}); }
+    s_[src] = { stamp, date: pkg.date, rows: (pkg.doc.data.rows || []).length, at: nowStr() };
+    await mergeInto(dbx().doc('giaoout/index'), { s: s_ }, { s: {} });
+    return { ok: true, stamp, src };
+  }
+  async function giaoInbox() {
+    await ensureGiaoData();
+    const snap = await dbx().collection('giaoin').limit(100).get();
+    const done = (docData(await dbx().doc('giaodone/index').get()) || {}).s || {};
+    const got = [];
+    for (const d of snap.docs) {
+      const x = d.data() || {};
+      if (!x.pkg || !x.stamp || done[d.id] === x.stamp) continue;
+      try {
+        const r = await giaoSync('POST', {}, x.pkg);
+        await mergeInto(dbx().doc('giaodone/index'), { s: { [d.id]: x.stamp } }, { s: {} });
+        got.push(r);
+      } catch (e) { console.warn('giaoin', d.id, e); }
+    }
+    return { got };
+  }
+  async function giaoSync(method, q, body, arg) {
+    if (arg === 'out' && method === 'POST') return giaoOutbox(q);
+    if (arg === 'inbox' && method === 'POST') return giaoInbox();
     if (method === 'GET') {
       const doc = (st.docs.TP || {})[q.id];
       if (!doc || doc.kind !== 'routing') throw new ApiError(404, 'Không tìm thấy bảng phân tuyến (hãy Lưu trước).');
@@ -916,7 +951,7 @@ const Backend = (() => {
       await write(() => ref.routes().set({ r: routes }));
       st.routes = routes;
       // mỗi bảng phân tuyến của web kho (tuyến lẻ, tuyến 1-2-3…) là 1 bảng ở đây; gửi lại cùng bảng thì thay bản cũ
-      const src = text(body.src).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40) || 'x';
+      const src = srcOf(body.src);
       const id = `rt-${d}-${src}`;
       const old = (st.docs.TP || {})[id];
       const rec = { kind: 'routing', date: d, src, title: text(body.doc.title), data: body.doc.data, created_at: old ? old.created_at : nowStr(), updated_at: nowStr() };
@@ -1066,7 +1101,7 @@ const Backend = (() => {
     // đã có tài khoản nhân viên: người chưa đăng nhập được coi như nhân viên thường (phiếu điều chỉnh phải chờ duyệt)
     const hasStaff = live(settings().staff_accounts).length > 0;
     const me = hasStaff ? (staffMe(opts.token || '') || ['', {}]) : null;
-    if (res === 'giao-sync') return giaoSync(method, q, body || {});
+    if (res === 'giao-sync') return giaoSync(method, q, body || {}, arg);
     if (res === 'drivers') {
       if (method === 'GET') return Object.entries(drivers()).map(([k, d]) => publicDriver(k, d));
       if (method === 'POST') return saveDriver(body || {});

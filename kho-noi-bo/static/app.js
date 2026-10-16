@@ -1725,14 +1725,14 @@ async function viewRouting(main, m) {
           <div class="small muted">${code in d.assign ? 'chọn cho ngày này' : routeDriver(code) ? 'tuyến thường chạy' : ''}</div>` : ''}</td>
         <td class="num">${rows.length}</td>${GIAO_LINKED ? '' : `<td class="num">${ok || bad ? `<b>${ok}</b>/${rows.length}${bad ? ` <span class="badge bad">${bad} không giao được</span>` : ''}` : ''}</td>`}${usedCols.map(k => `<td class="num">${fmtBlank0(s[k])}</td>`).join('')}</tr>`; }).join('')}
       <tr class="sum"><td>Cộng</td><td></td><td class="num">${d.rows.length}</td>${GIAO_LINKED ? '' : `<td class="num">${fmtBlank0(d.rows.filter(r => (delivOf(r) || {}).status === 'ok').length)}</td>`}${usedCols.map(k => `<td class="num">${fmtBlank0(sumQty(d.rows)[k])}</td>`).join('')}</tr></tbody></table></div>
-      ${GIAO_LINKED ? '<p class="hint">Bấm <b>💾 Lưu</b> là dữ liệu được sao chép để gửi sang <b>Giao hàng An Tâm</b> (sang tab đó bấm Ctrl+V); sửa phân tuyến thì Lưu lại là gửi lại. Kết quả giao (ảnh, vị trí) xem ở trang Giao hàng An Tâm.</p>'
+      ${GIAO_LINKED ? '<p class="hint">Bấm <b>💾 Lưu</b> là phân tuyến <b>tự chuyển sang Giao hàng An Tâm</b> (trong khoảng 1 giờ, không cần làm gì thêm); sửa phân tuyến thì Lưu lại là tự gửi lại. Cần gấp: bấm <b>📤 Gửi ngay</b> rồi Ctrl+V ở tab Giao hàng An Tâm. Kết quả giao (ảnh, vị trí) xem ở trang Giao hàng An Tâm.</p>'
         : drivers.length ? '<p class="hint">Người giao xem tuyến của mình trên <b>web giao hàng</b> sau khi bấm <b>Lưu</b>, và bấm "Đã giao" – cột Đã giao cập nhật khi mở lại trang này (hoặc bấm ↻ Kết quả giao).</p>'
         : '<p class="hint">Chưa có tài khoản giao hàng – tạo ở <a href="#/giao-hang-tk">Danh mục › Tài khoản giao hàng</a> để mỗi người giao xem tuyến của mình trên điện thoại.</p>'}
       <div class="toolbar" style="margin-top:14px"><label class="field">Xem<select id="rt-filter">${options([['', 'Tất cả khách'], ['-', 'Chưa có tuyến']].concat(gs.filter(g => g[0]).map(g => [g[0], `${g[0]} – ${rName(g[0])} (${g[1].length})`])), ui.filter)}</select></label>
       <label class="field">Tìm khách<input id="rt-search" value="${esc(ui.search)}" placeholder="mã, tên, địa chỉ…"></label></div>
       <div class="table-wrap"><table class="data"><thead><tr><th>STT</th><th>Quận</th><th>Mã CRM</th><th>Khách hàng</th><th>Địa chỉ</th><th>SĐT</th><th>Ghi chú</th><th>Số lượng</th><th style="width:170px">Tuyến</th></tr></thead><tbody id="rt-rows"></tbody></table></div>
       <div class="form-actions"><button class="btn primary" id="rt-save">💾 Lưu</button><button class="btn" id="rt-print">🖨 In danh sách giao theo tuyến</button>
-      <button class="btn" id="rt-print-sum">🖨 In tổng hợp tuyến</button><button class="btn" id="rt-csv">⬇ Tải danh sách mã CRM (Excel)</button>${doc.id ? (GIAO_LINKED ? '<button class="btn" id="rt-send">📤 Gửi lại sang Giao hàng An Tâm</button>' : '<button class="btn" id="rt-deliv">↻ Kết quả giao</button>') : ''}${doc.id ? '<button class="btn danger" id="rt-del">Xóa</button>' : ''}<a class="btn ghost" href="#/phan-tuyen">← Danh sách</a></div>`;
+      <button class="btn" id="rt-print-sum">🖨 In tổng hợp tuyến</button><button class="btn" id="rt-csv">⬇ Tải danh sách mã CRM (Excel)</button>${doc.id ? (GIAO_LINKED ? '<button class="btn" id="rt-send" title="Không chờ tự chuyển: sao chép rồi dán ở tab Giao hàng An Tâm">📤 Gửi ngay sang Giao hàng An Tâm</button>' : '<button class="btn" id="rt-deliv">↻ Kết quả giao</button>') : ''}${doc.id ? '<button class="btn danger" id="rt-del">Xóa</button>' : ''}<a class="btn ghost" href="#/phan-tuyen">← Danh sách</a></div>`;
     $$('tr[data-g]', box).forEach(tr => tr.onclick = e => { if (e.target.closest('select')) return; ui.filter = tr.dataset.g || '-'; $('#rt-filter').value = ui.filter; drawRows(); });
     $$('select[data-assign]', box).forEach(sel => sel.onchange = () => { d.assign[sel.dataset.assign] = sel.value; markDirty(); const y = window.scrollY; drawBody(); window.scrollTo(0, y); });
     $('#rt-filter').onchange = () => { ui.filter = $('#rt-filter').value; drawRows(); };
@@ -1788,6 +1788,12 @@ async function viewRouting(main, m) {
   // Gửi bảng phân tuyến (đã lưu) + tài khoản người giao + danh mục tuyến sang trang Giao hàng An Tâm: sao chép rồi dán bên đó
   async function sendToGiao(afterSave) {
     if (S.dirty) return toast('Bấm 💾 Lưu trước rồi mới gửi', true);
+    // để sẵn gói dữ liệu cho tác vụ tự chuyển sang Giao hàng An Tâm
+    const out = await guard(() => api('POST', '/giao-sync/out?id=' + encodeURIComponent(doc.id)));
+    if (afterSave) {
+      if (out) toast('Đã lưu – phân tuyến sẽ tự chuyển sang Giao hàng An Tâm (trong khoảng 1 giờ). Cần gấp: bấm 📤 Gửi ngay.');
+      return;
+    }
     const pkg = await guard(() => api('GET', '/giao-sync?id=' + encodeURIComponent(doc.id)));
     if (!pkg) return;
     const text = JSON.stringify(pkg);
@@ -1801,8 +1807,7 @@ async function viewRouting(main, m) {
         <ol style="margin:0 0 12px;padding-left:20px;line-height:1.7"><li>Sang tab <a href="${esc(GIAO_URL)}" target="_blank" rel="noopener"><b>Giao hàng An Tâm ↗</b></a> (đang ở phần quản lý).</li>
         <li>Bấm <kbd>Ctrl</kbd>+<kbd>V</kbd> – trang tự nhận và báo "Đã nhận phân tuyến".</li>
         <li>Người giao bấm ↻ trên điện thoại (hoặc mở lại trang) là thấy tuyến mới.</li></ol>
-        <p class="hint" style="margin:0 0 8px">Mẹo: để sẵn một tab Giao hàng An Tâm (phần quản lý) cạnh tab web kho – mỗi lần Lưu chỉ cần chuyển tab và Ctrl+V.
-        Hai trang trên claude.ai không ghi được dữ liệu của nhau nên cần bước dán này.</p>
+        <p class="hint" style="margin:0 0 8px">Không dán cũng được: phân tuyến đã lưu sẽ tự chuyển sang Giao hàng An Tâm trong khoảng 1 giờ. Dán chỉ khi cần người giao thấy ngay.</p>
         <textarea id="gs-text" rows="4" readonly style="width:100%;font:12px ui-monospace,monospace">${esc(text)}</textarea>
         <div class="toolbar" style="margin-top:8px"><button class="btn sm" id="gs-copy">Sao chép lại</button><button class="btn sm" id="gs-file">⬇ Tải file (.json)</button></div>`,
     });
@@ -1929,10 +1934,10 @@ async function viewDrivers(main) {
       <b>Không giao được</b> và kho thấy kết quả ở bảng phân tuyến.<br>Tuyến của mỗi người = <b>tuyến thường chạy</b> dưới đây; ngày nào đổi người thì chọn lại ở cột
       <b>Người giao</b> trong phân tuyến của ngày đó.</div>
       ${GIAO_APP ? `<div class="callout small">Tài khoản người giao được <b>tạo / sửa / khóa ở web Kho An Tâm › Tài khoản giao hàng</b> và cập nhật sang đây mỗi lần kho
-        <b>Gửi phân tuyến</b>. Người giao chỉ được mời vào trang Giao hàng An Tâm này (email, quyền <b>Editor</b>, tắt "Anyone with the link") – không mời họ vào web Kho An Tâm.</div>`
+        <b>Lưu phân tuyến</b> (tự chuyển sang, trong khoảng 1 giờ). Người giao chỉ được mời vào trang Giao hàng An Tâm này (email, quyền <b>Editor</b>, tắt "Anyone with the link") – không mời họ vào web Kho An Tâm.</div>`
       : GIAO_LINKED ? `<div class="callout small">Người giao dùng trang riêng <a href="${esc(GIAO_URL)}" target="_blank" rel="noopener"><b>Giao hàng An Tâm ↗</b></a> – mời họ vào trang đó
-        (email, quyền <b>Editor</b>, tắt "Anyone with the link"), <b>không mời vào web Kho An Tâm</b>. Tài khoản tạo / sửa ở đây được chuyển sang khi bấm
-        <b>📤 Gửi sang Giao hàng An Tâm</b> trong Phân tuyến giao hàng; kết quả giao, ảnh và vị trí xem ở trang Giao hàng An Tâm.</div>`
+        (email, quyền <b>Editor</b>, tắt "Anyone with the link"), <b>không mời vào web Kho An Tâm</b>. Tài khoản tạo / sửa ở đây tự chuyển sang mỗi lần
+        <b>Lưu</b> bảng Phân tuyến giao hàng (trong khoảng 1 giờ); kết quả giao, ảnh và vị trí xem ở trang Giao hàng An Tâm.</div>`
       : ONLINE ? `<div class="callout small">Người giao hàng chỉ được mời vào <b>trang Giao hàng An Tâm này</b> – <b>không mời họ vào web Kho An Tâm</b>.
         Mời bằng <b>email</b> ở nút <i>Share</i> của trang, chọn quyền <b>Editor</b> (quyền Viewer/Commenter không bấm được "Đã giao" hay gửi ảnh), và để
         <i>General access</i> ở chế độ <b>chỉ người được mời</b> (tắt "Anyone with the link").
@@ -2563,10 +2568,20 @@ async function bootGiaoApp() {
   document.body.classList.add('gh-mode');
   giaoRoot().innerHTML = '<p style="padding:20px;font-family:sans-serif">Đang kết nối dữ liệu…</p>';
   try { await Backend.init(); } catch (e) { giaoRoot().innerHTML = `<p style="padding:20px">Không kết nối được dữ liệu: ${esc(e.message)}</p>`; return; }
+  await pullGiaoInbox();
+  setInterval(pullGiaoInbox, 120000);
   if (store('mode') === 'giao') return startDriverMode();
   const tok = store(ADMIN_KEY);
   if (tok && (await api('POST', '/admin/check', { token: tok }).catch(() => ({}))).ok) return enterAdmin();
   return showGiaoStart();
+}
+// Nhận phân tuyến web kho gửi tự động (tác vụ định kỳ chép vào "giaoin" của trang này)
+async function pullGiaoInbox() {
+  const r = await api('POST', '/giao-sync/inbox').catch(e => { console.warn('giaoin', e); return null; });
+  if (!r || !r.got.length) return;
+  const days = [...new Set(r.got.map(g => vnDate(g.date)))].join(', ');
+  if (store('mode') === 'giao' && window.GiaoHang) GiaoHang.onRemoteChange();
+  else { toast(`Đã tự nhận phân tuyến từ web kho: ngày ${days}`); if (S.meta) { await loadMeta(); render(); } }
 }
 function startDriverMode() {
   store('mode', 'giao');
@@ -2619,8 +2634,8 @@ async function viewGiaoImport(main) {
   const list = await api('GET', '/docs?kind=routing');
   let pasted = '';
   main.innerHTML = `<div class="card"><h3>Dán dữ liệu phân tuyến</h3>
-      <p class="small" style="margin-top:0">Ở web <b>Kho An Tâm › Phân tuyến giao hàng</b> bấm <b>💾 Lưu</b> (dữ liệu tự được sao chép), rồi sang trang này bấm
-      <kbd>Ctrl</kbd>+<kbd>V</kbd> – trang tự nhận. Gửi lại cùng ngày sẽ thay bảng cũ của ngày đó (kết quả đã giao vẫn giữ).</p>
+      <p class="small" style="margin-top:0"><b>Tự động:</b> phân tuyến lưu ở web <b>Kho An Tâm › Phân tuyến giao hàng</b> tự chuyển sang trang này trong khoảng 1 giờ – không cần làm gì.
+      <br><b>Cần ngay:</b> ở web kho bấm <b>📤 Gửi ngay</b>, rồi sang trang này bấm <kbd>Ctrl</kbd>+<kbd>V</kbd> – trang tự nhận. Gửi lại cùng ngày sẽ thay bảng cũ của ngày đó (kết quả đã giao vẫn giữ).</p>
       <textarea id="im-text" rows="3" placeholder="Bấm vào đây rồi Ctrl+V…" style="width:100%"></textarea>
       <div class="toolbar" style="margin-top:8px"><button class="btn primary" id="im-go">📥 Nhận dữ liệu</button>
       <label class="field">hoặc chọn file .json đã tải<input type="file" id="im-file" accept=".json,application/json"></label></div>
