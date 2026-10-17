@@ -1,0 +1,444 @@
+<!doctype html>
+<html lang="vi">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Báo cáo khu vực bếp – An Tâm Cuisine</title>
+<style>
+  :root {
+    --brand: #7a1020;
+    --brand-soft: #f6e9ea;
+    --gold: #b88a2e;
+    --bg: #faf6ef;
+    --paper: #ffffff;
+    --ink: #2a2222;
+    --muted: #6b5f5f;
+    --line: #e2d8cc;
+    --ok: #2f7d4f;
+    --bad: #b42318;
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0;
+    background: var(--bg);
+    color: var(--ink);
+    font: 15px/1.5 "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+  }
+  .page {
+    max-width: 1000px;
+    margin: 24px auto;
+    padding: 32px;
+    background: var(--paper);
+    border: 1px solid var(--line);
+    border-radius: 12px;
+  }
+  header {
+    display: flex;
+    justify-content: space-between;
+    align-items: flex-end;
+    gap: 16px;
+    flex-wrap: wrap;
+    border-bottom: 3px solid var(--brand);
+    padding-bottom: 16px;
+    margin-bottom: 24px;
+  }
+  .brand { color: var(--brand); font-weight: 700; letter-spacing: .04em; font-size: 14px; }
+  .brand small { display: block; color: var(--gold); font-weight: 500; letter-spacing: 0; }
+  h1 { margin: 4px 0 0; font-size: 24px; color: var(--brand); text-transform: uppercase; }
+  .subtitle { color: var(--muted); font-size: 14px; }
+  .doc-meta { font-size: 13px; color: var(--muted); text-align: right; }
+  h2 {
+    font-size: 16px;
+    color: var(--brand);
+    margin: 28px 0 12px;
+    padding-left: 10px;
+    border-left: 4px solid var(--gold);
+    text-transform: uppercase;
+  }
+  .grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 12px 16px; }
+  label { display: block; font-size: 13px; color: var(--muted); margin-bottom: 4px; }
+  input, textarea {
+    width: 100%;
+    font: inherit;
+    color: inherit;
+    padding: 6px 8px;
+    border: 1px solid var(--line);
+    border-radius: 6px;
+    background: #fff;
+  }
+  input:focus, textarea:focus { outline: 2px solid var(--gold); outline-offset: 0; border-color: var(--gold); }
+  textarea { min-height: 80px; resize: vertical; }
+  .table-wrap { overflow-x: auto; }
+  table { width: 100%; border-collapse: collapse; font-size: 14px; }
+  th, td { border: 1px solid var(--line); padding: 6px; vertical-align: middle; }
+  th { background: var(--brand); color: #fff; font-weight: 600; text-align: center; font-size: 13px; }
+  th .op { display: block; font-size: 16px; color: #f3d48a; line-height: 1; }
+  td input { border-color: transparent; background: transparent; padding: 4px; }
+  td input:hover { border-color: var(--line); }
+  .num { text-align: right; font-variant-numeric: tabular-nums; }
+  td.calc { background: var(--brand-soft); font-weight: 600; text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+  td.key { background: #fdf3dc; }
+  tfoot td { font-weight: 700; background: #fbf7f0; text-align: right; font-variant-numeric: tabular-nums; }
+  .center { text-align: center; }
+  .product small { color: var(--muted); }
+  .summary { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; margin-top: 12px; }
+  .stat { border: 1px solid var(--line); border-radius: 8px; padding: 10px 12px; }
+  .stat b { display: block; font-size: 20px; color: var(--brand); font-variant-numeric: tabular-nums; }
+  .stat span { font-size: 12px; color: var(--muted); }
+  .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 12px; font-weight: 600; }
+  .badge.ok { background: #e3f3e9; color: var(--ok); }
+  .badge.bad { background: #fde8e7; color: var(--bad); }
+  .btn {
+    font: inherit; font-size: 14px; cursor: pointer;
+    padding: 8px 14px; border-radius: 6px; border: 1px solid var(--brand);
+    background: var(--brand); color: #fff;
+  }
+  .btn.ghost { background: #fff; color: var(--brand); }
+  .btn.small { padding: 4px 10px; font-size: 13px; }
+  .btn.icon { padding: 2px 8px; border-color: var(--line); background: #fff; color: var(--muted); }
+  .toolbar { display: flex; gap: 8px; flex-wrap: wrap; justify-content: flex-end; margin-bottom: 16px; }
+  .hint { font-size: 12px; color: var(--muted); margin-top: 6px; }
+  .signatures { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; text-align: center; margin-top: 12px; }
+  .signatures .role { font-weight: 700; }
+  .signatures .note { font-size: 12px; color: var(--muted); font-style: italic; }
+  .signatures .space { height: 72px; }
+  footer { margin-top: 28px; padding-top: 12px; border-top: 1px solid var(--line); font-size: 12px; color: var(--muted); text-align: center; }
+
+  @media (max-width: 640px) {
+    .page { margin: 0; padding: 16px; border-radius: 0; border: 0; }
+    .doc-meta { text-align: left; }
+    .signatures { grid-template-columns: 1fr; }
+  }
+  @media print {
+    @page { size: A4; margin: 12mm; }
+    body { background: #fff; font-size: 12px; }
+    .page { margin: 0; padding: 0; border: 0; max-width: none; }
+    .no-print { display: none !important; }
+    th { background: #eee !important; color: #000 !important; -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+    th .op { color: #000 !important; }
+    td.calc, td.key { background: #f5f5f5 !important; }
+    input, textarea { border: 0 !important; padding: 0 2px; }
+    textarea { min-height: 0; resize: none; }
+    section { break-inside: avoid; }
+  }
+</style>
+</head>
+<body>
+<div class="page">
+
+  <div class="toolbar no-print">
+    <button type="button" class="btn ghost" id="btn-new-day" title="Tồn thực tế cuối ngày hôm nay được chuyển thành tồn đầu ngày của báo cáo mới">Lập báo cáo ngày tiếp theo</button>
+    <button type="button" class="btn ghost" id="btn-reset">Xóa trắng</button>
+    <button type="button" class="btn" onclick="window.print()">In / Lưu PDF</button>
+  </div>
+
+  <header>
+    <div>
+      <div class="brand">AN TÂM CUISINE<small>Tận tâm sản phẩm – Vững bước phát triển</small></div>
+      <h1>Báo cáo khu vực bếp</h1>
+      <div class="subtitle">Tồn đầu ngày · Sản xuất · Hàng xuất đi · Tồn bàn giao cuối ngày</div>
+    </div>
+    <div class="doc-meta">
+      Mẫu: BC-BEP-01<br>
+      134/56 Hiệp Thành 45, P. Tân Thới Hiệp, TP.HCM
+    </div>
+  </header>
+
+  <form id="report" autocomplete="off">
+
+    <!-- I. THÔNG TIN CHUNG -->
+    <section>
+      <h2>I. Thông tin chung</h2>
+      <div class="grid">
+        <div><label for="ngay">Ngày báo cáo</label><input type="date" id="ngay" name="ngay"></div>
+        <div><label for="nguoi-lap">Người lập báo cáo</label><input id="nguoi-lap" name="nguoi_lap"></div>
+        <div><label for="nguoi-giao">Người bàn giao</label><input id="nguoi-giao" name="nguoi_giao"></div>
+        <div><label for="nguoi-nhan">Người nhận bàn giao</label><input id="nguoi-nhan" name="nguoi_nhan"></div>
+      </div>
+    </section>
+
+    <!-- II. TỔNG HỢP NHẬP – XUẤT – TỒN -->
+    <section>
+      <h2>II. Tổng hợp tồn – sản xuất – xuất (đơn vị: túi 15 vỏ)</h2>
+      <div class="table-wrap">
+        <table id="tbl-ton">
+          <thead>
+            <tr>
+              <th style="min-width:160px">Sản phẩm</th>
+              <th>Tồn đầu ngày</th>
+              <th><span class="op">+</span>Sản xuất trong ngày</th>
+              <th><span class="op">−</span>Hàng xuất đi</th>
+              <th><span class="op">−</span>Lỗi / hủy</th>
+              <th><span class="op">=</span>Tồn cuối ngày (sổ sách)</th>
+              <th>Tồn thực tế bàn giao</th>
+              <th>Chênh lệch</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr data-sp="25">
+              <td class="product">Vỏ taco 25cm<br><small>Túi 15 vỏ · 75.600đ</small></td>
+              <td><input type="number" min="0" name="ton_dau_25" class="num"></td>
+              <td><input type="number" min="0" name="sx_25" class="num"></td>
+              <td class="calc" data-out="xuat">0</td>
+              <td><input type="number" min="0" name="huy_25" class="num"></td>
+              <td class="calc" data-out="so_sach">–</td>
+              <td class="key"><input type="number" min="0" name="ton_tt_25" class="num"></td>
+              <td class="calc" data-out="lech">–</td>
+            </tr>
+            <tr data-sp="28">
+              <td class="product">Vỏ taco 28cm<br><small>Túi 15 vỏ · 86.400đ</small></td>
+              <td><input type="number" min="0" name="ton_dau_28" class="num"></td>
+              <td><input type="number" min="0" name="sx_28" class="num"></td>
+              <td class="calc" data-out="xuat">0</td>
+              <td><input type="number" min="0" name="huy_28" class="num"></td>
+              <td class="calc" data-out="so_sach">–</td>
+              <td class="key"><input type="number" min="0" name="ton_tt_28" class="num"></td>
+              <td class="calc" data-out="lech">–</td>
+            </tr>
+          </tbody>
+          <tfoot>
+            <tr>
+              <td style="text-align:left">Tổng cộng</td>
+              <td id="t-dau">0</td><td id="t-sx">0</td><td id="t-xuat">0</td><td id="t-huy">0</td>
+              <td id="t-so-sach">0</td><td id="t-tt">0</td><td id="t-lech">–</td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <p class="hint">
+        Tồn cuối ngày (sổ sách) = Tồn đầu + Sản xuất − Xuất đi − Lỗi/hủy. Cột “Hàng xuất đi” tự cộng từ bảng chi tiết ở mục III.
+        Chênh lệch = Tồn thực tế kiểm đếm − Tồn sổ sách (âm là thiếu hàng, dương là dư hàng).
+      </p>
+      <p>Đối chiếu tồn: <span id="doi-chieu" class="badge">Chưa kiểm đếm</span></p>
+    </section>
+
+    <!-- III. CHI TIẾT HÀNG XUẤT ĐI -->
+    <section>
+      <h2>III. Chi tiết hàng đã xuất đi</h2>
+      <div class="table-wrap">
+        <table id="tbl-xuat">
+          <thead>
+            <tr>
+              <th style="width:40px">STT</th>
+              <th style="width:90px">Giờ xuất</th>
+              <th style="min-width:180px">Khách hàng / nơi nhận</th>
+              <th style="min-width:90px">Số phiếu</th>
+              <th>25cm<br>(túi)</th>
+              <th>28cm<br>(túi)</th>
+              <th>Thành tiền<br>(VND)</th>
+              <th style="min-width:120px">Ghi chú</th>
+              <th class="no-print"></th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+          <tfoot>
+            <tr>
+              <td colspan="4" style="text-align:left">Tổng hàng xuất</td>
+              <td id="x-25">0</td><td id="x-28">0</td><td id="x-tien">0</td><td colspan="2"></td>
+            </tr>
+          </tfoot>
+        </table>
+      </div>
+      <p class="no-print" style="margin-top:8px"><button type="button" class="btn ghost small" id="btn-add-xuat">+ Thêm lượt xuất</button></p>
+      <p class="hint">Thành tiền tính theo giá bán lẻ, chưa gồm phí vận chuyển.</p>
+    </section>
+
+    <!-- IV. TÓM TẮT -->
+    <section>
+      <h2>IV. Tóm tắt trong ngày</h2>
+      <div class="summary">
+        <div class="stat"><b id="s-dau">0</b><span>Tồn đầu ngày (túi)</span></div>
+        <div class="stat"><b id="s-sx">0</b><span>Sản xuất (túi)</span></div>
+        <div class="stat"><b id="s-xuat">0</b><span>Đã xuất đi (túi)</span></div>
+        <div class="stat"><b id="s-tt">0</b><span>Tồn bàn giao cuối ngày (túi)</span></div>
+        <div class="stat"><b id="s-tien">0</b><span>Giá trị hàng xuất (VND)</span></div>
+      </div>
+    </section>
+
+    <!-- V. GHI CHÚ BÀN GIAO -->
+    <section>
+      <h2>V. Ghi chú bàn giao</h2>
+      <div class="grid" style="grid-template-columns:1fr">
+        <div><label for="ly-do-lech">Giải trình chênh lệch / hàng lỗi, hủy</label><textarea id="ly-do-lech" name="ly_do_lech"></textarea></div>
+        <div><label for="ban-giao">Lưu ý cho ngày hôm sau (đơn hàng chờ xuất, kế hoạch sản xuất…)</label><textarea id="ban-giao" name="ban_giao"></textarea></div>
+      </div>
+    </section>
+
+    <!-- VI. KÝ XÁC NHẬN -->
+    <section>
+      <h2>VI. Xác nhận</h2>
+      <div class="signatures">
+        <div><div class="role">Người lập báo cáo</div><div class="note">(Ký, ghi rõ họ tên)</div><div class="space"></div></div>
+        <div><div class="role">Người bàn giao</div><div class="note">(Ký, ghi rõ họ tên)</div><div class="space"></div></div>
+        <div><div class="role">Người nhận bàn giao</div><div class="note">(Ký, ghi rõ họ tên)</div><div class="space"></div></div>
+      </div>
+    </section>
+  </form>
+
+  <footer>
+    An Tâm Cuisine · Hotline 0398 431 300 – 0348 635 222
+    <span class="no-print"> · Dữ liệu đang nhập được lưu tạm trên trình duyệt này.</span>
+  </footer>
+</div>
+
+<script>
+(function () {
+  const STORAGE_KEY = "antam-bao-cao-bep-v2";
+  const PRICE = { 25: 75600, 28: 86400 };
+  const form = document.getElementById("report");
+  const xuatBody = document.querySelector("#tbl-xuat tbody");
+  const fmt = new Intl.NumberFormat("vi-VN");
+  const $ = id => document.getElementById(id);
+
+  function esc(s) {
+    return String(s).replace(/[&<>"]/g, c => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+  }
+  const num = el => {
+    const v = parseFloat(el && el.value);
+    return Number.isFinite(v) ? v : null;
+  };
+  const signed = v => (v > 0 ? "+" : "") + fmt.format(v);
+
+  function addXuatRow(row = {}) {
+    const tr = document.createElement("tr");
+    tr.innerHTML =
+      `<td class="center" data-out="stt"></td>` +
+      `<td><input data-k="gio" type="time" value="${esc(row.gio || "")}"></td>` +
+      `<td><input data-k="khach" value="${esc(row.khach || "")}"></td>` +
+      `<td><input data-k="phieu" value="${esc(row.phieu || "")}"></td>` +
+      `<td><input data-k="q25" type="number" min="0" class="num" value="${esc(row.q25 || "")}"></td>` +
+      `<td><input data-k="q28" type="number" min="0" class="num" value="${esc(row.q28 || "")}"></td>` +
+      `<td class="calc" data-out="tien">–</td>` +
+      `<td><input data-k="ghichu" value="${esc(row.ghichu || "")}"></td>` +
+      `<td class="no-print center"><button type="button" class="btn icon" title="Xóa dòng">✕</button></td>`;
+    tr.querySelector("button").addEventListener("click", () => { tr.remove(); recalc(); save(); });
+    xuatBody.appendChild(tr);
+    return tr;
+  }
+
+  function recalc() {
+    // III. Chi tiết xuất
+    const xuat = { 25: 0, 28: 0 };
+    let tien = 0;
+    [...xuatBody.rows].forEach((tr, i) => {
+      tr.querySelector('[data-out="stt"]').textContent = i + 1;
+      const q25 = num(tr.querySelector('[data-k="q25"]')) || 0;
+      const q28 = num(tr.querySelector('[data-k="q28"]')) || 0;
+      const t = q25 * PRICE[25] + q28 * PRICE[28];
+      tr.querySelector('[data-out="tien"]').textContent = (q25 || q28) ? fmt.format(t) : "–";
+      xuat[25] += q25; xuat[28] += q28; tien += t;
+    });
+    $("x-25").textContent = fmt.format(xuat[25]);
+    $("x-28").textContent = fmt.format(xuat[28]);
+    $("x-tien").textContent = fmt.format(tien);
+
+    // II. Tổng hợp tồn
+    const tot = { dau: 0, sx: 0, xuat: 0, huy: 0, soSach: 0, tt: 0, lech: 0 };
+    let daDem = 0, coLech = false;
+    document.querySelectorAll("#tbl-ton tbody tr").forEach(tr => {
+      const sp = tr.dataset.sp;
+      const dau = num(form.elements["ton_dau_" + sp]) || 0;
+      const sx = num(form.elements["sx_" + sp]) || 0;
+      const huy = num(form.elements["huy_" + sp]) || 0;
+      const tt = num(form.elements["ton_tt_" + sp]);
+      const soSach = dau + sx - xuat[sp] - huy;
+      tr.querySelector('[data-out="xuat"]').textContent = fmt.format(xuat[sp]);
+      const ss = tr.querySelector('[data-out="so_sach"]');
+      ss.textContent = fmt.format(soSach);
+      ss.style.color = soSach < 0 ? "var(--bad)" : "";
+      const lechEl = tr.querySelector('[data-out="lech"]');
+      if (tt === null) {
+        lechEl.textContent = "–"; lechEl.style.color = "";
+      } else {
+        const lech = tt - soSach;
+        lechEl.textContent = signed(lech);
+        lechEl.style.color = lech === 0 ? "var(--ok)" : "var(--bad)";
+        daDem++; tot.tt += tt; tot.lech += lech;
+        if (lech !== 0) coLech = true;
+      }
+      tot.dau += dau; tot.sx += sx; tot.xuat += xuat[sp]; tot.huy += huy; tot.soSach += soSach;
+    });
+    $("t-dau").textContent = fmt.format(tot.dau);
+    $("t-sx").textContent = fmt.format(tot.sx);
+    $("t-xuat").textContent = fmt.format(tot.xuat);
+    $("t-huy").textContent = fmt.format(tot.huy);
+    $("t-so-sach").textContent = fmt.format(tot.soSach);
+    $("t-tt").textContent = fmt.format(tot.tt);
+    $("t-lech").textContent = daDem ? signed(tot.lech) : "–";
+
+    const badge = $("doi-chieu");
+    if (!daDem) { badge.className = "badge"; badge.textContent = "Chưa kiểm đếm"; }
+    else if (coLech) { badge.className = "badge bad"; badge.textContent = "Có chênh lệch – cần giải trình ở mục V"; }
+    else if (daDem < 2) { badge.className = "badge"; badge.textContent = "Còn sản phẩm chưa kiểm đếm"; }
+    else { badge.className = "badge ok"; badge.textContent = "Khớp sổ sách"; }
+
+    // IV. Tóm tắt
+    $("s-dau").textContent = fmt.format(tot.dau);
+    $("s-sx").textContent = fmt.format(tot.sx);
+    $("s-xuat").textContent = fmt.format(tot.xuat);
+    $("s-tt").textContent = daDem ? fmt.format(tot.tt) : "–";
+    $("s-tien").textContent = fmt.format(tien);
+  }
+
+  function collect() {
+    const data = {};
+    form.querySelectorAll("[name]").forEach(el => { data[el.name] = el.value; });
+    data._xuat = [...xuatBody.rows].map(tr => {
+      const row = {};
+      tr.querySelectorAll("[data-k]").forEach(el => { row[el.dataset.k] = el.value; });
+      return row;
+    });
+    return data;
+  }
+
+  function save() {
+    try { localStorage.setItem(STORAGE_KEY, JSON.stringify(collect())); } catch (e) { /* lưu tạm không khả dụng */ }
+  }
+
+  function apply(data) {
+    form.querySelectorAll("[name]").forEach(el => { el.value = data[el.name] != null ? data[el.name] : ""; });
+    xuatBody.innerHTML = "";
+    (data._xuat || []).forEach(addXuatRow);
+    if (!xuatBody.rows.length) { addXuatRow(); addXuatRow(); addXuatRow(); }
+  }
+
+  function isoDate(d) {
+    return `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+  }
+
+  function load() {
+    let data = null;
+    try { data = JSON.parse(localStorage.getItem(STORAGE_KEY) || "null"); } catch (e) { data = null; }
+    apply(data || { ngay: isoDate(new Date()) });
+  }
+
+  load();
+  recalc();
+
+  form.addEventListener("input", () => { recalc(); save(); });
+  $("btn-add-xuat").addEventListener("click", () => { addXuatRow().querySelector('[data-k="gio"]').focus(); recalc(); save(); });
+
+  $("btn-new-day").addEventListener("click", () => {
+    if (!confirm("Lập báo cáo ngày tiếp theo? Tồn thực tế bàn giao hôm nay sẽ được chuyển thành tồn đầu ngày mới. Hãy in / lưu PDF báo cáo hiện tại trước.")) return;
+    const old = collect();
+    const cur = old.ngay ? new Date(old.ngay + "T00:00:00") : new Date();
+    cur.setDate(cur.getDate() + 1);
+    apply({
+      ngay: isoDate(cur),
+      nguoi_giao: old.nguoi_nhan || "",
+      ton_dau_25: old.ton_tt_25,
+      ton_dau_28: old.ton_tt_28,
+    });
+    recalc(); save();
+  });
+
+  $("btn-reset").addEventListener("click", () => {
+    if (!confirm("Xóa toàn bộ dữ liệu đang nhập?")) return;
+    try { localStorage.removeItem(STORAGE_KEY); } catch (e) { /* bỏ qua */ }
+    apply({ ngay: isoDate(new Date()) });
+    recalc();
+  });
+})();
+</script>
+</body>
+</html>
