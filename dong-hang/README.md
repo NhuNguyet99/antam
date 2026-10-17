@@ -9,11 +9,12 @@ Web riêng (trang claude.ai, một file `dong-hang-antam.html`) thay cho Google 
 - **Khách hàng**: danh mục khách (khu vực, CRM, địa chỉ, SĐT, ghi chú/chành xe, đóng gói mặc định).
 - **Thống kê**: theo khoảng ngày – số đơn, bánh, kebab, bao bì, theo khu vực / người tạo đơn / tài xế / thanh toán,
   khách đặt nhiều, khách ngưng đặt; so với cùng số ngày trước đó.
-- **Nhập từ Google Sheet**: mở sheet ngày, Ctrl+A, Ctrl+C rồi Ctrl+V vào web – cập nhật danh mục khách và đơn của ngày.
+- **Nhập từ sheet** (không bắt buộc): danh sách khách đã đưa sẵn lên web; mục này chỉ dùng khi muốn nạp lại từ sheet
+  (mở sheet ngày, Ctrl+A, Ctrl+C rồi Ctrl+V vào web).
 - **Định mức & cài đặt**: bảng số bánh tối đa cho 1 túi / thùng / cây, danh sách sản phẩm (loại size để tính đóng gói).
 
 Quy tắc đóng gói (giống sheet): TÚI ĐEN – mỗi bánh chiếm 1/định mức túi, cộng lại làm tròn lên, kebab túi riêng;
-THÙNG (gửi chành / Bà Tám / gửi tàu – tự chọn khi ghi chú có các chữ này) – chọn thùng nhỏ nhất đủ chứa
+THÙNG (gửi chành / Bà Tám / gửi tàu – tự chọn khi khu vực hoặc ghi chú có các chữ này) – chọn thùng nhỏ nhất đủ chứa
 (giấy → nhỏ → chung → đại), vượt thùng đại thì thêm thùng, kebab đóng cây.
 
 Dữ liệu nằm trong kho dữ liệu của trang: `cfg/main`, `khach/k0..k7` (danh mục khách chia 8 phần), `ngay/<yyyy-mm-dd>` (đơn của ngày).

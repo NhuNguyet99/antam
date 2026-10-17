@@ -180,8 +180,8 @@ tbody tr.grp:hover td { background: var(--accent-soft); }
     <button data-v="in">Định mức đóng hàng</button>
     <button data-v="khach">Khách hàng</button>
     <button data-v="tk">Thống kê</button>
-    <button data-v="nhap">Nhập từ Google Sheet</button>
     <button data-v="cd">Định mức &amp; cài đặt</button>
+    <button data-v="nhap">Nhập từ sheet</button>
   </nav>
   <span class="sync" id="sync"></span>
   <button class="me-btn" id="me-btn" title="Tên ghi vào cột Người tạo đơn">👤 <span id="me-name">…</span></button>
@@ -260,8 +260,8 @@ const DEFAULT_CFG = {
     P('BÁNH MÌ KEBAB -THAN TRE', 'Kebab than tre', 'K'), P('CÂY THỊT 5 KG', 'Cây thịt 5kg', ''), P('CÂY THỊT 12KG', 'Cây thịt 12kg', ''),
     P('CÂY THỊT 18 KG', 'Cây thịt 18kg', ''), P('SẢN PHẨM KHÁC', 'SP khác', ''),
   ],
-  pay: ['ĐÃ TT', 'CHƯA TT', 'CÔNG NỢ', 'CHUYỂN KHOẢN'],
-  thungWords: 'chành, bà tám, gửi tàu, nhà xe, gửi xe, xe khách',
+  pay: ['ĐÃ TT', 'Chưa TT', 'TIỀN MẶT', 'HỖ TRỢ', 'CÔNG NỢ', 'CHUYỂN KHOẢN'],
+  thungWords: 'chành, bà tám, gửi tàu',
 };
 const SIZE_LABEL = { 22: '22 cm', 25: '25 cm', 28: '28 cm', 31: '31 cm', K: 'Kebab', '': 'Không tính đóng gói' };
 
@@ -367,8 +367,9 @@ function refresh(fromDay) {
 /* ================================================================ tính định mức đóng hàng */
 const isTui = pk => norm(pk).includes('tui');
 function autoPack(c) {
-  const words = String(S.cfg.thungWords || '').split(',').map(norm).filter(Boolean);
-  const t = norm((c && c.note) || '');
+  const words = String(S.cfg.thungWords || '').split(',').map(w => w.normalize('NFC').toLowerCase().replace(/\s+/g, ' ').trim()).filter(Boolean);
+  // khu vực "CHÀNH XE…", "BÀ TÁM", "GỬI TÀU…" hoặc ghi chú; so cả dấu ("chành" khác "Bình Chánh")
+  const t = (c ? `${c.q || ''} ${c.note || ''}` : '').normalize('NFC').toLowerCase().replace(/\s+/g, ' ');
   return words.some(w => t.includes(w)) ? 'THÙNG' : 'TÚI ĐEN';
 }
 const packOf = (o, c) => (o && o.pk) || (c && c.pk) || autoPack(c);
@@ -407,7 +408,8 @@ function packing(q, pk) {
   }
   return res;
 }
-const packLabel = r => NEED.filter(([k]) => r[k]).map(([k, n]) => `${r[k]} ${n}`).join(' + ');
+const LABEL_ORDER = ['tui', 'tuiK', 'dai', 'chung', 'nho', 'giay', 'cay']; // như sheet: thùng đại (đầy) trước, thùng lẻ sau
+const packLabel = r => LABEL_ORDER.filter(k => r[k]).map(k => `${r[k]} ${NEED.find(x => x[0] === k)[1]}`).join(' + ');
 function orderOf(cid) { return (S.day && S.day.r[cid]) || null; }
 function statusOf(o) { if (!o) return 'NGHỈ'; if (o.hd) return o.hd; return qtyTotal(o.q) > 0 ? 'HOẠT ĐỘNG' : 'NGHỈ'; }
 const hasOrder = o => !!o && statusOf(o) === 'HOẠT ĐỘNG';
@@ -993,8 +995,9 @@ function parseSheet(table) {
   let area = '';
   for (const r of table.slice(hi + 1)) {
     const name = g(r, col.name).replace(/\s*\n\s*/g, ' ');
-    if (areaCol >= 0 && g(r, areaCol)) area = g(r, areaCol);
+    if (areaCol >= 0 && g(r, areaCol).trim()) area = g(r, areaCol).replace(/\s+/g, ' ').trim().toUpperCase();
     if (!name || HK(name).startsWith('khach dat hang')) continue;
+    if (HK(name).startsWith('tong ')) break; // các dòng TỔNG cuối sheet
     const q = {}; pcols.forEach(p => { const n = num(r[p.i]); if (n > 0) q[p.name] = n; });
     const rec = { area, name, crm: g(r, col.crm).replace(/\s+/g, ''), q };
     for (const k of Object.keys(META)) if (!['crm', 'name'].includes(k)) rec[k] = g(r, col[k]);
@@ -1120,7 +1123,7 @@ function viewSettings(main) {
       <ul class="hint" style="margin:0;padding-left:18px"><li>Đóng <b>TÚI ĐEN</b> (giao trong TP): bánh đóng túi đen; kebab đóng túi đen riêng.</li>
         <li>Đóng <b>THÙNG</b> (gửi chành / Bà Tám / gửi tàu): chọn thùng nhỏ nhất đủ chứa: Thùng giấy → Nhỏ → Chung → Đại; vượt Thùng đại thì thêm thùng; kebab đóng cây.</li>
         <li>Đơn nhiều size: mỗi bánh chiếm 1/định mức của túi/thùng, cộng lại rồi làm tròn lên.</li></ul>
-      <label class="field">Ghi chú có các chữ này thì tự chọn đóng THÙNG (cách nhau dấu phẩy)<input id="s-words" value="${esc(c.thungWords)}"></label>
+      <label class="field">Khu vực hoặc ghi chú có các chữ này thì tự chọn đóng THÙNG (cách nhau dấu phẩy)<input id="s-words" value="${esc(c.thungWords)}"></label>
     </div>
     <div class="card" style="display:grid;gap:10px"><h2>Sản phẩm (các cột số lượng)</h2>
       <div class="tw prods"><table><thead><tr><th>Tên đầy đủ (giống tiêu đề cột trong sheet)</th><th>Tên ngắn trên bảng</th><th>Loại tính đóng gói</th><th>Hiện</th><th></th></tr></thead><tbody>
