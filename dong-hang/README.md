@@ -13,6 +13,10 @@ Web riêng (trang claude.ai, một file `dong-hang-antam.html`) thay cho Google 
   **Đưa vào Bánh tuyến** ghi tổng sang dòng BÁNH TUYẾN của Đơn hàng ngày (thịt 5/12/18 kg → cây thịt tương ứng);
   "Cập nhật từ sheet" dán tab ngày để cập nhật khách và số lượng (có thể thay toàn bộ danh sách).
   Dữ liệu: `tuyen123/khach` (khách), `t123/<ngày>` (số lượng).
+- **Lọc theo yêu cầu + In báo cáo** (cả Đơn hàng ngày và Tuyến kebab 123): lọc bằng ô tìm, chọn khu vực / tuyến và dòng
+  "▼ Lọc theo cột" dưới tiêu đề bảng (CRM, hỗ trợ, tình trạng, từng sản phẩm có/trống, túi 50, túi lẻ, ghi chú…).
+  Ở Tuyến 123, bảng tổng tính theo các khách đang lọc. Nút **🖨 In báo cáo** cho chọn in *theo bộ lọc* hoặc *tất cả*,
+  kèm/không kèm chi tiết từng khách → tải file HTML, mở bằng trình duyệt rồi Ctrl+P (A4 ngang).
 - **Khách hàng**: danh mục khách (khu vực, CRM, địa chỉ, SĐT, ghi chú/chành xe, đóng gói mặc định).
 - **Thống kê**: theo khoảng ngày – số đơn, bánh, kebab, bao bì, theo khu vực / người tạo đơn / tài xế / thanh toán,
   khách đặt nhiều, khách ngưng đặt; so với cùng số ngày trước đó.
