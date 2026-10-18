@@ -10,6 +10,9 @@
   --accent: #0f6e5a; --accent-ink: #ffffff; --accent-soft: #e2f1ec; --crust: #b86a1d; --crust-soft: #f8ecdd;
   --good: #1f7a46; --good-soft: #e1f3e7; --bad: #b4232c; --bad-soft: #fbe5e6; --warn: #8a5a00; --warn-soft: #fbf0d6;
   --input: #ffffff; --hover: #f1f6f3; --shadow: 0 8px 28px rgba(20, 40, 30, .14);
+  /* màu nhóm sản phẩm: đậm (vạch, chữ tiêu đề) / nhạt (nền cột) */
+  --g-thuong: #a8650f; --g-thuong-s: #fdf3e2; --g-dacbiet: #4f7a1f; --g-dacbiet-s: #eef6e3; --g-tuoi: #1f6fa8; --g-tuoi-s: #e5f1fa;
+  --g-kebab: #b23a2e; --g-kebab-s: #fcebe8; --g-thit: #6c4bb0; --g-thit-s: #f1ecfb; --g-khac: #5c6a64; --g-khac-s: #eef1ef;
   --f-body: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --f-num: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
   --r: 8px;
@@ -20,6 +23,8 @@
     --accent: #3fb594; --accent-ink: #08130f; --accent-soft: #19362d; --crust: #e0a25e; --crust-soft: #3a2b1a;
     --good: #5fcf8e; --good-soft: #17331f; --bad: #ff8a8f; --bad-soft: #3d1c1f; --warn: #f0c062; --warn-soft: #382c12;
     --input: #121a16; --hover: #1f2b25; --shadow: 0 8px 28px rgba(0, 0, 0, .5); color-scheme: dark;
+    --g-thuong: #f0b45e; --g-thuong-s: #2e2414; --g-dacbiet: #9fd067; --g-dacbiet-s: #1e2a14; --g-tuoi: #7cc0f0; --g-tuoi-s: #142634;
+    --g-kebab: #f39488; --g-kebab-s: #33191a; --g-thit: #b9a0f2; --g-thit-s: #241d36; --g-khac: #aab8b1; --g-khac-s: #212a26;
   }
 }
 :root[data-theme="dark"] {
@@ -27,6 +32,8 @@
   --accent: #3fb594; --accent-ink: #08130f; --accent-soft: #19362d; --crust: #e0a25e; --crust-soft: #3a2b1a;
   --good: #5fcf8e; --good-soft: #17331f; --bad: #ff8a8f; --bad-soft: #3d1c1f; --warn: #f0c062; --warn-soft: #382c12;
   --input: #121a16; --hover: #1f2b25; --shadow: 0 8px 28px rgba(0, 0, 0, .5); color-scheme: dark;
+    --g-thuong: #f0b45e; --g-thuong-s: #2e2414; --g-dacbiet: #9fd067; --g-dacbiet-s: #1e2a14; --g-tuoi: #7cc0f0; --g-tuoi-s: #142634;
+    --g-kebab: #f39488; --g-kebab-s: #33191a; --g-thit: #b9a0f2; --g-thit-s: #241d36; --g-khac: #aab8b1; --g-khac-s: #212a26;
 }
 * { box-sizing: border-box; }
 body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 14px; line-height: 1.45; }
@@ -54,7 +61,8 @@ a { color: var(--accent); }
 .sync.busy { color: var(--warn); }
 .sync.err { color: var(--bad); }
 
-main { padding-block: 18px 60px; display: grid; gap: 16px; }
+main { padding-block: 18px 60px; display: grid; grid-template-columns: minmax(0, 1fr); gap: 16px; }
+main > * { min-width: 0; }
 .card { background: var(--panel); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; min-width: 0; }
 .row { display: flex; gap: 10px; align-items: flex-end; flex-wrap: wrap; }
 .grow { flex: 1; }
@@ -104,6 +112,8 @@ td.n, th.n { text-align: right; }
 tr.grp td { background: var(--accent-soft); color: var(--accent); font-weight: 700; font-size: 12.5px; letter-spacing: .03em; text-transform: uppercase; }
 tbody tr:hover td { background: var(--hover); }
 tbody tr.grp:hover td { background: var(--accent-soft); }
+/* bảng nhập đơn cuộn trong khung riêng để dòng tiêu đề nhóm / sản phẩm luôn hiện */
+.tw.otw { max-height: calc(100vh - 150px); max-height: calc(100dvh - 150px); overflow: auto; }
 .orders td { vertical-align: middle; }
 .orders .cust { min-width: 230px; max-width: 340px; }
 .orders .cust b { font-weight: 600; }
@@ -114,7 +124,20 @@ tbody tr.grp:hover td { background: var(--accent-soft); }
 .orders input.q { width: 52px; text-align: right; border: 1px solid var(--line); background: var(--input); border-radius: 5px; padding: 4px 6px; font-family: var(--f-num); font-size: 13px; }
 .orders input.q.has { border-color: var(--accent); background: var(--accent-soft); font-weight: 600; }
 .orders select.in { padding: 4px 6px; font-size: 13px; }
-.orders th.p { writing-mode: horizontal-tb; min-width: 60px; font-size: 11.5px; line-height: 1.2; }
+.orders th.p { min-width: 64px; max-width: 92px; font-size: 12px; line-height: 1.25; white-space: normal; text-align: center; font-weight: 700; color: var(--gc); background: var(--gs); top: 30px; }
+.orders thead tr:first-child th { height: 30px; }
+.orders th.gh { text-align: center; font-size: 11.5px; letter-spacing: .05em; text-transform: uppercase; color: var(--gc); background: var(--gs); border-top: 3px solid var(--gc); white-space: nowrap; }
+.orders td.pc { background: var(--gs); text-align: center; }
+.orders tbody tr:hover td.pc { background: var(--gs); filter: brightness(.97); }
+.orders .gstart { border-left: 2px solid var(--gc); }
+.orders td.pc input.q.has { border-color: var(--gc); background: var(--panel); color: var(--gc); }
+.g-thuong { --gc: var(--g-thuong); --gs: var(--g-thuong-s); } .g-dacbiet { --gc: var(--g-dacbiet); --gs: var(--g-dacbiet-s); }
+.g-tuoi { --gc: var(--g-tuoi); --gs: var(--g-tuoi-s); } .g-kebab { --gc: var(--g-kebab); --gs: var(--g-kebab-s); }
+.g-thit { --gc: var(--g-thit); --gs: var(--g-thit-s); } .g-khac { --gc: var(--g-khac); --gs: var(--g-khac-s); }
+.qsec { display: grid; gap: 6px; padding: 8px 10px; border-radius: 8px; background: var(--gs); border-left: 3px solid var(--gc); }
+.qsec h4 { margin: 0; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--gc); }
+.qsec .qgrid label { background: var(--panel); }
+.gdot { display: inline-block; width: 9px; height: 9px; border-radius: 50%; background: var(--gc); margin-right: 5px; }
 .orders tr.has-order td.cust b { color: var(--accent); }
 .pack { white-space: nowrap; font-size: 12.5px; font-weight: 600; color: var(--crust); }
 .more { text-align: center; padding: 10px; }
@@ -159,6 +182,7 @@ tbody tr.grp:hover td { background: var(--accent-soft); }
 .fgrid { display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 10px; }
 .fgrid .wide { grid-column: 1 / -1; }
 .qgrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(150px, 1fr)); gap: 8px; }
+.qsecs { display: grid; gap: 10px; }
 .qgrid label { display: flex; align-items: center; justify-content: space-between; gap: 6px; font-size: 12.5px; border: 1px solid var(--line-2); border-radius: 6px; padding: 4px 6px; }
 .qgrid input { width: 58px; text-align: right; font-family: var(--f-num); border: 1px solid var(--line); background: var(--input); border-radius: 5px; padding: 3px 5px; }
 #toasts { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); display: grid; gap: 8px; z-index: 50; }
@@ -263,6 +287,29 @@ const DEFAULT_CFG = {
   pay: ['ĐÃ TT', 'Chưa TT', 'TIỀN MẶT', 'HỖ TRỢ', 'CÔNG NỢ', 'CHUYỂN KHOẢN'],
   thungWords: 'chành, bà tám, gửi tàu',
 };
+// Nhóm sản phẩm: mỗi nhóm một màu trên bảng nhập đơn
+const GROUPS = {
+  thuong: { name: 'Bánh thường', pre: 'Bánh ' }, dacbiet: { name: 'Bánh đặc biệt', pre: 'Bánh ' }, tuoi: { name: 'Bánh tươi', pre: 'Tươi ' },
+  kebab: { name: 'Bánh mì kebab', pre: 'Kebab ' }, thit: { name: 'Cây thịt', pre: 'Cây thịt ' }, khac: { name: 'Khác', pre: '' },
+};
+function groupOf(p) {
+  if (p.grp && GROUPS[p.grp]) return p.grp;
+  const n = norm(p.name);
+  if (n.includes('kebab')) return 'kebab';
+  if (n.includes('tuoi')) return 'tuoi';
+  if (n.includes('cay thit')) return 'thit';
+  if (/^(22|25|28|31) ?cm$/.test(n)) return 'thuong';
+  if (/(22|25|28|31) ?cm/.test(n)) return 'dacbiet';
+  return 'khac';
+}
+// tên ngắn đứng dưới tiêu đề nhóm (bỏ phần trùng với tên nhóm)
+const SHORT = { '22 CM': '22 cm', '25 CM': '25 cm', '28 CM': '28 cm', '31 CM': '31 cm', '25CM BÁNH THAN TRE': '25 cm than tre', '22CM KHÔNG HƯƠNG': '22 cm không hương',
+  '28CM KHÔNG HƯƠNG': '28 cm không hương', '28CM KHÔNG HƯƠNG, KHÔNG ĐƯỜNG, ÍT BỘT PHỦ': '28 cm k.hương k.đường', '31CM KHÔNG HƯƠNG': '31 cm không hương',
+  '31CM BÁNH 30% HƯƠNG, 30% BỘT SỮA, KHÔNG ĐƯỜNG, GIẢM ĐỘ DAI': '31 cm 30% hương', 'BÁNH TƯƠI 22 CM': '22 cm', 'BÁNH TƯƠI 25 CM': '25 cm', 'BÁNH TƯƠI 28 CM': '28 cm',
+  'BÁNH TƯƠI 31 CM': '31 cm', 'BÁNH MÌ KEBAB': 'thường', 'BÁNH MÌ KEBAB -MÈ ĐEN': 'mè đen', 'BÁNH MÌ KEBAB -MÈ TRẮNG': 'mè trắng', 'BÁNH MÌ KEBAB -THAN TRE': 'than tre',
+  'CÂY THỊT 5 KG': '5 kg', 'CÂY THỊT 12KG': '12 kg', 'CÂY THỊT 18 KG': '18 kg', 'SẢN PHẨM KHÁC': 'SP khác' };
+const OLD_SHORT = new Set(['22', '25', '28', '31', 'Tươi 22', 'Tươi 25', 'Tươi 28', 'Tươi 31', 'Kebab', 'Kebab mè đen', 'Kebab mè trắng', 'Kebab than tre',
+  'Cây thịt 5kg', 'Cây thịt 12kg', 'Cây thịt 18kg', '25 than tre', '22 k.hương', '28 k.hương', '28 k.hương k.đường', '31 k.hương', '31 30% hương']);
 const SIZE_LABEL = { 22: '22 cm', 25: '25 cm', 28: '28 cm', 31: '31 cm', K: 'Kebab', '': 'Không tính đóng gói' };
 
 /* ================================================================ dữ liệu (db của trang) */
@@ -470,7 +517,12 @@ function render() {
 const custList = () => Object.values(S.cust).sort((a, b) => (a.s || 0) - (b.s || 0) || String(a.name).localeCompare(String(b.name), 'vi'));
 const areas = () => { const seen = []; for (const c of custList()) if (c.q && !seen.includes(c.q)) seen.push(c.q); return seen; };
 const prodById = id => S.cfg.products.find(p => p.id === id);
-const prodShort = p => p.short || p.name;
+// tên cột: tên ngắn đã đặt, hoặc tên mặc định theo sheet (tên ngắn kiểu cũ được thay bằng tên rõ hơn)
+const prodShort = p => (p.short && !OLD_SHORT.has(p.short) ? p.short : SHORT[String(p.name).replace(/\s+/g, ' ').trim()] || p.short || p.name);
+// tên đầy đủ dễ đọc (bản in, chi tiết): "Tươi 22 cm", "Kebab mè đen", "Bánh 25 cm than tre"
+const prodLabel = p => { const sh = prodShort(p), g = GROUPS[groupOf(p)]; return norm(sh).startsWith(norm(g.pre)) || !g.pre ? sh : g.pre + sh; };
+// các nhóm liền nhau của danh sách cột: [{g, list}]
+function groupRuns(ps) { const runs = []; for (const p of ps) { const g = groupOf(p); if (!runs.length || runs[runs.length - 1].g !== g) runs.push({ g, list: [] }); runs[runs.length - 1].list.push(p); } return runs; }
 const emptyCust = () => `<div class="card empty"><div class="big">Chưa có danh sách khách hàng</div>
   <p class="hint">Lấy dữ liệu từ Google Sheet "ĐỊNH MỨC ĐÓNG HÀNG": mở sheet ngày (VD 16/10), bấm Ctrl+A rồi Ctrl+C, vào mục <b>Nhập từ Google Sheet</b> và bấm Ctrl+V.</p>
   <button class="btn pri" data-goto="nhap">Nhập từ Google Sheet</button></div>`;
@@ -554,9 +606,11 @@ function drawTable() {
     if (c.q !== lastArea) { lastArea = c.q; html += `<tr class="grp"><td colspan="${cols}">${esc(c.q || 'Chưa có khu vực')}</td></tr>`; }
     html += rowHtml(c, ps, pay);
   });
-  el.innerHTML = `<div class="tw"><table class="orders" id="orders"><thead><tr>
-      <th class="stick">Khách hàng</th><th>Tình trạng</th>${ps.map(p => `<th class="p n" title="${esc(p.name)}">${esc(prodShort(p))}</th>`).join('')}
-      <th>Đóng gói</th><th>Định mức</th><th>Thanh toán</th><th></th></tr></thead><tbody>${html}</tbody></table></div>
+  const runs = groupRuns(ps);
+  el.innerHTML = `<div class="tw otw"><table class="orders" id="orders"><thead><tr>
+      <th class="stick" rowspan="2">Khách hàng</th><th rowspan="2">Tình trạng</th>${runs.map(r => `<th class="gh g-${r.g} gstart" colspan="${r.list.length}">${esc(GROUPS[r.g].name)}</th>`).join('')}
+      <th rowspan="2">Đóng gói</th><th rowspan="2">Định mức</th><th rowspan="2">Thanh toán</th><th rowspan="2"></th></tr>
+      <tr>${runs.map(r => r.list.map((p, i) => `<th class="p g-${r.g}${i ? '' : ' gstart'}" title="${esc(p.name)}">${esc(prodShort(p))}</th>`).join('')).join('')}</tr></thead><tbody>${html}</tbody></table></div>
     ${rows.length > shown ? `<div class="more"><button class="btn" id="d-more">Xem thêm ${Math.min(PAGE, rows.length - shown)} khách (còn ${rows.length - shown})</button></div>` : ''}
     <p class="hint" style="margin-top:8px">${rows.length} khách. Gõ số lượng là tự lưu và tự tính định mức. Bấm ⋯ để nhập người bàn giao, người giao, tài xế, công nợ, ngày thanh toán, người check, ghi chú.</p>`;
   if ($('#d-more')) $('#d-more').onclick = () => { shown += PAGE; drawTable(); };
@@ -568,7 +622,7 @@ function rowHtml(c, ps, pay) {
   return `<tr data-cid="${esc(c.id)}" class="${hasOrder(o) ? 'has-order' : ''}">
     <td class="cust stick"><b>${esc(c.crm ? c.crm + ' · ' : '')}${esc(c.name)}</b><div class="sub">${esc(c.phone || '')}${c.note ? ' · ' + esc(c.note) : ''}</div></td>
     <td><select class="in" data-k="hd"><option value="">${st === 'HOẠT ĐỘNG' ? 'HOẠT ĐỘNG' : 'NGHỈ'} (tự)</option><option ${o.hd === 'HOẠT ĐỘNG' ? 'selected' : ''}>HOẠT ĐỘNG</option><option ${o.hd === 'NGHỈ' ? 'selected' : ''}>NGHỈ</option></select></td>
-    ${ps.map(pr => { const v = (o.q || {})[pr.id]; return `<td class="n"><input class="q ${num(v) > 0 ? 'has' : ''}" data-p="${esc(pr.id)}" inputmode="decimal" value="${v ? esc(v) : ''}" aria-label="${esc(pr.name)}"></td>`; }).join('')}
+    ${ps.map((pr, i) => { const v = (o.q || {})[pr.id], g = groupOf(pr), st = !i || groupOf(ps[i - 1]) !== g; return `<td class="pc g-${g}${st ? ' gstart' : ''}"><input class="q ${num(v) > 0 ? 'has' : ''}" data-p="${esc(pr.id)}" inputmode="decimal" value="${v ? esc(v) : ''}" aria-label="${esc(prodLabel(pr))}" title="${esc(prodLabel(pr))}"></td>`; }).join('')}
     <td><select class="in" data-k="pk">${['TÚI ĐEN', 'THÙNG'].map(x => `<option ${norm(x) === norm(pk) ? 'selected' : ''}>${x}</option>`).join('')}</select></td>
     <td class="pack" data-out="pack">${esc(packLabel(p))}</td>
     <td><select class="in" data-k="tt"><option value=""></option>${pay.map(x => `<option ${x === o.tt ? 'selected' : ''}>${esc(x)}</option>`).join('')}${o.tt && !pay.includes(o.tt) ? `<option selected>${esc(o.tt)}</option>` : ''}</select></td>
@@ -637,7 +691,7 @@ function editOrder(cid) {
     title: `Đơn ${vn(S.date)} – ${c.crm ? c.crm + ' · ' : ''}${c.name}`, wide: true, ok: 'Lưu đơn',
     body: `<div style="display:grid;gap:14px">
       <p class="hint" style="margin:0">${esc(c.q || '')} · ${esc(c.phone || '')}${c.note ? ' · ' + esc(c.note) : ''}</p>
-      <div class="qgrid">${ps.map(p => `<label title="${esc(p.name)}"><span>${esc(prodShort(p))}</span><input data-p="${esc(p.id)}" inputmode="decimal" value="${(o.q || {})[p.id] ? esc(o.q[p.id]) : ''}"></label>`).join('')}</div>
+      <div class="qsecs">${groupRuns(ps).map(r => `<div class="qsec g-${r.g}"><h4>${esc(GROUPS[r.g].name)}</h4><div class="qgrid">${r.list.map(p => `<label title="${esc(p.name)}"><span>${esc(prodShort(p))}</span><input data-p="${esc(p.id)}" inputmode="decimal" value="${(o.q || {})[p.id] ? esc(o.q[p.id]) : ''}"></label>`).join('')}</div></div>`).join('')}</div>
       <div class="fgrid">
         <label class="field">Đóng gói<select id="eo-pk">${['TÚI ĐEN', 'THÙNG'].map(x => `<option ${norm(x) === norm(packOf(o, c)) ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
         <label class="field">Tình trạng hoạt động<select id="eo-hd"><option value="">Tự (có số lượng = HOẠT ĐỘNG)</option><option ${o.hd === 'HOẠT ĐỘNG' ? 'selected' : ''}>HOẠT ĐỘNG</option><option ${o.hd === 'NGHỈ' ? 'selected' : ''}>NGHỈ</option></select></label>
@@ -730,7 +784,7 @@ function viewCust(main) {
 
 /* ================================================================ BẢN IN ĐỊNH MỨC */
 function prodText(q) {
-  return S.cfg.products.filter(p => num((q || {})[p.id]) > 0).map(p => `${prodShort(p)}: ${fmt(q[p.id])}`).join(', ');
+  return S.cfg.products.filter(p => num((q || {})[p.id]) > 0).map(p => `${prodLabel(p)}: ${fmt(q[p.id])}`).join(', ');
 }
 function printDoc(d, r) {
   const t = dayTotals(r), list = dayOrders(r).sort((a, b) => (a.c.s || 0) - (b.c.s || 0));
@@ -748,7 +802,7 @@ function printDoc(d, r) {
       <div><h3 style="margin-bottom:6px">Tổng cần chuẩn bị</h3><div class="tw"><table><thead><tr><th>Bao bì</th><th class="n">Số lượng</th></tr></thead><tbody>
         ${NEED.map(([k, n]) => `<tr><td>${n}</td><td class="n"><b>${fmt(t.need[k])}</b></td></tr>`).join('')}</tbody></table></div></div>
       <div><h3 style="margin-bottom:6px">Tổng sản phẩm</h3><div class="tw"><table><thead><tr><th>Sản phẩm</th><th class="n">Số lượng</th></tr></thead><tbody>
-        ${prods.length ? prods.map(p => `<tr><td>${esc(p.name)}</td><td class="n"><b>${fmt(t.prod[p.id])}</b></td></tr>`).join('') : '<tr><td colspan="2" class="muted">Chưa có đơn</td></tr>'}</tbody></table></div></div>
+        ${prods.length ? prods.map(p => `<tr><td><span class="gdot g-${groupOf(p)}"></span>${esc(prodLabel(p))}</td><td class="n"><b>${fmt(t.prod[p.id])}</b></td></tr>`).join('') : '<tr><td colspan="2" class="muted">Chưa có đơn</td></tr>'}</tbody></table></div></div>
     </div>
     <h3 style="margin-bottom:6px">Chi tiết đóng hàng từng khách</h3>
     <div class="tw"><table><thead><tr><th class="n">STT</th><th>CRM</th><th>Khách hàng</th><th>SĐT</th><th>Ghi chú</th><th>Sản phẩm</th><th>Đóng gói</th><th>Định mức</th></tr></thead>
@@ -892,7 +946,7 @@ function drawStats(days, prev, len) {
       <div class="chart" id="t-chart"></div></div>
     <div class="grid2">
       <div class="card"><h3 style="margin-bottom:8px">Sản phẩm</h3>${prods.length ? `<div class="tw"><table><thead><tr><th>Sản phẩm</th><th class="n">Tổng</th><th class="n">TB/ngày có đơn</th></tr></thead><tbody>
-        ${prods.map(p => `<tr><td>${esc(p.name)}</td><td class="n bar-cell"><i style="width:${(st.prod[p.id] / maxP * 100).toFixed(1)}%"></i><span>${fmt(st.prod[p.id])}</span></td><td class="n">${fmt(nDays ? st.prod[p.id] / nDays : 0)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Chưa có dữ liệu</p>'}</div>
+        ${prods.map(p => `<tr><td><span class="gdot g-${groupOf(p)}"></span>${esc(prodLabel(p))}</td><td class="n bar-cell"><i style="width:${(st.prod[p.id] / maxP * 100).toFixed(1)}%"></i><span>${fmt(st.prod[p.id])}</span></td><td class="n">${fmt(nDays ? st.prod[p.id] / nDays : 0)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Chưa có dữ liệu</p>'}</div>
       <div class="card"><h3 style="margin-bottom:8px">Bao bì đã dùng</h3><div class="tw"><table><thead><tr><th>Loại</th><th class="n">Số lượng</th></tr></thead><tbody>
         ${NEED.map(([k, n]) => `<tr><td>${n}</td><td class="n">${fmt(st.need[k])}</td></tr>`).join('')}</tbody></table></div></div>
       ${rankTable('Theo khu vực', st.area, 'Khu vực', 30)}
@@ -1145,8 +1199,9 @@ function viewSettings(main) {
       <label class="field">Khu vực hoặc ghi chú có các chữ này thì tự chọn đóng THÙNG (cách nhau dấu phẩy)<input id="s-words" value="${esc(c.thungWords)}"></label>
     </div>
     <div class="card" style="display:grid;gap:10px"><h2>Sản phẩm (các cột số lượng)</h2>
-      <div class="tw prods"><table><thead><tr><th>Tên đầy đủ (giống tiêu đề cột trong sheet)</th><th>Tên ngắn trên bảng</th><th>Loại tính đóng gói</th><th>Hiện</th><th></th></tr></thead><tbody>
-        ${c.products.map((p, i) => `<tr data-i="${i}"><td><input class="in" data-k="name" value="${esc(p.name)}" style="width:100%;min-width:220px"></td><td><input class="in" data-k="short" value="${esc(p.short || '')}" style="width:140px"></td>
+      <div class="tw prods"><table><thead><tr><th>Tên đầy đủ (giống tiêu đề cột trong sheet)</th><th>Nhóm (màu cột)</th><th>Tên cột trên bảng</th><th>Loại tính đóng gói</th><th>Hiện</th><th></th></tr></thead><tbody>
+        ${c.products.map((p, i) => `<tr data-i="${i}"><td><input class="in" data-k="name" value="${esc(p.name)}" style="width:100%;min-width:220px"></td><td><select class="in" data-k="grp"><option value="">Tự (${esc(GROUPS[groupOf(Object.assign({}, p, { grp: '' }))].name)})</option>${Object.entries(GROUPS).map(([k, g]) => `<option value="${k}" ${p.grp === k ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}</select></td>
+          <td><input class="in" data-k="short" value="${esc(prodShort(p))}" style="width:150px"></td>
           <td><select class="in" data-k="size">${Object.entries(SIZE_LABEL).map(([k, n]) => `<option value="${k}" ${p.size === k ? 'selected' : ''}>${n}</option>`).join('')}</select></td>
           <td><input type="checkbox" data-k="show" ${p.show !== false ? 'checked' : ''}></td>
           <td class="nowrap"><button class="btn sm ghost" data-up ${i ? '' : 'disabled'} aria-label="Lên">↑</button><button class="btn sm ghost" data-down ${i < c.products.length - 1 ? '' : 'disabled'} aria-label="Xuống">↓</button><button class="btn sm ghost danger" data-del aria-label="Xóa">✕</button></td></tr>`).join('')}
