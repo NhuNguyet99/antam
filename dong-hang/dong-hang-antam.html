@@ -119,6 +119,10 @@ tbody tr.grp:hover td { background: var(--accent-soft); }
 .orders .cust b { font-weight: 600; }
 .orders .cust .sub { font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; max-width: 330px; }
 .orders .stick { position: sticky; left: 0; background: var(--panel); z-index: 1; box-shadow: 1px 0 0 var(--line-2); }
+.orders .s-crm { width: 76px; min-width: 76px; max-width: 76px; font-family: var(--f-num); font-weight: 600; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.orders .cust.stick, .orders th.s-cust { left: 76px; }
+.orders tr.has-order td.s-crm { color: var(--accent); }
+.orders .grp-l { position: sticky; left: 8px; }
 .orders th.stick { z-index: 3; }
 .orders tbody tr:hover td.stick { background: var(--hover); }
 .orders input.q { width: 52px; text-align: right; border: 1px solid var(--line); background: var(--input); border-radius: 5px; padding: 4px 6px; font-family: var(--f-num); font-size: 13px; }
@@ -160,6 +164,10 @@ tbody tr.grp:hover td { background: var(--accent-soft); }
 .tip { position: absolute; pointer-events: none; background: var(--panel); border: 1px solid var(--line); box-shadow: var(--shadow); border-radius: 6px; padding: 6px 9px; font-size: 12.5px; white-space: nowrap; z-index: 5; }
 .tip b { font-family: var(--f-num); }
 .bar-cell { position: relative; }
+.prodstat tr.pgrp td { background: var(--gs); color: var(--gc); font-weight: 700; border-top: 2px solid var(--gc); }
+.prodstat tr.pgrp .gdot { background: var(--gc); }
+.prodstat tr.zero td { color: var(--muted); }
+.prodstat .up { color: var(--good); } .prodstat .down { color: var(--bad); }
 .bar-cell i { position: absolute; left: 0; top: 4px; bottom: 4px; background: var(--accent-soft); border-radius: 0 4px 4px 0; z-index: 0; }
 .bar-cell span { position: relative; z-index: 1; }
 
@@ -191,7 +199,7 @@ tbody tr.grp:hover td { background: var(--accent-soft); }
 
 @media (max-width: 640px) {
   .tabs { order: 3; flex-basis: 100%; overflow-x: auto; flex-wrap: nowrap; }
-  .orders .cust { min-width: 180px; }
+  .orders .cust { min-width: 150px; }
   .daybar .date-big { font-size: 17px; }
 }
 @media (prefers-reduced-motion: reduce) { * { transition: none !important; animation: none !important; } }
@@ -601,14 +609,14 @@ function drawTable() {
     return;
   }
   let lastArea = null, html = '';
-  const cols = 6 + ps.length;
+  const cols = 7 + ps.length;
   rows.slice(0, shown).forEach(c => {
-    if (c.q !== lastArea) { lastArea = c.q; html += `<tr class="grp"><td colspan="${cols}">${esc(c.q || 'Chưa có khu vực')}</td></tr>`; }
+    if (c.q !== lastArea) { lastArea = c.q; html += `<tr class="grp"><td colspan="${cols}"><span class="grp-l">${esc(c.q || 'Chưa có khu vực')}</span></td></tr>`; }
     html += rowHtml(c, ps, pay);
   });
   const runs = groupRuns(ps);
   el.innerHTML = `<div class="tw otw"><table class="orders" id="orders"><thead><tr>
-      <th class="stick" rowspan="2">Khách hàng</th><th rowspan="2">Tình trạng</th>${runs.map(r => `<th class="gh g-${r.g} gstart" colspan="${r.list.length}">${esc(GROUPS[r.g].name)}</th>`).join('')}
+      <th class="stick s-crm" rowspan="2">CRM</th><th class="stick s-cust" rowspan="2">Khách hàng</th><th rowspan="2">Tình trạng</th>${runs.map(r => `<th class="gh g-${r.g} gstart" colspan="${r.list.length}">${esc(GROUPS[r.g].name)}</th>`).join('')}
       <th rowspan="2">Đóng gói</th><th rowspan="2">Định mức</th><th rowspan="2">Thanh toán</th><th rowspan="2"></th></tr>
       <tr>${runs.map(r => r.list.map((p, i) => `<th class="p g-${r.g}${i ? '' : ' gstart'}" title="${esc(p.name)}">${esc(prodShort(p))}</th>`).join('')).join('')}</tr></thead><tbody>${html}</tbody></table></div>
     ${rows.length > shown ? `<div class="more"><button class="btn" id="d-more">Xem thêm ${Math.min(PAGE, rows.length - shown)} khách (còn ${rows.length - shown})</button></div>` : ''}
@@ -620,7 +628,8 @@ function rowHtml(c, ps, pay) {
   const o = orderOf(c.id) || {}, st = statusOf(o), pk = packOf(o, c);
   const p = packing(o.q, pk);
   return `<tr data-cid="${esc(c.id)}" class="${hasOrder(o) ? 'has-order' : ''}">
-    <td class="cust stick"><b>${esc(c.crm ? c.crm + ' · ' : '')}${esc(c.name)}</b><div class="sub">${esc(c.phone || '')}${c.note ? ' · ' + esc(c.note) : ''}</div></td>
+    <td class="stick s-crm" title="${esc(c.crm || '')}">${esc(c.crm || '–')}</td>
+    <td class="cust stick"><b>${esc(c.name)}</b><div class="sub">${esc(c.phone || '')}${c.note ? ' · ' + esc(c.note) : ''}</div></td>
     <td><select class="in" data-k="hd"><option value="">${st === 'HOẠT ĐỘNG' ? 'HOẠT ĐỘNG' : 'NGHỈ'} (tự)</option><option ${o.hd === 'HOẠT ĐỘNG' ? 'selected' : ''}>HOẠT ĐỘNG</option><option ${o.hd === 'NGHỈ' ? 'selected' : ''}>NGHỈ</option></select></td>
     ${ps.map((pr, i) => { const v = (o.q || {})[pr.id], g = groupOf(pr), st = !i || groupOf(ps[i - 1]) !== g; return `<td class="pc g-${g}${st ? ' gstart' : ''}"><input class="q ${num(v) > 0 ? 'has' : ''}" data-p="${esc(pr.id)}" inputmode="decimal" value="${v ? esc(v) : ''}" aria-label="${esc(prodLabel(pr))}" title="${esc(prodLabel(pr))}"></td>`; }).join('')}
     <td><select class="in" data-k="pk">${['TÚI ĐEN', 'THÙNG'].map(x => `<option ${norm(x) === norm(pk) ? 'selected' : ''}>${x}</option>`).join('')}</select></td>
@@ -868,6 +877,17 @@ function routingRows(r) {
 }
 
 /* ================================================================ THỐNG KÊ */
+// các số xem được trên biểu đồ: [mã, tên, nhóm (optgroup), đơn vị]
+const METRICS = () => [['banh', 'Bánh (22–31 cm)', 'Tổng', 'bánh'], ['kebab', 'Bánh mì kebab', '', 'kebab'], ['orders', 'Đơn hàng', '', 'đơn']]
+  .concat(groupRuns(S.cfg.products).flatMap(r => r.list.map((p, i) => ['p:' + p.id, prodLabel(p), i ? '' : GROUPS[r.g].name, 'cái'])));
+function metricOptions() {
+  let html = '', open = false;
+  for (const [k, n, g] of METRICS()) {
+    if (g) { if (open) html += '</optgroup>'; html += `<optgroup label="${esc(g)}">`; open = true; }
+    html += `<option value="${esc(k)}" ${TK.metric === k ? 'selected' : ''}>${esc(n)}</option>`;
+  }
+  return html + (open ? '</optgroup>' : '');
+}
 const TK = Object.assign({ from: addDays(today(), -29), to: today(), metric: 'banh' }, store('tk') || {});
 async function loadRange(from, to) {
   const snap = await S.db.collection('ngay').where('date', '>=', from).where('date', '<=', to).get().catch(e => { throw dbErr(e); });
@@ -875,15 +895,20 @@ async function loadRange(from, to) {
   return out;
 }
 function statsOf(days) {
-  const st = { orders: 0, banh: 0, kebab: 0, need: { tui: 0, tuiK: 0, giay: 0, nho: 0, chung: 0, dai: 0, cay: 0 }, perDay: {}, prod: {}, area: {}, tao: {}, tx: {}, pay: {}, cust: {}, debt: 0 };
+  const st = { orders: 0, banh: 0, kebab: 0, need: { tui: 0, tuiK: 0, giay: 0, nho: 0, chung: 0, dai: 0, cay: 0 }, perDay: {}, prod: {}, prodOrders: {}, prodCust: {}, prodDays: {}, area: {}, tao: {}, tx: {}, pay: {}, cust: {}, debt: 0 };
   for (const [d, r] of Object.entries(days)) {
-    const pd = st.perDay[d] = { orders: 0, banh: 0, kebab: 0 };
+    const pd = st.perDay[d] = { orders: 0, banh: 0, kebab: 0, prod: {} };
     for (const { cid, o, c } of dayOrders(r)) {
       const sz = sizeTotals(o.q), banh = SIZES.reduce((a, s) => a + sz[s], 0);
       const p = packing(o.q, packOf(o, c));
       for (const k in st.need) st.need[k] += p[k];
       st.orders++; pd.orders++; st.banh += banh; pd.banh += banh; st.kebab += sz.K; pd.kebab += sz.K;
-      for (const [pid, n] of Object.entries(o.q || {})) if (num(n) > 0) st.prod[pid] = (st.prod[pid] || 0) + num(n);
+      for (const [pid, n] of Object.entries(o.q || {})) {
+        if (!(num(n) > 0)) continue;
+        st.prod[pid] = (st.prod[pid] || 0) + num(n); pd.prod[pid] = (pd.prod[pid] || 0) + num(n);
+        st.prodOrders[pid] = (st.prodOrders[pid] || 0) + 1;
+        (st.prodCust[pid] = st.prodCust[pid] || new Set()).add(cid); (st.prodDays[pid] = st.prodDays[pid] || new Set()).add(d);
+      }
       const add = (m, k, b) => { k = k || '(trống)'; const x = m[k] = m[k] || { orders: 0, banh: 0, kebab: 0 }; x.orders++; x.banh += b; x.kebab += sz.K; };
       add(st.area, c.q, banh); add(st.tao, o.tao, banh); add(st.tx, o.tx, banh); add(st.pay, o.tt, banh);
       const cu = st.cust[cid] = st.cust[cid] || { c, orders: 0, banh: 0, kebab: 0, last: '' };
@@ -928,11 +953,20 @@ function drawStats(days, prev, len) {
   const st = statsOf(days), ps = statsOf(prev);
   const dates = []; for (let d = TK.from; d <= TK.to; d = addDays(d, 1)) dates.push(d);
   const nDays = Object.values(st.perDay).filter(x => x.orders).length;
+  const dTxt = (a, b) => (!a && !b ? '<span class="muted">–</span>' : !b ? '<span class="pill ok">mới</span>' : `<span class="${a >= b ? 'up' : 'down'}">${a >= b ? '▲' : '▼'} ${fmt(Math.abs((a - b) / b * 100))}%</span>`);
   const delta = (a, b) => (b ? `${a >= b ? '▲' : '▼'} ${fmt(Math.abs((a - b) / b * 100))}% so với ${len} ngày trước` : `${len} ngày trước: chưa có số liệu`);
   const stopped = Object.entries(ps.cust).filter(([cid]) => !st.cust[cid]).sort((a, b) => b[1].banh - a[1].banh).slice(0, 15);
   const top = Object.values(st.cust).sort((a, b) => b.banh + b.kebab - (a.banh + a.kebab)).slice(0, 15);
-  const prods = S.cfg.products.filter(p => st.prod[p.id]).sort((a, b) => st.prod[b.id] - st.prod[a.id]);
-  const maxP = Math.max(1, ...prods.map(p => st.prod[p.id]));
+  const maxP = Math.max(1, ...S.cfg.products.map(p => st.prod[p.id] || 0));
+  // mọi sản phẩm (kể cả chưa bán), theo nhóm, có tổng nhóm và so với kỳ trước
+  const prodRows = groupRuns(S.cfg.products).map(r => {
+    const sum = k => r.list.reduce((a, p) => a + (st[k][p.id] || 0), 0);
+    const gTot = sum('prod'), gPrev = r.list.reduce((a, p) => a + (ps.prod[p.id] || 0), 0);
+    return `<tr class="pgrp g-${r.g}"><td><span class="gdot"></span>${esc(GROUPS[r.g].name)}</td><td class="n">${fmt(gTot)}</td><td class="n">${fmt(nDays ? gTot / nDays : 0)}</td><td class="n">${fmt(sum('prodOrders'))}</td><td class="n"></td><td class="n">${dTxt(gTot, gPrev)}</td></tr>`
+      + r.list.map(p => { const v = st.prod[p.id] || 0; return `<tr class="${v ? '' : 'zero'}"><td style="padding-left:24px">${esc(prodLabel(p))}</td>
+        <td class="n bar-cell g-${r.g}"><i style="width:${(v / maxP * 100).toFixed(1)}%;background:var(--gs)"></i><span>${fmt(v)}</span></td><td class="n">${fmt(nDays ? v / nDays : 0)}</td>
+        <td class="n">${fmt(st.prodOrders[p.id] || 0)}</td><td class="n">${fmt(st.prodCust[p.id] ? st.prodCust[p.id].size : 0)}</td><td class="n">${dTxt(v, ps.prod[p.id] || 0)}</td></tr>`; }).join('');
+  }).join('');
   $('#t-body').innerHTML = `<div style="display:grid;gap:16px">
     <div class="kpis">
       <div class="kpi"><div class="k">Số đơn</div><div class="v">${fmt(st.orders)}</div><div class="s">${delta(st.orders, ps.orders)}</div></div>
@@ -941,31 +975,31 @@ function drawStats(days, prev, len) {
       <div class="kpi"><div class="k">Khách đặt hàng</div><div class="v">${fmt(Object.keys(st.cust).length)}</div><div class="s">${nDays} ngày có đơn · TB ${fmt(nDays ? st.orders / nDays : 0)} đơn/ngày</div></div>
       <div class="kpi"><div class="k">Túi đen (bánh + kebab)</div><div class="v">${fmt(st.need.tui + st.need.tuiK)}</div><div class="s">Thùng: ${fmt(st.need.giay + st.need.nho + st.need.chung + st.need.dai)} · Cây kebab: ${fmt(st.need.cay)}</div></div>
     </div>
-    <div class="card"><div class="row" style="justify-content:space-between;align-items:center;margin-bottom:10px"><h3 id="t-ch-title">${{ banh: 'Bánh mỗi ngày', kebab: 'Kebab mỗi ngày', orders: 'Đơn mỗi ngày' }[TK.metric]}</h3>
-      <div class="seg" id="t-metric">${[['banh', 'Bánh'], ['kebab', 'Kebab'], ['orders', 'Đơn']].map(([k, n]) => `<button data-m="${k}" class="${TK.metric === k ? 'on' : ''}">${n}</button>`).join('')}</div></div>
+    <div class="card"><div class="row" style="justify-content:space-between;align-items:center;margin-bottom:10px"><h3 id="t-ch-title"></h3>
+      <label class="field" style="min-width:220px">Xem biểu đồ<select id="t-metric">${metricOptions()}</select></label></div>
       <div class="chart" id="t-chart"></div></div>
+    <div class="card"><h3 style="margin-bottom:8px">Tất cả sản phẩm</h3><div class="tw"><table class="prodstat"><thead><tr><th>Sản phẩm</th><th class="n">Tổng</th><th class="n">TB/ngày có đơn</th><th class="n">Số đơn</th><th class="n">Số khách</th><th class="n">So với ${len} ngày trước</th></tr></thead>
+      <tbody>${prodRows}</tbody></table></div></div>
     <div class="grid2">
-      <div class="card"><h3 style="margin-bottom:8px">Sản phẩm</h3>${prods.length ? `<div class="tw"><table><thead><tr><th>Sản phẩm</th><th class="n">Tổng</th><th class="n">TB/ngày có đơn</th></tr></thead><tbody>
-        ${prods.map(p => `<tr><td><span class="gdot g-${groupOf(p)}"></span>${esc(prodLabel(p))}</td><td class="n bar-cell"><i style="width:${(st.prod[p.id] / maxP * 100).toFixed(1)}%"></i><span>${fmt(st.prod[p.id])}</span></td><td class="n">${fmt(nDays ? st.prod[p.id] / nDays : 0)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Chưa có dữ liệu</p>'}</div>
       <div class="card"><h3 style="margin-bottom:8px">Bao bì đã dùng</h3><div class="tw"><table><thead><tr><th>Loại</th><th class="n">Số lượng</th></tr></thead><tbody>
         ${NEED.map(([k, n]) => `<tr><td>${n}</td><td class="n">${fmt(st.need[k])}</td></tr>`).join('')}</tbody></table></div></div>
       ${rankTable('Theo khu vực', st.area, 'Khu vực', 30)}
       ${rankTable('Theo người tạo đơn', st.tao, 'Người tạo đơn')}
       ${rankTable('Theo tài xế', st.tx, 'Tài xế')}
       ${rankTable('Theo tình trạng thanh toán', st.pay, 'Tình trạng')}
-      <div class="card"><h3 style="margin-bottom:8px">Khách đặt nhiều nhất</h3>${top.length ? `<div class="tw"><table><thead><tr><th>Khách</th><th class="n">Đơn</th><th class="n">Bánh</th><th class="n">Kebab</th></tr></thead><tbody>
-        ${top.map(x => `<tr><td>${esc(x.c.crm ? x.c.crm + ' · ' : '')}${esc(x.c.name)}<div class="small muted">${esc(x.c.q || '')}</div></td><td class="n">${fmt(x.orders)}</td><td class="n">${fmt(x.banh)}</td><td class="n">${fmt(x.kebab)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Chưa có dữ liệu</p>'}</div>
-      <div class="card"><h3 style="margin-bottom:4px">Khách ngưng đặt</h3><p class="hint" style="margin-bottom:8px">Có đơn trong ${len} ngày trước đó, chưa đặt lại trong khoảng đang xem.</p>${stopped.length ? `<div class="tw"><table><thead><tr><th>Khách</th><th class="n">Đơn trước</th><th>Lần cuối</th></tr></thead><tbody>
-        ${stopped.map(([, x]) => `<tr><td>${esc(x.c.crm ? x.c.crm + ' · ' : '')}${esc(x.c.name)}<div class="small muted">${esc(x.c.phone || '')}</div></td><td class="n">${fmt(x.orders)}</td><td class="mono small">${vn(x.last)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Không có khách ngưng đặt.</p>'}</div>
+      <div class="card"><h3 style="margin-bottom:8px">Khách đặt nhiều nhất</h3>${top.length ? `<div class="tw"><table><thead><tr><th>CRM</th><th>Khách</th><th class="n">Đơn</th><th class="n">Bánh</th><th class="n">Kebab</th></tr></thead><tbody>
+        ${top.map(x => `<tr><td class="mono small">${esc(x.c.crm || '–')}</td><td>${esc(x.c.name)}<div class="small muted">${esc(x.c.q || '')}</div></td><td class="n">${fmt(x.orders)}</td><td class="n">${fmt(x.banh)}</td><td class="n">${fmt(x.kebab)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Chưa có dữ liệu</p>'}</div>
+      <div class="card"><h3 style="margin-bottom:4px">Khách ngưng đặt</h3><p class="hint" style="margin-bottom:8px">Có đơn trong ${len} ngày trước đó, chưa đặt lại trong khoảng đang xem.</p>${stopped.length ? `<div class="tw"><table><thead><tr><th>CRM</th><th>Khách</th><th class="n">Đơn trước</th><th>Lần cuối</th></tr></thead><tbody>
+        ${stopped.map(([, x]) => `<tr><td class="mono small">${esc(x.c.crm || '–')}</td><td>${esc(x.c.name)}<div class="small muted">${esc(x.c.phone || '')}</div></td><td class="n">${fmt(x.orders)}</td><td class="mono small">${vn(x.last)}</td></tr>`).join('')}</tbody></table></div>` : '<p class="muted">Không có khách ngưng đặt.</p>'}</div>
     </div>
     ${st.debt ? `<p class="hint">Tổng cột Công nợ trong khoảng: <b class="mono">${fmt(st.debt)}</b></p>` : ''}</div>`;
-  const drawCh = () => drawBars($('#t-chart'), dates.map(d => ({ d, v: (st.perDay[d] || {})[TK.metric] || 0 })), { banh: 'bánh', kebab: 'kebab', orders: 'đơn' }[TK.metric]);
-  $$('#t-metric button').forEach(b => b.onclick = () => {
-    TK.metric = b.dataset.m; store('tk', TK);
-    $$('#t-metric button').forEach(x => x.classList.toggle('on', x === b));
-    $('#t-ch-title').textContent = { banh: 'Bánh mỗi ngày', kebab: 'Kebab mỗi ngày', orders: 'Đơn mỗi ngày' }[TK.metric];
-    drawCh();
-  });
+  const drawCh = () => {
+    const m = METRICS().find(x => x[0] === TK.metric) || METRICS()[0];
+    const pid = m[0].startsWith('p:') ? m[0].slice(2) : null;
+    $('#t-ch-title').textContent = m[1] + ' mỗi ngày';
+    drawBars($('#t-chart'), dates.map(d => { const x = st.perDay[d] || {}; return { d, v: pid ? (x.prod || {})[pid] || 0 : x[m[0]] || 0 }; }), pid ? 'cái' : m[3]);
+  };
+  $('#t-metric').onchange = e => { TK.metric = e.target.value; store('tk', TK); drawCh(); };
   drawCh();
 }
 // Biểu đồ cột 1 dãy số theo ngày (rê chuột / chạm vào cột để xem số)
