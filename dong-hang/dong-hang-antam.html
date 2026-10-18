@@ -311,28 +311,47 @@ function setDoc(path, data) {
   return serial(path, () => S.db.doc(path).set(data).catch(e => { throw dbErr(e); })).finally(() => { pendingWrites--; setSync(); });
 }
 
+function showFatal(title, detail) {
+  $('#main').innerHTML = `<div class="card empty"><div class="big">${esc(title)}</div><p class="hint">${esc(detail || '')}</p>
+    <button class="btn pri" id="fatal-retry">Thử lại</button></div>`;
+  $('#fatal-retry').onclick = () => location.reload();
+}
+const withTimeout = (p, ms, what) => Promise.race([p, new Promise((_, rej) => setTimeout(() => rej(new Error('Hết thời gian chờ ' + what)), ms))]);
+const errText = e => (e && (e.code ? e.code + ': ' : '') + (e.message || '')) || String(e);
+function applyCust(snap) {
+  const all = {}, shards = {};
+  snap.docs.forEach(d => { const c = (d.data() || {}).c || {}; shards[d.id] = c; for (const [id, v] of live(c)) all[id] = Object.assign({ id }, v); });
+  S.cust = all; S.shards = shards; S.loaded.cust++;
+}
 async function boot() {
-  let db = null, user = null;
-  try { [db, user] = await Promise.all([window.claude.use('db'), window.claude.use('user')]); } catch (e) { db = null; }
-  if (!db) { $('#main').innerHTML = '<div class="card empty"><div class="big">Không mở được dữ liệu của trang</div><p class="hint">Hãy đăng nhập claude.ai và mở link được chia sẻ (quyền Editor để nhập liệu).</p></div>'; return; }
-  S.db = db; S.user = user;
-  if (user) {
-    try { const me = await user.me(); S.myId = (me && me.id) || ''; if (!S.me && me && me.name) S.me = me.name; } catch (e) { /* bỏ qua */ }
-  }
+  let db = null;
+  try { db = await withTimeout(window.claude.use('db'), 15000, 'kết nối dữ liệu'); } catch (e) { return showFatal('Không kết nối được dữ liệu của trang', errText(e)); }
+  if (!db) return showFatal('Không mở được dữ liệu của trang', 'Hãy đăng nhập claude.ai và mở đúng link được chia sẻ (người nhập liệu cần quyền Editor).');
+  S.db = db;
+  // tên người dùng: lấy sau, không chặn việc tải trang
+  window.claude.use('user').then(async user => {
+    S.user = user; if (!user) return;
+    const me = await user.me(); S.myId = (me && me.id) || '';
+    if (!S.me && me && me.name) { S.me = me.name; $('#me-name').textContent = S.me; }
+  }).catch(e => console.warn('user', e));
   $('#me-name').textContent = S.me || 'Đặt tên';
+  // cài đặt: dùng mặc định ngay, có bản đã lưu thì thay
+  S.loaded.cfg = true;
   db.doc('cfg/main').onSnapshot(s => {
     const d = s.exists ? s.data() : null;
     S.cfg = Object.assign(JSON.parse(JSON.stringify(DEFAULT_CFG)), d || {});
-    S.loaded.cfg = true; refresh();
-  }, e => toast(dbErr(e).message, true));
-  db.collection('khach').onSnapshot(snap => {
-    const all = {}, shards = {};
-    snap.docs.forEach(d => { const c = (d.data() || {}).c || {}; shards[d.id] = c; for (const [id, v] of live(c)) all[id] = Object.assign({ id }, v); });
-    S.cust = all; S.shards = shards; S.loaded.cust++; refresh();
-  }, e => toast(dbErr(e).message, true));
+    refresh();
+  }, e => toast('Cài đặt: ' + dbErr(e).message, true));
+  // danh mục khách: đọc 1 lần (có giới hạn thời gian) rồi theo dõi thay đổi
+  try { applyCust(await withTimeout(db.collection('khach').get(), 20000, 'tải danh sách khách')); }
+  catch (e) { return showFatal('Không tải được danh sách khách', errText(dbErr(e))); }
+  db.collection('khach').onSnapshot(snap => { applyCust(snap); refresh(); }, e => toast('Danh sách khách: ' + dbErr(e).message, true));
   watchDay(S.date);
   setSync();
+  render();
 }
+window.addEventListener('error', e => { if (e && e.message) toast('Lỗi: ' + e.message, true); });
+window.addEventListener('unhandledrejection', e => { const r = e && e.reason; if (r) toast('Lỗi: ' + errText(r), true); });
 function watchDay(d) {
   if (S.dayUnsub) S.dayUnsub();
   S.day = null; S.date = d;
@@ -343,7 +362,7 @@ function watchDay(d) {
     S.day = { date: d, r: Object.assign({}, data.r || {}) };
     for (const [cid, rec] of Object.entries(mine)) S.day.r[cid] = deepMerge(JSON.parse(JSON.stringify(S.day.r[cid] || {})), rec);
     refresh(true);
-  }, e => toast(dbErr(e).message, true));
+  }, e => toast('Đơn ngày ' + vn(d) + ': ' + dbErr(e).message, true));
 }
 function deepMerge(t, p) {
   for (const [k, v] of Object.entries(p || {})) {
@@ -1161,6 +1180,6 @@ function viewSettings(main) {
 /* ================================================================ chạy */
 window.addEventListener('beforeunload', e => { if (pendingWrites) { e.preventDefault(); e.returnValue = ''; } });
 setView(S.view);
-if (window.claude && window.claude.use) boot();
-else $('#main').innerHTML = '<div class="card empty"><div class="big">Hãy mở trang này trên claude.ai</div></div>';
+if (window.claude && window.claude.use) boot().catch(e => showFatal('Trang gặp lỗi khi mở', errText(e)));
+else showFatal('Hãy mở trang này trên claude.ai', 'Bản lưu về máy không có dữ liệu – mở link claude.ai của trang.');
 </script>
