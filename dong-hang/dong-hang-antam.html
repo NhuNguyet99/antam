@@ -126,6 +126,17 @@ tbody tr.grp:hover td { background: var(--accent-soft); }
 .orders .cust.stick, .orders th.s-cust { left: 76px; }
 .orders tr.has-order td.s-crm { color: var(--accent); }
 .orders .grp-l { position: sticky; left: 8px; }
+/* cột tích thanh toán */
+.p-ctt { --pc: var(--bad); --pcs: var(--bad-soft); } .p-dtt { --pc: var(--good); --pcs: var(--good-soft); }
+.p-ht { --pc: var(--warn); --pcs: var(--warn-soft); } .p-tm { --pc: var(--g-tuoi); --pcs: var(--g-tuoi-s); } .p-none { --pc: var(--muted); --pcs: var(--line-2); }
+.orders th.pay-h { --gc: var(--ink-2); --gs: var(--panel); }
+.orders th.pay-th { color: var(--pc); background: var(--pcs); min-width: 54px; }
+.orders td.pay-td { text-align: center; }
+.orders .pay-td.gstart, .orders th.pay-th.gstart { border-left: 2px solid var(--line); }
+.pay-cb { width: 20px; height: 20px; accent-color: var(--pc); cursor: pointer; vertical-align: middle; }
+.paychips { display: flex; flex-wrap: wrap; gap: 8px; }
+.pchip { border-radius: 999px; padding: 4px 12px; background: var(--pcs); color: var(--pc); font-weight: 600; font-size: 13px; }
+.pchip b { font-family: var(--f-num); margin-left: 4px; }
 /* ô tình trạng: xanh khi HOẠT ĐỘNG */
 .orders select.st-sel { color: var(--muted); }
 .orders select.st-sel.st-on { background: var(--good); border-color: var(--good); color: var(--accent-ink); font-weight: 700; }
@@ -522,11 +533,16 @@ const hasOrder = o => !!o && statusOf(o) === 'HOẠT ĐỘNG';
 function dayOrders(dayR) {
   return live(dayR).filter(([cid, o]) => hasOrder(o)).map(([cid, o]) => ({ cid, o, c: S.cust[cid] || { id: cid, name: (o.snap && o.snap.name) || '(khách đã xóa)', q: (o.snap && o.snap.q) || '' } }));
 }
+// 4 cột tích thanh toán (mỗi đơn 1 lựa chọn, lưu vào o.tt như cột TÌNH TRẠNG của sheet)
+const PAYS = [['ctt', 'CTT', 'Chưa TT', 'Chưa thanh toán'], ['dtt', 'ĐTT', 'ĐÃ TT', 'Đã thanh toán'], ['ht', 'Hỗ trợ', 'HỖ TRỢ', 'Hỗ trợ'], ['tm', 'Tiền mặt', 'TIỀN MẶT', 'Tiền mặt']];
+const payKey = tt => { const n = norm(tt); if (!n) return ''; const hit = PAYS.find(([, , v]) => norm(v) === n) || PAYS.find(([, l]) => norm(l) === n); return hit ? hit[0] : ''; };
 // Báo cáo ngày như cuối sheet: TỔNG TÚI (đơn), BÁNH TUYẾN, TỔNG CÁI = (túi + bánh tuyến) × cái/túi, TACOS, KEBAB, BILL
 function dayReport(dayR, tuyen) {
   const list = dayOrders(dayR), tui = {}, cai = {};
   let bill = 0;
+  const pay = { ctt: 0, dtt: 0, ht: 0, tm: 0, none: 0 };
   for (const { o, c } of list) {
+    const pk = payKey(o.tt); pay[pk || 'none']++;
     for (const [pid, n] of Object.entries(o.q || {})) if (num(n) > 0) tui[pid] = (tui[pid] || 0) + num(n);
     bill += o.bill != null && o.bill !== '' ? num(o.bill) : (c.bill == null ? 1 : num(c.bill));
   }
@@ -539,7 +555,7 @@ function dayReport(dayR, tuyen) {
   }
   const tuyenTxt = S.cfg.products.filter(p => num((tuyen || {})[p.id]) > 0)
     .map(p => `${fmt(tuyen[p.id])} túi ${prodLabel(p)} = ${fmt(num(tuyen[p.id]) * perOf(p))} cái`).join(' · ');
-  return { tui, cai, tacos, kebab, bill, count: list.length, tuyenTxt };
+  return { tui, cai, tacos, kebab, bill, count: list.length, tuyenTxt, pay };
 }
 function dayTotals(dayR) {
   const need = { tui: 0, tuiK: 0, giay: 0, nho: 0, chung: 0, dai: 0, cay: 0 }, prod = {}, size = { 22: 0, 25: 0, 28: 0, 31: 0, K: 0 };
@@ -602,6 +618,8 @@ function reportHtml(rep, need, tuyen, editable) {
       <div><div class="v" data-r="bill">${fmt(rep.bill)}</div><div class="k">BILL</div></div>
       <div><div class="v" data-r="count">${fmt(rep.count)}</div><div class="k">ĐƠN HOẠT ĐỘNG</div></div>
     </div>
+    <div class="paychips">${PAYS.map(([k, l, , full]) => `<span class="pchip p-${k}" title="${esc(full)}">${esc(l)} <b data-r="pay:${k}">${fmt(rep.pay[k])}</b></span>`).join('')}
+      <span class="pchip p-none" title="Đơn chưa tích ô thanh toán nào">Chưa tích <b data-r="pay:none">${fmt(rep.pay.none)}</b></span></div>
     <div class="tw"><table class="orders rept"><thead>
       <tr><th class="stick rl" rowspan="2"></th>${runs.map(r => `<th class="gh g-${r.g} gstart" colspan="${r.list.length}">${esc(GROUPS[r.g].name)}</th>`).join('')}</tr>
       <tr>${runs.map(r => r.list.map((p, i) => `<th class="p g-${r.g}${i ? '' : ' gstart'}" title="${esc(p.name)} · ${perOf(p)} cái/túi">${esc(prodShort(p))}</th>`).join('')).join('')}</tr></thead><tbody>
@@ -706,7 +724,7 @@ function drawTable() {
     return;
   }
   let lastArea = null, html = '';
-  const cols = 7 + ps.length;
+  const cols = 6 + PAYS.length + ps.length;
   rows.slice(0, shown).forEach(c => {
     if (c.q !== lastArea) { lastArea = c.q; html += `<tr class="grp"><td colspan="${cols}"><span class="grp-l">${esc(c.q || 'Chưa có khu vực')}</span></td></tr>`; }
     html += rowHtml(c, ps, pay);
@@ -714,8 +732,8 @@ function drawTable() {
   const runs = groupRuns(ps);
   el.innerHTML = `<div class="tw otw"><table class="orders" id="orders"><thead><tr>
       <th class="stick s-crm" rowspan="2">CRM</th><th class="stick s-cust" rowspan="2">Khách hàng</th><th rowspan="2">Tình trạng</th>${runs.map(r => `<th class="gh g-${r.g} gstart" colspan="${r.list.length}">${esc(GROUPS[r.g].name)}</th>`).join('')}
-      <th rowspan="2">Đóng gói</th><th rowspan="2">Định mức</th><th rowspan="2">Thanh toán</th><th rowspan="2"></th></tr>
-      <tr>${runs.map(r => r.list.map((p, i) => `<th class="p g-${r.g}${i ? '' : ' gstart'}" title="${esc(p.name)}">${esc(prodShort(p))}</th>`).join('')).join('')}</tr></thead><tbody>${html}</tbody></table></div>
+      <th rowspan="2">Đóng gói</th><th rowspan="2">Định mức</th><th class="gh pay-h gstart" colspan="${PAYS.length}">Thanh toán</th><th rowspan="2"></th></tr>
+      <tr>${runs.map(r => r.list.map((p, i) => `<th class="p g-${r.g}${i ? '' : ' gstart'}" title="${esc(p.name)}">${esc(prodShort(p))}</th>`).join('')).join('')}${PAYS.map(([k, l, , full], i) => `<th class="p pay-th p-${k}${i ? '' : ' gstart'}" title="${esc(full)}">${esc(l)}</th>`).join('')}</tr></thead><tbody>${html}</tbody></table></div>
     ${rows.length > shown ? `<div class="more"><button class="btn" id="d-more">Xem thêm ${Math.min(PAGE, rows.length - shown)} khách (còn ${rows.length - shown})</button></div>` : ''}
     <p class="hint" style="margin-top:8px">${rows.length} khách. Gõ số lượng là tự lưu và tự tính định mức. Bấm ⋯ để nhập người bàn giao, người giao, tài xế, công nợ, ngày thanh toán, người check, ghi chú.</p>`;
   if ($('#d-more')) $('#d-more').onclick = () => { shown += PAGE; drawTable(); };
@@ -732,7 +750,7 @@ function rowHtml(c, ps, pay) {
     ${ps.map((pr, i) => { const v = (o.q || {})[pr.id], g = groupOf(pr), st = !i || groupOf(ps[i - 1]) !== g; return `<td class="pc g-${g}${st ? ' gstart' : ''}"><input class="q ${num(v) > 0 ? 'has' : ''}" data-p="${esc(pr.id)}" inputmode="decimal" value="${v ? esc(v) : ''}" aria-label="${esc(prodLabel(pr))}" title="${esc(prodLabel(pr))}"></td>`; }).join('')}
     <td><select class="in" data-k="pk">${['TÚI ĐEN', 'THÙNG'].map(x => `<option ${norm(x) === norm(pk) ? 'selected' : ''}>${x}</option>`).join('')}</select></td>
     <td class="pack" data-out="pack">${esc(packLabel(p))}</td>
-    <td><select class="in" data-k="tt"><option value=""></option>${pay.map(x => `<option ${x === o.tt ? 'selected' : ''}>${esc(x)}</option>`).join('')}${o.tt && !pay.includes(o.tt) ? `<option selected>${esc(o.tt)}</option>` : ''}</select></td>
+    ${PAYS.map(([k, l, , full], i) => `<td class="pay-td${i ? '' : ' gstart'}"><input type="checkbox" class="pay-cb p-${k}" data-pay="${k}" ${payKey(o.tt) === k ? 'checked' : ''} aria-label="${esc(full)}" title="${esc(full)}"></td>`).join('')}
     <td><button class="btn sm ghost" data-more title="Chi tiết đơn">⋯</button></td></tr>`;
 }
 // ghi 1 dòng (gộp các lần gõ liên tiếp)
@@ -775,6 +793,12 @@ function bindRows(el) {
       inp.addEventListener('focus', () => inp.select());
     });
     $$('select[data-k]', tr).forEach(sel => sel.onchange = () => { patchRow(cid, { [sel.dataset.k]: sel.value }); updateRow(tr, cid); updateDayTotals(); });
+    // ô tích thanh toán: tích ô này thì bỏ tích các ô khác của dòng
+    $$('input[data-pay]', tr).forEach(cb => cb.onchange = () => {
+      $$('input[data-pay]', tr).forEach(x => { if (x !== cb) x.checked = false; });
+      const hit = PAYS.find(([k]) => k === cb.dataset.pay);
+      patchRow(cid, { tt: cb.checked ? hit[2] : '' }); updateDayTotals();
+    });
     $('[data-more]', tr).onclick = () => editOrder(cid);
   });
 }
@@ -793,6 +817,7 @@ function updateDayTotals() {
     const [k, id] = key.split(':');
     if (k === 'tui') return rep.tui[id] || 0; if (k === 'cai') return rep.cai[id] || 0; if (k === 'need') return t.need[id];
     if (k === 'tuyen') return num(S.day.tuyen[id]);
+    if (k === 'pay') return rep.pay[id];
     return rep[k];
   };
   $$('[data-r]', root).forEach(el => {
@@ -934,17 +959,17 @@ function printDoc(d, r, tuyen) {
   const t = dayTotals(r), list = dayOrders(r).sort((a, b) => (a.c.s || 0) - (b.c.s || 0));
   let area = null, i = 0, rows = '';
   for (const { o, c } of list) {
-    if (c.q !== area) { area = c.q; rows += `<tr class="grp"><td colspan="8">${esc(area || 'Chưa có khu vực')}</td></tr>`; }
+    if (c.q !== area) { area = c.q; rows += `<tr class="grp"><td colspan="9">${esc(area || 'Chưa có khu vực')}</td></tr>`; }
     const pk = packOf(o, c);
     rows += `<tr><td class="n">${++i}</td><td>${esc(c.crm || '')}</td><td>${esc(c.name)}</td><td>${esc(c.phone || '')}</td><td>${esc([c.note, o.gc].filter(Boolean).join(' · '))}</td>
-      <td>${esc(prodText(o.q))}</td><td>${esc(pk)}</td><td class="pack">${esc(packLabel(packing(o.q, pk)))}</td></tr>`;
+      <td>${esc(prodText(o.q))}</td><td>${esc(pk)}</td><td class="pack">${esc(packLabel(packing(o.q, pk)))}</td><td>${esc(o.tt || '')}</td></tr>`;
   }
   return `<h2 style="text-align:center;margin-bottom:4px">ĐỊNH MỨC ĐÓNG HÀNG NGÀY ${vn(d)}</h2>
     <p class="hint" style="text-align:center;margin:0 0 14px">${dow(d)} · ${t.count} đơn</p>
     <div style="margin-bottom:16px">${reportHtml(dayReport(r, tuyen), t.need, tuyen, false).replace('id="d-report"', '')}</div>
     <h3 style="margin-bottom:6px">Chi tiết đóng hàng từng khách</h3>
-    <div class="tw"><table><thead><tr><th class="n">STT</th><th>CRM</th><th>Khách hàng</th><th>SĐT</th><th>Ghi chú</th><th>Sản phẩm</th><th>Đóng gói</th><th>Định mức</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="8" class="muted">Chưa có đơn</td></tr>'}</tbody></table></div>`;
+    <div class="tw"><table><thead><tr><th class="n">STT</th><th>CRM</th><th>Khách hàng</th><th>SĐT</th><th>Ghi chú</th><th>Sản phẩm</th><th>Đóng gói</th><th>Định mức</th><th>Thanh toán</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="9" class="muted">Chưa có đơn</td></tr>'}</tbody></table></div>`;
 }
 function viewPrint(main) {
   const d = S.date, r = S.day ? S.day.r : {};
