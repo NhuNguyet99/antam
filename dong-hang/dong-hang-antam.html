@@ -126,6 +126,22 @@ tbody tr.grp:hover td { background: var(--accent-soft); }
 .orders .cust.stick, .orders th.s-cust { left: 76px; }
 .orders tr.has-order td.s-crm { color: var(--accent); }
 .orders .grp-l { position: sticky; left: 8px; }
+/* báo cáo ngày (như các dòng tổng cuối sheet) */
+.rep { display: grid; gap: 12px; }
+.rep-big { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
+.rep-big > div { border: 1px solid var(--line); border-radius: 8px; padding: 10px 14px; background: var(--panel); }
+.rep-big .v { font-family: var(--f-num); font-size: 30px; font-weight: 700; line-height: 1.15; font-variant-numeric: tabular-nums; }
+.rep-big .k { font-size: 12px; color: var(--ink-2); font-weight: 600; letter-spacing: .02em; }
+.rep-big .hot { background: var(--warn-soft); border-color: var(--hit-bar); }
+.rep-big .hot .v { color: var(--bad); }
+.rept th.rl, .rept td.rl { min-width: 128px; width: 128px; font-weight: 700; white-space: nowrap; }
+.rept td.pc { font-family: var(--f-num); font-variant-numeric: tabular-nums; }
+.rept tr.r-tui td.pc { color: var(--bad); font-weight: 600; }
+.rept tr.r-cai td { font-weight: 700; border-top: 2px solid var(--line); }
+.rept tr.r-tuyen td.rl { color: var(--crust); }
+.rept input.q { width: 56px; }
+.zero { color: var(--muted) !important; font-weight: 400 !important; }
+.rep h4 { margin: 0 0 6px; font-size: 12px; text-transform: uppercase; letter-spacing: .05em; color: var(--ink-2); }
 /* dòng khớp ô tìm kiếm */
 mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 1px; }
 tr.hit > td:not(.pc), tbody tr.hit:hover > td:not(.pc) { background: var(--hit); }
@@ -421,7 +437,7 @@ function watchDay(d) {
     const data = s.exists ? s.data() : { date: d, r: {} };
     // giữ các ô đang gõ dở trên máy này
     const mine = S.day && S.day.date === d ? S.localRows || {} : {};
-    S.day = { date: d, r: Object.assign({}, data.r || {}) };
+    S.day = { date: d, r: Object.assign({}, data.r || {}), tuyen: Object.assign({}, data.tuyen || {}, S.localTuyen || {}) };
     for (const [cid, rec] of Object.entries(mine)) S.day.r[cid] = deepMerge(JSON.parse(JSON.stringify(S.day.r[cid] || {})), rec);
     refresh(true);
   }, e => toast('Đơn ngày ' + vn(d) + ': ' + dbErr(e).message, true));
@@ -439,7 +455,7 @@ function refresh(fromDay) {
   refreshTimer = setTimeout(() => {
     // không vẽ lại khi đang gõ trong bảng (tránh mất con trỏ); chỉ cập nhật số tổng
     const a = document.activeElement;
-    if (S.view === 'don' && a && a.closest && a.closest('#orders')) { if (fromDay) updateDayTotals(); return; }
+    if (S.view === 'don' && a && a.closest && a.closest('#orders, #d-report')) { if (fromDay) updateDayTotals(); return; }
     if (S.view === 'cd' && $('#main [data-dirty="1"]')) return;
     render();
   }, 60);
@@ -497,6 +513,25 @@ const hasOrder = o => !!o && statusOf(o) === 'HOẠT ĐỘNG';
 function dayOrders(dayR) {
   return live(dayR).filter(([cid, o]) => hasOrder(o)).map(([cid, o]) => ({ cid, o, c: S.cust[cid] || { id: cid, name: (o.snap && o.snap.name) || '(khách đã xóa)', q: (o.snap && o.snap.q) || '' } }));
 }
+// Báo cáo ngày như cuối sheet: TỔNG TÚI (đơn), BÁNH TUYẾN, TỔNG CÁI = (túi + bánh tuyến) × cái/túi, TACOS, KEBAB, BILL
+function dayReport(dayR, tuyen) {
+  const list = dayOrders(dayR), tui = {}, cai = {};
+  let bill = 0;
+  for (const { o, c } of list) {
+    for (const [pid, n] of Object.entries(o.q || {})) if (num(n) > 0) tui[pid] = (tui[pid] || 0) + num(n);
+    bill += o.bill != null && o.bill !== '' ? num(o.bill) : (c.bill == null ? 1 : num(c.bill));
+  }
+  let tacos = 0, kebab = 0;
+  for (const p of S.cfg.products) {
+    const n = ((tui[p.id] || 0) + num((tuyen || {})[p.id])) * perOf(p);
+    cai[p.id] = n;
+    const g = groupOf(p);
+    if (['thuong', 'dacbiet', 'tuoi'].includes(g)) tacos += n; else if (g === 'kebab') kebab += n;
+  }
+  const tuyenTxt = S.cfg.products.filter(p => num((tuyen || {})[p.id]) > 0)
+    .map(p => `${fmt(tuyen[p.id])} túi ${prodLabel(p)} = ${fmt(num(tuyen[p.id]) * perOf(p))} cái`).join(' · ');
+  return { tui, cai, tacos, kebab, bill, count: list.length, tuyenTxt };
+}
 function dayTotals(dayR) {
   const need = { tui: 0, tuiK: 0, giay: 0, nho: 0, chung: 0, dai: 0, cay: 0 }, prod = {}, size = { 22: 0, 25: 0, 28: 0, 31: 0, K: 0 };
   const list = dayOrders(dayR);
@@ -536,6 +571,8 @@ const prodById = id => S.cfg.products.find(p => p.id === id);
 const prodShort = p => (p.short && !OLD_SHORT.has(p.short) ? p.short : SHORT[String(p.name).replace(/\s+/g, ' ').trim()] || p.short || p.name);
 // tên đầy đủ dễ đọc (bản in, chi tiết): "Tươi 22 cm", "Kebab mè đen", "Bánh 25 cm than tre"
 const prodLabel = p => { const sh = prodShort(p), g = GROUPS[groupOf(p)]; return norm(sh).startsWith(norm(g.pre)) || !g.pre ? sh : g.pre + sh; };
+// số cái trong 1 túi (sheet: TỔNG CÁI = túi × 15 với bánh tacos; kebab tính theo cái)
+const perOf = p => (p.per != null && p.per !== '' ? num(p.per) : ['thuong', 'dacbiet', 'tuoi'].includes(groupOf(p)) ? 15 : 1);
 // các nhóm liền nhau của danh sách cột: [{g, list}]
 function groupRuns(ps) { const runs = []; for (const p of ps) { const g = groupOf(p); if (!runs.length || runs[runs.length - 1].g !== g) runs.push({ g, list: [] }); runs[runs.length - 1].list.push(p); } return runs; }
 const emptyCust = () => `<div class="card empty"><div class="big">Chưa có danh sách khách hàng</div>
@@ -545,6 +582,30 @@ const emptyCust = () => `<div class="card empty"><div class="big">Chưa có danh
 /* ================================================================ ĐƠN HÀNG NGÀY */
 const PAGE = 200;
 let shown = PAGE;
+function reportHtml(rep, need, tuyen, editable) {
+  const runs = groupRuns(S.cfg.products.filter(p => p.show !== false));
+  const cells = (fn) => runs.map(r => r.list.map((p, i) => `<td class="pc g-${r.g}${i ? '' : ' gstart'}">${fn(p)}</td>`).join('')).join('');
+  const nz = (v, key) => `<span data-r="${key}" class="${v ? '' : 'zero'}">${fmt(v)}</span>`;
+  return `<div class="rep" id="d-report">
+    <div class="rep-big">
+      <div class="hot"><div class="v" data-r="tacos">${fmt(rep.tacos)}</div><div class="k">TACOS · tổng cái bánh các size</div></div>
+      <div class="hot"><div class="v" data-r="kebab">${fmt(rep.kebab)}</div><div class="k">KEBAB · tổng cái (gồm mè, than tre)</div></div>
+      <div><div class="v" data-r="bill">${fmt(rep.bill)}</div><div class="k">BILL</div></div>
+      <div><div class="v" data-r="count">${fmt(rep.count)}</div><div class="k">ĐƠN HOẠT ĐỘNG</div></div>
+    </div>
+    <div class="tw"><table class="orders rept"><thead>
+      <tr><th class="stick rl" rowspan="2"></th>${runs.map(r => `<th class="gh g-${r.g} gstart" colspan="${r.list.length}">${esc(GROUPS[r.g].name)}</th>`).join('')}</tr>
+      <tr>${runs.map(r => r.list.map((p, i) => `<th class="p g-${r.g}${i ? '' : ' gstart'}" title="${esc(p.name)} · ${perOf(p)} cái/túi">${esc(prodShort(p))}</th>`).join('')).join('')}</tr></thead><tbody>
+      <tr class="r-tuyen"><td class="stick rl" title="Bánh mang theo tuyến – cộng vào Tổng cái, không vào Tổng túi">BÁNH TUYẾN</td>${cells(p => editable
+        ? `<input class="q ${num((tuyen || {})[p.id]) > 0 ? 'has' : ''}" data-tuyen="${esc(p.id)}" inputmode="decimal" value="${num((tuyen || {})[p.id]) || ''}" aria-label="Bánh tuyến ${esc(prodLabel(p))}">`
+        : nz(num((tuyen || {})[p.id]), 'tuyen:' + p.id))}</tr>
+      <tr class="r-tui"><td class="stick rl">TỔNG TÚI</td>${cells(p => nz(rep.tui[p.id] || 0, 'tui:' + p.id))}</tr>
+      <tr class="r-cai"><td class="stick rl">TỔNG CÁI</td>${cells(p => nz(rep.cai[p.id] || 0, 'cai:' + p.id))}</tr>
+    </tbody></table></div>
+    <p class="hint" data-r="tuyenTxt">${rep.tuyenTxt ? 'Bánh tuyến: ' + esc(rep.tuyenTxt) : 'Bánh tuyến: chưa nhập. Nhập số túi ở dòng BÁNH TUYẾN (được cộng vào Tổng cái).'}</p>
+    <div><h4>Tổng cần chuẩn bị (bao bì)</h4><div class="need">${NEED.map(([k, n]) => `<div class="box"><div class="k">${esc(n)}</div><div class="v" data-r="need:${k}">${fmt(need[k])}</div></div>`).join('')}</div></div>
+  </div>`;
+}
 function needHtml(t) {
   return `<div class="need">${[['Số đơn', t.count, '']].concat(SIZES.map(s => [`Bánh ${s} cm`, t.size[s], ''])).concat([['Kebab', t.size.K, '']])
     .concat(NEED.map(([k, n]) => [n, t.need[k], 'box'])).map(([k, v, cl]) => `<div class="${cl}"><div class="k">${esc(k)}</div><div class="v">${fmt(v)}</div></div>`).join('')}</div>`;
@@ -571,7 +632,7 @@ function viewDay(main) {
         <span class="grow"></span>
         <button class="btn sm" id="d-print">Xem định mức đóng hàng</button>
       </div>
-      <div id="d-need">${needHtml(tot)}</div>
+      ${reportHtml(dayReport(S.day ? S.day.r : {}, S.day && S.day.tuyen), tot.need, S.day && S.day.tuyen, true)}
     </div>
     <div class="row">
       <label class="field grow" style="min-width:200px">Tìm khách (tên, CRM, SĐT, địa chỉ) – tìm trong tất cả khách để thêm đơn<input id="f-q" value="${esc(f.q)}" placeholder="VD: K1326 hoặc Wallace"></label>
@@ -586,6 +647,7 @@ function viewDay(main) {
   $('#d-today').onclick = () => { shown = PAGE; watchDay(today()); render(); };
   $('#d-date').onchange = e => { if (e.target.value) { shown = PAGE; watchDay(e.target.value); render(); } };
   $('#d-print').onclick = () => setView('in');
+  bindReport();
   $('#d-add').onclick = () => editCustomer(null);
   const saveF = () => store('filter', S.filter);
   let qt; $('#f-q').oninput = e => { clearTimeout(qt); qt = setTimeout(() => { S.filter.q = e.target.value; saveF(); shown = PAGE; drawTable(); }, 220); };
@@ -713,7 +775,43 @@ function updateRow(tr, cid) {
   tr.classList.toggle('has-order', hasOrder(o));
   const sel = $('select[data-k=hd]', tr); if (sel) sel.options[0].textContent = (qtyTotal(o.q) > 0 ? 'HOẠT ĐỘNG' : 'NGHỈ') + ' (tự)';
 }
-function updateDayTotals() { const el = $('#d-need'); if (el) el.innerHTML = needHtml(dayTotals(S.day ? S.day.r : {})); }
+// cập nhật số trên báo cáo mà không vẽ lại ô đang gõ
+function updateDayTotals() {
+  const root = $('#d-report'); if (!root || !S.day) return;
+  const rep = dayReport(S.day.r, S.day.tuyen), t = dayTotals(S.day.r);
+  const val = key => {
+    const [k, id] = key.split(':');
+    if (k === 'tui') return rep.tui[id] || 0; if (k === 'cai') return rep.cai[id] || 0; if (k === 'need') return t.need[id];
+    if (k === 'tuyen') return num(S.day.tuyen[id]);
+    return rep[k];
+  };
+  $$('[data-r]', root).forEach(el => {
+    const key = el.dataset.r;
+    if (key === 'tuyenTxt') { el.textContent = rep.tuyenTxt ? 'Bánh tuyến: ' + rep.tuyenTxt : 'Bánh tuyến: chưa nhập. Nhập số túi ở dòng BÁNH TUYẾN (được cộng vào Tổng cái).'; return; }
+    const v = val(key); el.textContent = fmt(v);
+    if (el.tagName === 'SPAN') el.classList.toggle('zero', !v);
+  });
+}
+// dòng BÁNH TUYẾN: lưu vào ngay/<ngày>.tuyen
+S.localTuyen = {};
+let tuyenTimer = null;
+function bindReport() {
+  $$('#d-report input[data-tuyen]').forEach(inp => {
+    inp.addEventListener('focus', () => inp.select());
+    inp.addEventListener('input', () => {
+      const pid = inp.dataset.tuyen, n = num(inp.value);
+      S.day.tuyen[pid] = n; S.localTuyen[pid] = n;
+      inp.classList.toggle('has', n > 0);
+      updateDayTotals();
+      if (!tuyenTimer) { pendingWrites++; setSync(); } else clearTimeout(tuyenTimer);
+      tuyenTimer = setTimeout(() => {
+        tuyenTimer = null; pendingWrites--;
+        const patch = S.localTuyen, d = S.date; S.localTuyen = {};
+        mergeInto('ngay/' + d, { tuyen: patch }, { date: d, r: {} }).catch(e => toast(e.message, true));
+      }, 700);
+    });
+  });
+}
 const ORDER_FIELDS = [['tao', 'Người tạo đơn'], ['bg', 'Người bàn giao bánh'], ['gh', 'Người giao hàng'], ['tx', 'Tài xế'], ['cn', 'Công nợ'], ['ntt', 'Ngày thanh toán', 'date'], ['ck', 'Tên người check'], ['bill', 'Bill', 'number']];
 function people(field) {
   const s = new Set(); if (S.me && field === 'tao') s.add(S.me);
@@ -822,9 +920,8 @@ function viewCust(main) {
 function prodText(q) {
   return S.cfg.products.filter(p => num((q || {})[p.id]) > 0).map(p => `${prodLabel(p)}: ${fmt(q[p.id])}`).join(', ');
 }
-function printDoc(d, r) {
+function printDoc(d, r, tuyen) {
   const t = dayTotals(r), list = dayOrders(r).sort((a, b) => (a.c.s || 0) - (b.c.s || 0));
-  const prods = S.cfg.products.filter(p => t.prod[p.id]);
   let area = null, i = 0, rows = '';
   for (const { o, c } of list) {
     if (c.q !== area) { area = c.q; rows += `<tr class="grp"><td colspan="8">${esc(area || 'Chưa có khu vực')}</td></tr>`; }
@@ -834,12 +931,7 @@ function printDoc(d, r) {
   }
   return `<h2 style="text-align:center;margin-bottom:4px">ĐỊNH MỨC ĐÓNG HÀNG NGÀY ${vn(d)}</h2>
     <p class="hint" style="text-align:center;margin:0 0 14px">${dow(d)} · ${t.count} đơn</p>
-    <div class="grid2" style="margin-bottom:16px">
-      <div><h3 style="margin-bottom:6px">Tổng cần chuẩn bị</h3><div class="tw"><table><thead><tr><th>Bao bì</th><th class="n">Số lượng</th></tr></thead><tbody>
-        ${NEED.map(([k, n]) => `<tr><td>${n}</td><td class="n"><b>${fmt(t.need[k])}</b></td></tr>`).join('')}</tbody></table></div></div>
-      <div><h3 style="margin-bottom:6px">Tổng sản phẩm</h3><div class="tw"><table><thead><tr><th>Sản phẩm</th><th class="n">Số lượng</th></tr></thead><tbody>
-        ${prods.length ? prods.map(p => `<tr><td><span class="gdot g-${groupOf(p)}"></span>${esc(prodLabel(p))}</td><td class="n"><b>${fmt(t.prod[p.id])}</b></td></tr>`).join('') : '<tr><td colspan="2" class="muted">Chưa có đơn</td></tr>'}</tbody></table></div></div>
-    </div>
+    <div style="margin-bottom:16px">${reportHtml(dayReport(r, tuyen), t.need, tuyen, false).replace('id="d-report"', '')}</div>
     <h3 style="margin-bottom:6px">Chi tiết đóng hàng từng khách</h3>
     <div class="tw"><table><thead><tr><th class="n">STT</th><th>CRM</th><th>Khách hàng</th><th>SĐT</th><th>Ghi chú</th><th>Sản phẩm</th><th>Đóng gói</th><th>Định mức</th></tr></thead>
       <tbody>${rows || '<tr><td colspan="8" class="muted">Chưa có đơn</td></tr>'}</tbody></table></div>`;
@@ -852,12 +944,12 @@ function viewPrint(main) {
       <button class="btn" id="p-copy" title="Dán vào web Kho An Tâm › Phân tuyến giao hàng">Sao chép cho Phân tuyến (web kho)</button>
       <button class="btn" id="p-csv">Tải Excel (CSV)</button>
       <button class="btn pri" id="p-html">Tải bản in</button></div>
-    <div class="card" id="p-doc">${printDoc(d, r)}</div>
+    <div class="card" id="p-doc">${printDoc(d, r, S.day && S.day.tuyen)}</div>
     <p class="hint">Trang không mở được hộp thoại in. Bấm <b>Tải bản in</b> rồi mở file vừa tải bằng trình duyệt và bấm Ctrl+P để in.</p>`;
   const go = nd => { watchDay(nd); render(); };
   $('#p-prev').onclick = () => go(addDays(d, -1)); $('#p-next').onclick = () => go(addDays(d, 1));
   $('#p-date').onchange = e => e.target.value && go(e.target.value);
-  $('#p-html').onclick = () => guard(() => saveFile(`dinh-muc-dong-hang-${d}.html`, printablePage(`Định mức đóng hàng ${vn(d)}`, printDoc(d, r)), 'text/html'));
+  $('#p-html').onclick = () => guard(() => saveFile(`dinh-muc-dong-hang-${d}.html`, printablePage(`Định mức đóng hàng ${vn(d)}`, printDoc(d, r, S.day && S.day.tuyen)), 'text/html'));
   $('#p-csv').onclick = () => guard(() => saveFile(`don-hang-${d}.csv`, '﻿' + toCsv(sheetRows(d, r)), 'text/csv'));
   $('#p-copy').onclick = async () => {
     const txt = routingRows(r).map(row => row.map(x => String(x == null ? '' : x).replace(/[\t\r\n]+/g, ' ')).join('\t')).join('\n');
@@ -890,6 +982,13 @@ function sheetRows(d, r) {
     out.push([c.q, c.crm, c.name, c.phone, c.note, oo.bill == null ? (c.bill == null ? 1 : c.bill) : oo.bill, oo.bg, oo.gh, statusOf(o), oo.tt, oo.tao, oo.gc, oo.cn, oo.tx, oo.ntt ? vn(oo.ntt) : '', oo.ck]
       .concat(ps.map(p => (num((oo.q || {})[p.id]) > 0 ? num(oo.q[p.id]) : ''))).concat([hasOrder(o) ? pk : '', hasOrder(o) ? packLabel(packing(oo.q, pk)) : '']));
   }
+  const tuyen = (S.day && S.day.date === d && S.day.tuyen) || {}, rp = dayReport(r, tuyen), pad = new Array(16).fill('');
+  out.push(['', '', 'BÁNH TUYẾN'].concat(pad.slice(3)).concat(ps.map(p => num(tuyen[p.id]) || '')));
+  out.push(['', '', 'TỔNG TÚI'].concat(pad.slice(3)).concat(ps.map(p => rp.tui[p.id] || 0)));
+  out.push(['', '', 'TỔNG CÁI'].concat(pad.slice(3)).concat(ps.map(p => rp.cai[p.id] || 0)));
+  out.push(['', '', 'TỔNG SỐ LƯỢNG SIZE TACOS', rp.tacos + ' TACOS']);
+  out.push(['', '', 'TỔNG SỐ LƯỢNG CÁI KEBAB (bao gồm mè, than tre)', rp.kebab + ' KEBAB']);
+  out.push(['', '', rp.bill + ' BILL']);
   return out;
 }
 // Mẫu web Kho An Tâm › Phân tuyến: QUẬN, CRM, KHÁCH, SĐT, GHI CHÚ, …, TRẠNG THÁI, TÌNH TRẠNG rồi các cột sản phẩm
@@ -1260,9 +1359,10 @@ function viewSettings(main) {
       <label class="field">Khu vực hoặc ghi chú có các chữ này thì tự chọn đóng THÙNG (cách nhau dấu phẩy)<input id="s-words" value="${esc(c.thungWords)}"></label>
     </div>
     <div class="card" style="display:grid;gap:10px"><h2>Sản phẩm (các cột số lượng)</h2>
-      <div class="tw prods"><table><thead><tr><th>Tên đầy đủ (giống tiêu đề cột trong sheet)</th><th>Nhóm (màu cột)</th><th>Tên cột trên bảng</th><th>Loại tính đóng gói</th><th>Hiện</th><th></th></tr></thead><tbody>
+      <div class="tw prods"><table><thead><tr><th>Tên đầy đủ (giống tiêu đề cột trong sheet)</th><th>Nhóm (màu cột)</th><th>Tên cột trên bảng</th><th>Cái / túi</th><th>Loại tính đóng gói</th><th>Hiện</th><th></th></tr></thead><tbody>
         ${c.products.map((p, i) => `<tr data-i="${i}"><td><input class="in" data-k="name" value="${esc(p.name)}" style="width:100%;min-width:220px"></td><td><select class="in" data-k="grp"><option value="">Tự (${esc(GROUPS[groupOf(Object.assign({}, p, { grp: '' }))].name)})</option>${Object.entries(GROUPS).map(([k, g]) => `<option value="${k}" ${p.grp === k ? 'selected' : ''}>${esc(g.name)}</option>`).join('')}</select></td>
           <td><input class="in" data-k="short" value="${esc(prodShort(p))}" style="width:150px"></td>
+          <td><input class="in" data-k="per" inputmode="numeric" value="${esc(perOf(p))}" style="width:64px;text-align:right" title="TỔNG CÁI = (tổng túi + bánh tuyến) × số này"></td>
           <td><select class="in" data-k="size">${Object.entries(SIZE_LABEL).map(([k, n]) => `<option value="${k}" ${p.size === k ? 'selected' : ''}>${n}</option>`).join('')}</select></td>
           <td><input type="checkbox" data-k="show" ${p.show !== false ? 'checked' : ''}></td>
           <td class="nowrap"><button class="btn sm ghost" data-up ${i ? '' : 'disabled'} aria-label="Lên">↑</button><button class="btn sm ghost" data-down ${i < c.products.length - 1 ? '' : 'disabled'} aria-label="Xuống">↓</button><button class="btn sm ghost danger" data-del aria-label="Xóa">✕</button></td></tr>`).join('')}
