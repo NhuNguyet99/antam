@@ -353,6 +353,7 @@ const SHARDS = 8;
 const shardOf = id => { let h = 0; for (const c of id) h = (h * 31 + c.charCodeAt(0)) >>> 0; return 'k' + (h % SHARDS); };
 const live = o => Object.entries(o || {}).filter(([, v]) => v != null);
 const queues = {};
+const HOLDER = rid('h'); // mã của tab này khi giữ khóa tạo tài liệu
 function serial(path, fn) { const p = (queues[path] || Promise.resolve()).catch(() => {}).then(fn); queues[path] = p; return p; }
 let pendingWrites = 0;
 function setSync() {
@@ -362,7 +363,8 @@ function setSync() {
 }
 function dbErr(e) {
   const c = e && e.code;
-  if (c === 'invalid_argument') return new Error('Không lưu được: dữ liệu quá lớn hoặc bạn chỉ có quyền xem trang này (cần được mời với quyền Editor).');
+  if (c === 'invalid_argument') return new Error(S.readOnly ? 'Bạn đang chỉ có quyền xem trang này – nhờ chủ trang mời bằng email với quyền Editor để nhập liệu.'
+    : 'Không lưu được (' + (e.message || 'invalid_argument') + '). Tải lại trang rồi thử lại; nếu vẫn lỗi, chụp màn hình gửi người làm web.');
   if (c === 'quota_exceeded') return new Error('Kho dữ liệu của trang đã đầy: ' + (e.message || ''));
   if (c === 'resource_exhausted') return new Error('Thao tác quá nhanh, thử lại sau vài giây.');
   if (c === 'revoked') return new Error('Bạn không còn quyền truy cập trang này.');
@@ -377,7 +379,8 @@ function mergeInto(path, patch, base) {
       try { await ref.update(patch); return; } catch (e) { if (!e || e.code !== 'invalid_argument') throw e; }
       const snap = await ref.get();
       if (snap.exists) { await ref.update(patch); return; }
-      const lease = await ref.acquire({ ttlMs: 3000 });
+      // tài liệu chưa có (VD ngày mới): giữ khóa ngắn rồi tạo; acquire bắt buộc có holder
+      const lease = await ref.acquire({ holder: HOLDER, ttlMs: 3000 });
       if (!lease.acquired) { await sleep(800); await ref.update(patch); return; }
       const again = await ref.get();
       if (again.exists) await ref.update(patch); else await ref.set(Object.assign({}, base || {}, patch));
@@ -411,6 +414,8 @@ async function boot() {
     S.user = user; if (!user) return;
     const me = await user.me(); S.myId = (me && me.id) || '';
     if (!S.me && me && me.name) { S.me = me.name; $('#me-name').textContent = S.me; }
+    const can = await user.can('data.write').catch(() => null);
+    if (can === false) { S.readOnly = true; toast('Bạn đang chỉ có quyền xem – nhờ chủ trang mời bằng email với quyền Editor để nhập liệu.', true); }
   }).catch(e => console.warn('user', e));
   $('#me-name').textContent = S.me || 'Đặt tên';
   // cài đặt: dùng mặc định ngay, có bản đã lưu thì thay
