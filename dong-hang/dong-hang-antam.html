@@ -126,6 +126,11 @@ tbody tr.grp:hover td { background: var(--accent-soft); }
 .orders .cust.stick, .orders th.s-cust { left: 76px; }
 .orders tr.has-order td.s-crm { color: var(--accent); }
 .orders .grp-l { position: sticky; left: 8px; }
+/* dòng lọc theo cột */
+.orders tr.flt th { background: var(--line-2); padding: 4px 6px; font-weight: 500; }
+.orders tr.flt th.pf { background: var(--gs); }
+.flt-sel { width: 100%; min-width: 64px; font-size: 12px; padding: 3px 4px; border: 1px solid var(--line); border-radius: 5px; background: var(--input); color: var(--muted); }
+.flt-sel.on { border-color: var(--accent); background: var(--accent-soft); color: var(--accent); font-weight: 700; }
 /* cột tích thanh toán */
 .p-ctt { --pc: var(--bad); --pcs: var(--bad-soft); } .p-dtt { --pc: var(--good); --pcs: var(--good-soft); }
 .p-ht { --pc: var(--warn); --pcs: var(--warn-soft); } .p-tm { --pc: var(--g-tuoi); --pcs: var(--g-tuoi-s); } .p-none { --pc: var(--muted); --pcs: var(--line-2); }
@@ -710,38 +715,88 @@ function matchCust(c, qn) {
   if (!qn) return true;
   return [c.name, c.crm, c.phone, c.note, c.q].some(x => norm(x).includes(qn)) || keyOf(c.phone).includes(qn.replace(/\D/g, '') || '§');
 }
+// Lọc theo cột (dòng lọc dưới tiêu đề bảng): {crm, st, pay, pk, pack, p: {mã sp: 'co' | 'trong'}}
+const colF = () => (S.filter.cols = Object.assign({ p: {} }, S.filter.cols || {}));
+const colFCount = () => { const f = colF(); return ['crm', 'st', 'pay', 'pk', 'pack'].filter(k => f[k]).length + Object.values(f.p || {}).filter(Boolean).length; };
+function packKind(o, c) {
+  const r = packing((o || {}).q, packOf(o, c)), out = [];
+  if (r.tui || r.tuiK) out.push('tui'); if (r.giay || r.nho || r.chung || r.dai) out.push('thung'); if (r.cay) out.push('cay');
+  return out.length ? out : ['none'];
+}
+function passCols(c) {
+  const f = colF(), o = orderOf(c.id) || {};
+  if (f.crm && (f.crm === 'co') !== !!c.crm) return false;
+  if (f.st && statusOf(o) !== f.st) return false;
+  if (f.pay && (f.pay === 'none' ? !!payKey(o.tt) : payKey(o.tt) !== f.pay)) return false;
+  if (f.pk && norm(packOf(o, c)) !== norm(f.pk)) return false;
+  if (f.pack && !packKind(o, c).includes(f.pack)) return false;
+  for (const [pid, v] of Object.entries(f.p || {})) { if (!v) continue; const has = num((o.q || {})[pid]) > 0; if ((v === 'co') !== has) return false; }
+  return true;
+}
 function filteredRows() {
   const f = S.filter, qn = norm(f.q);
   let list = custList().filter(c => (!f.area || c.q === f.area) && matchCust(c, qn));
   if (!qn) list = f.mode === 'co' ? list.filter(c => hasOrder(orderOf(c.id))) : list.filter(c => !c.off || hasOrder(orderOf(c.id)));
   // đơn của khách đã xóa khỏi danh mục vẫn hiện
   if (!qn && !f.area) for (const { cid, c } of dayOrders(S.day ? S.day.r : {})) if (!S.cust[cid]) list.push(c);
-  return list;
+  return colFCount() ? list.filter(passCols) : list;
+}
+const fSel = (key, opts, cur, label) => `<select class="flt-sel${cur ? ' on' : ''}" data-f="${esc(key)}" aria-label="Lọc ${esc(label)}"><option value="">Tất cả</option>${opts.map(([v, n]) => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>`;
+function filterRow(ps) {
+  const f = colF(), n = colFCount();
+  return `<tr class="flt">
+    <th class="stick s-crm">${fSel('crm', [['co', 'Có mã'], ['khong', 'Chưa có']], f.crm, 'CRM')}</th>
+    <th class="stick s-cust">${n ? `<button class="btn sm" id="flt-clear">✕ Xóa lọc (${n})</button>` : '<span class="muted small">▼ Lọc theo cột</span>'}</th>
+    <th>${fSel('st', [['HOẠT ĐỘNG', 'HOẠT ĐỘNG'], ['NGHỈ', 'NGHỈ']], f.st, 'tình trạng')}</th>
+    <th>${fSel('pay', PAYS.map(([k, l]) => [k, l]).concat([['none', 'Chưa chọn']]), f.pay, 'thanh toán')}</th>
+    ${ps.map((p, i) => `<th class="pf g-${groupOf(p)}${!i || groupOf(ps[i - 1]) !== groupOf(p) ? ' gstart' : ''}">${fSel('p:' + p.id, [['co', 'Có'], ['trong', 'Trống']], (f.p || {})[p.id] || '', prodLabel(p))}</th>`).join('')}
+    <th>${fSel('pk', [['TÚI ĐEN', 'TÚI ĐEN'], ['THÙNG', 'THÙNG']], f.pk, 'đóng gói')}</th>
+    <th>${fSel('pack', [['tui', 'Có túi đen'], ['thung', 'Có thùng'], ['cay', 'Có cây kebab'], ['none', 'Trống']], f.pack, 'định mức')}</th>
+    <th></th></tr>`;
+}
+function bindFilters(el) {
+  $$('select[data-f]', el).forEach(sel => sel.onchange = () => {
+    const f = colF(), k = sel.dataset.f;
+    if (k.startsWith('p:')) f.p[k.slice(2)] = sel.value; else f[k] = sel.value;
+    store('filter', S.filter); shown = PAGE; drawTable();
+  });
+  const cl = $('#flt-clear', el); if (cl) cl.onclick = () => { S.filter.cols = { p: {} }; store('filter', S.filter); shown = PAGE; drawTable(); };
+}
+// tiêu đề dính: dòng lọc nằm ngay dưới 2 dòng tiêu đề
+function fixStickyTops(table) {
+  const r = table.tHead.rows, h1 = r[0].offsetHeight, h2 = r[1].offsetHeight;
+  $$('th', r[1]).forEach(th => { th.style.top = h1 + 'px'; });
+  $$('th', r[2]).forEach(th => { th.style.top = (h1 + h2) + 'px'; });
 }
 function drawTable() {
   const el = $('#d-table'); if (!el) return;
   const ps = visibleProducts(), pay = S.cfg.pay || [];
   const rows = filteredRows();
-  if (!rows.length) {
-    el.innerHTML = `<div class="card empty"><div class="big">${S.filter.q ? 'Không tìm thấy khách' : S.filter.mode === 'co' ? 'Ngày này chưa có đơn' : 'Không có khách ở khu vực này'}</div>
-      <p class="hint">${S.filter.mode === 'co' && !S.filter.q ? 'Gõ tên / CRM / SĐT vào ô tìm để thêm đơn, hoặc chọn "Tất cả khách" để nhập theo danh sách.' : ''}</p></div>`;
+  if (!rows.length && !colFCount()) {
+    const nf = colFCount();
+    el.innerHTML = `<div class="card empty"><div class="big">${nf ? 'Không có dòng nào khớp bộ lọc cột' : S.filter.q ? 'Không tìm thấy khách' : S.filter.mode === 'co' ? 'Ngày này chưa có đơn' : 'Không có khách ở khu vực này'}</div>
+      <p class="hint">${nf ? (S.filter.mode === 'co' ? 'Đang xem "Khách có đơn" – muốn lọc khách NGHỈ hãy chọn "Tất cả khách".' : '') : S.filter.mode === 'co' && !S.filter.q ? 'Gõ tên / CRM / SĐT vào ô tìm để thêm đơn, hoặc chọn "Tất cả khách" để nhập theo danh sách.' : ''}</p>
+      ${nf ? `<button class="btn pri" id="flt-clear">✕ Xóa lọc (${nf})</button>` : ''}</div>`;
+    bindFilters(el);
     return;
   }
   let lastArea = null, html = '';
   const cols = 7 + ps.length;
+  if (!rows.length) html = `<tr><td colspan="${cols}" class="muted" style="padding:18px 12px"><span class="grp-l">Không có dòng nào khớp bộ lọc cột.${S.filter.mode === 'co' ? ' Đang xem "Khách có đơn" – muốn lọc khách NGHỈ hãy chọn "Tất cả khách".' : ''}</span></td></tr>`;
   rows.slice(0, shown).forEach(c => {
     if (c.q !== lastArea) { lastArea = c.q; html += `<tr class="grp"><td colspan="${cols}"><span class="grp-l">${esc(c.q || 'Chưa có khu vực')}</span></td></tr>`; }
     html += rowHtml(c, ps, pay);
   });
   const runs = groupRuns(ps);
   el.innerHTML = `<div class="tw otw"><table class="orders" id="orders"><thead><tr>
-      <th class="stick s-crm" rowspan="2">CRM</th><th class="stick s-cust" rowspan="2">Khách hàng</th><th rowspan="2">Tình trạng</th>${runs.map(r => `<th class="gh g-${r.g} gstart" colspan="${r.list.length}">${esc(GROUPS[r.g].name)}</th>`).join('')}
-      <th rowspan="2">Đóng gói</th><th rowspan="2">Định mức</th><th rowspan="2">Thanh toán</th><th rowspan="2"></th></tr>
-      <tr>${runs.map(r => r.list.map((p, i) => `<th class="p g-${r.g}${i ? '' : ' gstart'}" title="${esc(p.name)}">${esc(prodShort(p))}</th>`).join('')).join('')}</tr></thead><tbody>${html}</tbody></table></div>
+      <th class="stick s-crm" rowspan="2">CRM</th><th class="stick s-cust" rowspan="2">Khách hàng</th><th rowspan="2">Tình trạng</th><th rowspan="2">Thanh toán</th>${runs.map(r => `<th class="gh g-${r.g} gstart" colspan="${r.list.length}">${esc(GROUPS[r.g].name)}</th>`).join('')}
+      <th rowspan="2">Đóng gói</th><th rowspan="2">Định mức</th><th rowspan="2"></th></tr>
+      <tr>${runs.map(r => r.list.map((p, i) => `<th class="p g-${r.g}${i ? '' : ' gstart'}" title="${esc(p.name)}">${esc(prodShort(p))}</th>`).join('')).join('')}</tr>
+      ${filterRow(ps)}</thead><tbody>${html}</tbody></table></div>
     ${rows.length > shown ? `<div class="more"><button class="btn" id="d-more">Xem thêm ${Math.min(PAGE, rows.length - shown)} khách (còn ${rows.length - shown})</button></div>` : ''}
-    <p class="hint" style="margin-top:8px">${rows.length} khách. Gõ số lượng là tự lưu và tự tính định mức. Bấm ⋯ để nhập người bàn giao, người giao, tài xế, công nợ, ngày thanh toán, người check, ghi chú.</p>`;
+    <p class="hint" style="margin-top:8px">${rows.length} khách${colFCount() ? ` (đang lọc ${colFCount()} cột)` : ''}. Gõ số lượng là tự lưu và tự tính định mức. Bấm ⋯ để nhập người bàn giao, người giao, tài xế, công nợ, ngày thanh toán, người check, ghi chú.</p>`;
   if ($('#d-more')) $('#d-more').onclick = () => { shown += PAGE; drawTable(); };
-  bindRows(el);
+  bindRows(el); bindFilters(el); fixStickyTops($('#orders'));
 }
 function rowHtml(c, ps, pay) {
   const o = orderOf(c.id) || {}, st = statusOf(o), pk = packOf(o, c);
@@ -751,10 +806,10 @@ function rowHtml(c, ps, pay) {
     <td class="stick s-crm" title="${esc(c.crm || '')}">${c.crm ? hl(c.crm, q) : '–'}</td>
     <td class="cust stick"><b>${hl(c.name, q)}</b><div class="sub">${hl(c.phone || '', q)}${c.note ? ' · ' + hl(c.note, q) : ''}${q && c.q && matchCust({ q: c.q }, norm(q)) ? ' · ' + hl(c.q, q) : ''}</div></td>
     <td><select class="in st-sel${st === 'HOẠT ĐỘNG' ? ' st-on' : ''}" data-k="hd"><option value="">${st === 'HOẠT ĐỘNG' ? 'HOẠT ĐỘNG' : 'NGHỈ'} (tự)</option><option ${o.hd === 'HOẠT ĐỘNG' ? 'selected' : ''}>HOẠT ĐỘNG</option><option ${o.hd === 'NGHỈ' ? 'selected' : ''}>NGHỈ</option></select></td>
+    <td>${paySelect(o.tt)}</td>
     ${ps.map((pr, i) => { const v = (o.q || {})[pr.id], g = groupOf(pr), st = !i || groupOf(ps[i - 1]) !== g; return `<td class="pc g-${g}${st ? ' gstart' : ''}"><input class="q ${num(v) > 0 ? 'has' : ''}" data-p="${esc(pr.id)}" inputmode="decimal" value="${v ? esc(v) : ''}" aria-label="${esc(prodLabel(pr))}" title="${esc(prodLabel(pr))}"></td>`; }).join('')}
     <td><select class="in" data-k="pk">${['TÚI ĐEN', 'THÙNG'].map(x => `<option ${norm(x) === norm(pk) ? 'selected' : ''}>${x}</option>`).join('')}</select></td>
     <td class="pack" data-out="pack">${esc(packLabel(p))}</td>
-    <td>${paySelect(o.tt)}</td>
     <td><button class="btn sm ghost" data-more title="Chi tiết đơn">⋯</button></td></tr>`;
 }
 // ghi 1 dòng (gộp các lần gõ liên tiếp)
