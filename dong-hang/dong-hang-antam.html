@@ -118,6 +118,15 @@ tbody tr.grp:hover td { background: var(--accent-soft); }
 /* bảng nhập đơn cuộn trong khung riêng để dòng tiêu đề nhóm / sản phẩm luôn hiện */
 .tw.otw { max-height: calc(100vh - 150px); max-height: calc(100dvh - 150px); overflow: auto; }
 /* dòng tóm tắt + chế độ mở to bảng */
+.t1sum td, .t1sum th { white-space: nowrap; }
+.t1sum tr.tot td { border-top: 2px solid var(--line); background: var(--warn-soft); }
+.t1t .t1name { min-width: 260px; max-width: 420px; }
+.t1t .t1name .sub { font-size: 12px; color: var(--crust); }
+.t1t tr.t1tot td { background: var(--warn-soft); font-family: var(--f-num); font-weight: 700; color: var(--bad); }
+.t1t tr.t1tot td:nth-child(2) { font-family: var(--f-body); color: var(--ink); }
+.t1t tr.t1sub td { background: var(--line-2); font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.t1t input.t1thit { width: 64px; }
+.t1t input.t1gc { width: 150px; font-size: 12.5px; padding: 4px 6px; }
 .mini { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; font-size: 13px; color: var(--ink-2); }
 .mini b { font-family: var(--f-num); font-size: 16px; color: var(--ink); }
 .mini .pchip b { font-size: 13px; color: inherit; }
@@ -265,6 +274,7 @@ tr.hit > td:first-child { box-shadow: inset 4px 0 0 var(--hit-bar); }
   <div class="brand"><span class="brand-mark" aria-hidden="true">AT</span>Đóng hàng An Tâm</div>
   <nav class="tabs" id="tabs" aria-label="Các mục">
     <button data-v="don">Đơn hàng ngày</button>
+    <button data-v="t123">Tuyến kebab 123</button>
     <button data-v="in">Định mức đóng hàng</button>
     <button data-v="khach">Khách hàng</button>
     <button data-v="tk">Thống kê</button>
@@ -463,6 +473,11 @@ async function boot() {
   catch (e) { return showFatal('Không tải được danh sách khách', errText(dbErr(e))); }
   db.collection('khach').onSnapshot(snap => { applyCust(snap); refresh(); }, e => toast('Danh sách khách: ' + dbErr(e).message, true));
   watchDay(S.date);
+  // khách tuyến kebab 123
+  db.doc('tuyen123/khach').onSnapshot(sn => {
+    S.t1.cust = Object.assign({}, ((sn.exists ? sn.data() : {}) || {}).c || {}); S.t1.loaded = true;
+    if (S.view === 't123') { const a = document.activeElement; if (!(a && a.closest && a.closest('#t1-table, .modal-back'))) render(); }
+  }, e => toast('Tuyến 123: ' + dbErr(e).message, true));
   setSync();
   render();
 }
@@ -578,7 +593,7 @@ function dayReport(dayR, tuyen) {
     if (['thuong', 'dacbiet', 'tuoi'].includes(g)) tacos += n; else if (g === 'kebab') kebab += n;
   }
   const tuyenTxt = S.cfg.products.filter(p => num((tuyen || {})[p.id]) > 0)
-    .map(p => `${fmt(tuyen[p.id])} túi ${prodLabel(p)} = ${fmt(num(tuyen[p.id]) * perOf(p))} cái`).join(' · ');
+    .map(p => (perOf(p) > 1 ? `${fmt(tuyen[p.id])} túi ${prodLabel(p)} = ${fmt(num(tuyen[p.id]) * perOf(p))} cái` : `${fmt(tuyen[p.id])} cái ${prodLabel(p)}`)).join(' · ');
   return { tui, cai, tacos, kebab, bill, count: list.length, tuyenTxt, pay };
 }
 function dayTotals(dayR) {
@@ -610,7 +625,7 @@ function render() {
   $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === S.view));
   const main = $('#main');
   if (!S.loaded.cfg || !S.loaded.cust) return;
-  const views = { don: viewDay, in: viewPrint, khach: viewCust, tk: viewStats, nhap: viewImport, cd: viewSettings };
+  const views = { don: viewDay, t123: viewT123, in: viewPrint, khach: viewCust, tk: viewStats, nhap: viewImport, cd: viewSettings };
   (views[S.view] || viewDay)(main);
   $$('[data-goto]', main).forEach(b => b.onclick = () => setView(b.dataset.goto));
 }
@@ -1475,8 +1490,305 @@ function previewImport(p) {
   });
 }
 
+/* ================================================================ TUYẾN KEBAB 123 (sheet "2-KHÁCH TUYẾN 123") */
+// Nhóm như sheet: TỔNG BÁNH TUYẾN 1 / 2 / TỐI (gồm "chiều … giao") / 3; mỗi khách có thể có nhóm phụ (VD "Chiều – Nguyên giao")
+const T123_GROUPS = [['t1', 'Tuyến 1'], ['t2', 'Tuyến 2'], ['toi', 'Tuyến tối'], ['t3', 'Tuyến 3 · khách qua lấy']];
+// cột số lượng của tuyến → mã sản phẩm của Đơn hàng ngày (để đưa tổng sang dòng Bánh tuyến)
+const T123_P = [['p22', '22CM', '22cm'], ['p25', '25 CM', '25cm'], ['p28', '28CM', '28cm'], ['p31', '31 CM', '31cm'], ['vang', 'VÀNG', 'banhmikebab'], ['den', 'ĐEN', 'banhmikebabmeden']];
+S.t1 = { cust: {}, day: null, unsub: null, loaded: false, local: {}, timers: {} };
+const t1Price = () => Object.assign({ p22: 37500, p25: 45000, p28: 0, p31: 0, vang: 2640, den: 0 }, (S.cfg.t123 || {}).price || {});
+const t1List = () => Object.entries(S.t1.cust).filter(([, c]) => c).map(([id, c]) => Object.assign({ id }, c))
+  .sort((a, b) => T123_GROUPS.findIndex(g => g[0] === a.g) - T123_GROUPS.findIndex(g => g[0] === b.g) || (a.s || 0) - (b.s || 0));
+const t1Order = cid => (S.t1.day && S.t1.day.r[cid]) || {};
+const t1Qty = o => T123_P.reduce((a, [k]) => a + (num((o.q || {})[k]) > 0 ? num(o.q[k]) : 0), 0);
+const t1Status = o => (o.st ? o.st : t1Qty(o) > 0 || String(o.thit || '').trim() ? 'HOẠT ĐỘNG' : 'NGHỈ');
+function t1Watch(d) {
+  if (S.t1.unsub) S.t1.unsub();
+  S.t1.day = null; S.t1.date = d;
+  S.t1.unsub = S.db.doc('t123/' + d).onSnapshot(s => {
+    const data = s.exists ? s.data() : { r: {} };
+    S.t1.day = { date: d, r: Object.assign({}, data.r || {}) };
+    for (const [cid, rec] of Object.entries(S.t1.local)) S.t1.day.r[cid] = deepMerge(JSON.parse(JSON.stringify(S.t1.day.r[cid] || {})), rec);
+    if (S.view === 't123') { const a = document.activeElement; if (a && a.closest && a.closest('#t1-table')) t1Totals(); else render(); }
+  }, e => toast('Tuyến 123: ' + dbErr(e).message, true));
+}
+function t1Sum(list) {
+  const q = { p22: 0, p25: 0, p28: 0, p31: 0, vang: 0, den: 0 }, thit = [];
+  let n = 0;
+  for (const c of list) {
+    const o = t1Order(c.id);
+    if (t1Status(o) !== 'HOẠT ĐỘNG') continue;
+    n++;
+    for (const [k] of T123_P) q[k] += num((o.q || {})[k]) > 0 ? num(o.q[k]) : 0;
+    if (String(o.thit || '').trim()) thit.push(String(o.thit).trim());
+  }
+  const pr = t1Price(), dt = T123_P.reduce((a, [k]) => a + q[k] * (pr[k] || 0), 0);
+  return { q, thit, n, dt };
+}
+const thitText = arr => { const m = {}; arr.forEach(t => { m[t] = (m[t] || 0) + 1; }); return Object.entries(m).map(([t, n]) => (n > 1 ? `${n} × ${t}` : t)).join(', '); };
+function viewT123(main) {
+  if (!S.t1.day || S.t1.date !== S.date) { if (S.db) t1Watch(S.date); }
+  const d = S.date, list = t1List();
+  const sums = T123_GROUPS.map(([g, name]) => ({ g, name, ...t1Sum(list.filter(c => c.g === g)) })), all = t1Sum(list);
+  const cell = (v, key) => `<td class="n" data-tt="${key}">${v ? fmt(v) : '<span class="zero">0</span>'}</td>`;
+  main.innerHTML = `
+    <div class="card" style="display:grid;gap:12px">
+      <div class="daybar">
+        <button class="btn sm" id="t1-prev" aria-label="Ngày trước">◀</button>
+        <input type="date" class="in" id="t1-date" value="${d}" style="border:1px solid var(--line);border-radius:6px;padding:5px 8px;background:var(--input)">
+        <button class="btn sm" id="t1-next" aria-label="Ngày sau">▶</button>
+        <button class="btn sm" id="t1-today">Hôm nay</button>
+        <span class="date-big">Tuyến kebab 123 · ${vn(d)}</span><span class="dow">${dow(d)}</span>
+        <span class="grow"></span>
+        <button class="btn sm" id="t1-copy" title="Lấy số lượng của ngày gần nhất trước đó làm sẵn">Chép số ngày trước</button>
+        <button class="btn sm pri" id="t1-send" title="Ghi tổng số tuyến 123 vào dòng BÁNH TUYẾN của Đơn hàng ngày">→ Đưa vào Bánh tuyến</button>
+      </div>
+      <div class="tw"><table class="t1sum"><thead><tr><th>Tuyến</th><th class="n">Khách giao</th>${T123_P.map(([, l]) => `<th class="n">${esc(l)}</th>`).join('')}<th>Cây thịt</th><th class="n">Doanh thu (đ)</th></tr></thead><tbody>
+        ${sums.map(s => `<tr><td><b>${esc(s.name)}</b></td>${cell(s.n, 'n:' + s.g)}${T123_P.map(([k]) => cell(s.q[k], k + ':' + s.g)).join('')}<td data-tt="thit:${s.g}">${esc(thitText(s.thit))}</td>${cell(s.dt, 'dt:' + s.g)}</tr>`).join('')}
+        <tr class="tot"><td><b>TỔNG BÁNH TUYẾN</b></td>${cell(all.n, 'n:all')}${T123_P.map(([k]) => cell(all.q[k], k + ':all')).join('')}<td data-tt="thit:all">${esc(thitText(all.thit))}</td>${cell(all.dt, 'dt:all')}</tr>
+      </tbody></table></div>
+      <div class="row" style="align-items:center">
+        <span class="hint">Giá tính doanh thu: ${T123_P.map(([k, l]) => `${esc(l)} ${t1Price()[k] ? fmt(t1Price()[k]) + 'đ' : '<b style="color:var(--bad)">chưa có</b>'}`).join(' · ')}</span>
+        <span class="grow"></span>
+        <button class="btn sm" id="t1-price">Sửa giá</button><button class="btn sm" id="t1-add">+ Khách tuyến</button>
+        <button class="btn sm" id="t1-import">Cập nhật từ sheet</button><button class="btn sm" id="t1-csv">Tải Excel (CSV)</button>
+      </div>
+    </div>
+    <div id="t1-table">${list.length ? t1TableHtml(list, sums) : `<div class="card empty"><div class="big">Chưa có khách tuyến 123</div><p class="hint">Bấm "Cập nhật từ sheet" và dán sheet 2-KHÁCH TUYẾN 123, hoặc "+ Khách tuyến".</p></div>`}</div>`;
+  const go = nd => { watchDay(nd); t1Watch(nd); render(); };
+  $('#t1-prev').onclick = () => go(addDays(d, -1)); $('#t1-next').onclick = () => go(addDays(d, 1)); $('#t1-today').onclick = () => go(today());
+  $('#t1-date').onchange = e => e.target.value && go(e.target.value);
+  $('#t1-price').onclick = t1EditPrice; $('#t1-add').onclick = () => t1EditCust(null); $('#t1-import').onclick = t1Import;
+  $('#t1-copy').onclick = () => guard(t1CopyPrev); $('#t1-send').onclick = () => guard(t1Send);
+  $('#t1-csv').onclick = () => guard(() => saveFile(`tuyen-123-${d}.csv`, '﻿' + toCsv(t1Rows()), 'text/csv'));
+  t1Bind();
+}
+function t1TableHtml(list, sums) {
+  let html = '';
+  for (const s of sums) {
+    const rows = list.filter(c => c.g === s.g);
+    if (!rows.length) continue;
+    html += `<tr class="grp"><td colspan="${8 + T123_P.length}"><span class="grp-l">${esc(s.name)}</span></td></tr>
+      <tr class="t1tot"><td></td><td><b>TỔNG BÁNH ${esc(s.name.toUpperCase())}</b></td><td></td><td></td>${T123_P.map(([k]) => `<td class="n" data-tt="${k}:${s.g}">${fmt(s.q[k])}</td>`).join('')}<td data-tt="thit:${s.g}">${esc(thitText(s.thit))}</td><td colspan="2" class="small">Doanh thu <b data-tt="dt:${s.g}">${fmt(s.dt)}</b>đ</td></tr>`;
+    let sub = null;
+    for (const c of rows) {
+      if ((c.sub || '') !== sub) { sub = c.sub || ''; if (sub) html += `<tr class="t1sub"><td colspan="${8 + T123_P.length}"><span class="grp-l">↳ ${esc(sub)}</span></td></tr>`; }
+      html += t1RowHtml(c);
+    }
+  }
+  return `<div class="tw otw"><table class="orders t1t"><thead><tr><th>CRM</th><th>Tên khách hàng</th><th>SĐT</th><th>Tình trạng</th>${T123_P.map(([, l]) => `<th class="n">${esc(l)}</th>`).join('')}<th>Cây thịt (kg)</th><th>Ghi chú</th><th></th></tr></thead><tbody>${html}</tbody></table></div>
+    <p class="hint" style="margin-top:8px">${list.length} khách. 22–31 cm nhập theo túi, VÀNG / ĐEN theo cái, cây thịt ghi như sheet (VD 12kg). Gõ là tự lưu; có số lượng thì tự HOẠT ĐỘNG.</p>`;
+}
+function t1RowHtml(c) {
+  const o = t1Order(c.id), st = t1Status(o);
+  return `<tr data-t1="${esc(c.id)}" class="${st === 'HOẠT ĐỘNG' ? 'has-order' : ''}${c.off ? ' muted' : ''}">
+    <td class="mono small">${esc(c.crm || '–')}</td>
+    <td class="t1name"><b>${esc(c.name)}</b>${c.note ? `<div class="sub">${esc(c.note)}</div>` : ''}</td>
+    <td class="mono small">${esc(c.phone || '')}</td>
+    <td><select class="in st-sel${st === 'HOẠT ĐỘNG' ? ' st-on' : ''}" data-k="st"><option value="">${st === 'HOẠT ĐỘNG' && !o.st ? 'HOẠT ĐỘNG' : 'NGHỈ'} (tự)</option><option ${o.st === 'HOẠT ĐỘNG' ? 'selected' : ''}>HOẠT ĐỘNG</option><option ${o.st === 'NGHỈ' ? 'selected' : ''}>NGHỈ</option></select></td>
+    ${T123_P.map(([k, l]) => { const v = (o.q || {})[k]; return `<td class="n"><input class="q ${num(v) > 0 ? 'has' : ''}" data-q="${k}" inputmode="decimal" value="${num(v) ? esc(v) : ''}" aria-label="${esc(l)}"></td>`; }).join('')}
+    <td><input class="q t1thit" data-k="thit" value="${esc(o.thit || '')}" placeholder="kg" aria-label="Cây thịt"></td>
+    <td><input class="in t1gc" data-k="gc" value="${esc(o.gc || '')}" placeholder="ghi chú ngày" aria-label="Ghi chú ngày"></td>
+    <td><button class="btn sm ghost" data-edit title="Sửa khách">⋯</button></td></tr>`;
+}
+function t1Patch(cid, patch) {
+  const d = S.t1.date;
+  S.t1.day.r[cid] = deepMerge(JSON.parse(JSON.stringify(S.t1.day.r[cid] || {})), patch);
+  patch.at = nowStr(); if (S.me) patch.by = S.me;
+  S.t1.local[cid] = deepMerge(S.t1.local[cid] || {}, patch);
+  if (S.t1.timers[cid]) clearTimeout(S.t1.timers[cid]); else { pendingWrites++; setSync(); }
+  S.t1.timers[cid] = setTimeout(() => {
+    pendingWrites--; delete S.t1.timers[cid];
+    const rec = S.t1.local[cid]; delete S.t1.local[cid];
+    mergeInto('t123/' + d, { r: { [cid]: rec } }, { date: d }).catch(e => toast(e.message, true));
+  }, 700);
+}
+function t1Bind() {
+  $$('#t1-table tr[data-t1]').forEach(tr => {
+    const cid = tr.dataset.t1;
+    const after = () => {
+      const o = t1Order(cid), st = t1Status(o), sel = $('select[data-k=st]', tr);
+      tr.classList.toggle('has-order', st === 'HOẠT ĐỘNG');
+      sel.classList.toggle('st-on', st === 'HOẠT ĐỘNG');
+      sel.options[0].textContent = (t1Qty(o) > 0 || String(o.thit || '').trim() ? 'HOẠT ĐỘNG' : 'NGHỈ') + ' (tự)';
+      t1Totals();
+    };
+    $$('input[data-q]', tr).forEach(inp => {
+      inp.addEventListener('focus', () => inp.select());
+      inp.addEventListener('input', () => { const v = inp.value.trim(); t1Patch(cid, { q: { [inp.dataset.q]: v === '' ? 0 : num(v) } }); inp.classList.toggle('has', num(v) > 0); after(); });
+      inp.addEventListener('keydown', e => {
+        if (!['Enter', 'ArrowDown', 'ArrowUp'].includes(e.key)) return;
+        e.preventDefault();
+        const rows = $$('#t1-table tr[data-t1]'), nx = rows[rows.indexOf(tr) + (e.key === 'ArrowUp' ? -1 : 1)];
+        const t = nx && $(`input[data-q="${inp.dataset.q}"]`, nx); if (t) { t.focus(); t.select(); }
+      });
+    });
+    $$('input[data-k]', tr).forEach(inp => inp.addEventListener('input', () => { t1Patch(cid, { [inp.dataset.k]: inp.value.trim() }); after(); }));
+    $('select[data-k=st]', tr).onchange = e => { t1Patch(cid, { st: e.target.value }); after(); };
+    $('[data-edit]', tr).onclick = () => t1EditCust(cid);
+  });
+}
+function t1Totals() {
+  const list = t1List(), groups = T123_GROUPS.map(([g]) => [g, t1Sum(list.filter(c => c.g === g))]).concat([['all', t1Sum(list)]]);
+  for (const [g, s] of groups) {
+    $$(`[data-tt$=":${g}"]`).forEach(el => {
+      const k = el.dataset.tt.split(':')[0];
+      const v = k === 'n' ? s.n : k === 'dt' ? s.dt : k === 'thit' ? null : s.q[k];
+      el.textContent = k === 'thit' ? thitText(s.thit) : fmt(v);
+    });
+  }
+}
+async function t1CopyPrev() {
+  const d = S.t1.date;
+  const snap = await S.db.collection('t123').where('date', '<', d).orderBy('date', 'desc').limit(1).get().catch(e => { throw dbErr(e); });
+  if (!snap.docs.length) throw new Error('Chưa có ngày nào trước ' + vn(d) + ' để chép.');
+  const prev = snap.docs[0].data(), has = live(S.t1.day && S.t1.day.r).some(([, o]) => t1Qty(o) > 0);
+  if (has && !(await confirmBox(`Ngày ${vn(d)} đã có số lượng. Chép số của ngày ${vn(prev.date)} vào các khách CHƯA có số?`, 'Chép'))) return;
+  const patch = {};
+  for (const [cid, o] of live(prev.r)) {
+    if (!S.t1.cust[cid] || t1Qty(t1Order(cid)) > 0 || !(t1Qty(o) > 0 || String(o.thit || '').trim())) continue;
+    patch[cid] = { q: Object.assign({}, o.q || {}), thit: o.thit || '', at: nowStr(), by: S.me || '' };
+  }
+  if (!Object.keys(patch).length) return toast('Không có gì để chép');
+  await mergeInto('t123/' + d, { r: patch }, { date: d });
+  toast(`Đã chép ${Object.keys(patch).length} khách từ ngày ${vn(prev.date)}`);
+}
+async function t1Send() {
+  const d = S.t1.date, s = t1Sum(t1List()), tuyen = {};
+  for (const [k, , pid] of T123_P) tuyen[pid] = s.q[k];
+  const cur = (S.day && S.day.date === d && S.day.tuyen) || {};
+  const changed = Object.entries(tuyen).some(([pid, v]) => num(cur[pid]) && num(cur[pid]) !== v);
+  if (!(await confirmBox(`Ghi tổng tuyến 123 ngày ${vn(d)} vào dòng BÁNH TUYẾN của Đơn hàng ngày: ${T123_P.filter(([k]) => s.q[k]).map(([k, l]) => l + ' ' + fmt(s.q[k])).join(', ') || 'không có số'}?${changed ? ' Số Bánh tuyến đang có sẽ bị thay.' : ''}`, 'Ghi vào Bánh tuyến'))) return;
+  await mergeInto('ngay/' + d, { tuyen }, { date: d, r: {} });
+  toast('Đã ghi vào dòng BÁNH TUYẾN của Đơn hàng ngày ' + vn(d));
+}
+function t1EditPrice() {
+  const pr = t1Price();
+  modal({
+    title: 'Giá bán tuyến 123 (tính doanh thu)', ok: 'Lưu giá',
+    body: `<div class="fgrid">${T123_P.map(([k, l]) => `<label class="field">${esc(l)} (đ / ${k === 'vang' || k === 'den' ? 'cái' : 'túi'})<input data-pr="${k}" inputmode="numeric" value="${pr[k] || ''}"></label>`).join('')}</div>
+      <p class="hint" style="margin-top:8px">Giá có sẵn suy ra từ ô DOANH THU trong sheet (22 cm 37.500, 25 cm 45.000, vàng 2.640). Kiểm tra lại và điền các giá còn thiếu.</p>`,
+    onOk: async root => {
+      const price = {}; $$('[data-pr]', root).forEach(i => { price[i.dataset.pr] = num(i.value); });
+      S.cfg.t123 = Object.assign({}, S.cfg.t123 || {}, { price });
+      await setDoc('cfg/main', cfgDoc()); toast('Đã lưu giá'); render(); return true;
+    },
+  });
+}
+async function t1SaveCust(id, rec) { await mergeInto('tuyen123/khach', { c: { [id]: rec } }, { c: {} }); }
+function t1EditCust(id) {
+  const c = id ? Object.assign({}, S.t1.cust[id]) : { g: 't1', s: Math.max(0, ...Object.values(S.t1.cust).filter(Boolean).map(x => x.s || 0)) + 10 };
+  const subs = [...new Set(Object.values(S.t1.cust).filter(Boolean).map(x => x.sub).filter(Boolean))];
+  const m = modal({
+    title: id ? 'Sửa khách tuyến 123' : 'Thêm khách tuyến 123', ok: 'Lưu',
+    body: `<div class="fgrid">
+      <label class="field">Tuyến<select id="t1c-g">${T123_GROUPS.map(([g, n]) => `<option value="${g}" ${c.g === g ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select></label>
+      <label class="field">Nhóm phụ (VD Chiều – Nguyên giao)<input id="t1c-sub" list="dl-t1sub" value="${esc(c.sub || '')}"></label>
+      <label class="field">CRM<input id="t1c-crm" value="${esc(c.crm || '')}"></label>
+      <label class="field">SĐT<input id="t1c-phone" value="${esc(c.phone || '')}"></label>
+      <label class="field wide">Tên khách hàng – địa chỉ<input id="t1c-name" value="${esc(c.name || '')}"></label>
+      <label class="field wide">Ghi chú giao hàng<input id="t1c-note" value="${esc(c.note || '')}"></label>
+      <label class="field">Thứ tự (số nhỏ đứng trước)<input id="t1c-s" type="number" value="${esc(c.s || 0)}"></label>
+    </div><datalist id="dl-t1sub">${subs.map(x => `<option value="${esc(x)}">`).join('')}</datalist>
+    ${id ? '<div style="margin-top:12px"><button class="btn danger sm" id="t1c-del">Xóa khách khỏi tuyến</button></div>' : ''}`,
+    onOk: async root => {
+      const v = k => $(k, root).value.trim();
+      const rec = { g: v('#t1c-g'), sub: v('#t1c-sub'), crm: v('#t1c-crm'), phone: v('#t1c-phone'), name: v('#t1c-name'), note: v('#t1c-note'), s: num(v('#t1c-s')) };
+      if (!rec.name) throw new Error('Cần nhập tên khách hàng');
+      const nid = id || rid('t'); S.t1.cust[nid] = rec; await t1SaveCust(nid, rec); toast('Đã lưu khách'); render(); return true;
+    },
+  });
+  const del = $('#t1c-del', m.root);
+  if (del) del.onclick = async () => {
+    if (!(await confirmBox(`Xóa "${c.name}" khỏi tuyến 123? Số đã nhập các ngày trước vẫn giữ.`, 'Xóa', true))) return;
+    await guard(() => t1SaveCust(id, null)); delete S.t1.cust[id]; m.close(); render();
+  };
+}
+function t1Rows() {
+  const out = [['TUYẾN', 'CRM', 'Tên khách hàng', 'SDT', 'TÌNH TRẠNG'].concat(T123_P.map(([, l]) => l)).concat(['CÂY THỊT (KG)', 'GHI CHÚ', 'GHI CHÚ NGÀY'])];
+  const list = t1List();
+  for (const [g, name] of T123_GROUPS) {
+    const rows = list.filter(c => c.g === g); if (!rows.length) continue;
+    const s = t1Sum(rows);
+    out.push([name, '', 'TỔNG BÁNH ' + name.toUpperCase(), '', 'HOẠT ĐỘNG'].concat(T123_P.map(([k]) => s.q[k])).concat([thitText(s.thit), '', '']));
+    out.push([name, '', 'DOANH THU', '', '', s.dt]);
+    for (const c of rows) { const o = t1Order(c.id); out.push([c.sub || name, c.crm, c.name, c.phone, t1Status(o)].concat(T123_P.map(([k]) => (num((o.q || {})[k]) || ''))).concat([o.thit || '', c.note || '', o.gc || ''])); }
+  }
+  const all = t1Sum(list);
+  out.push(['', '', 'TỔNG', '', ''].concat(T123_P.map(([k]) => all.q[k])).concat([thitText(all.thit), 'Doanh thu ' + all.dt, '']));
+  return out;
+}
+// dán sheet "2-KHÁCH TUYẾN 123": cập nhật danh sách khách (và số lượng của 1 ngày nếu muốn)
+function parseT123(table) {
+  const hi = table.findIndex((r, i) => i < 15 && r.some(c => HK(c) === 'crm') && r.some(c => HK(c).startsWith('ten khach')));
+  if (hi < 0) throw new Error('Không thấy dòng tiêu đề (cần cột CRM và "Tên khách hàng"). Chọn cả sheet: Ctrl+A rồi Ctrl+C.');
+  const h = table[hi].map(HK), find = f => h.findIndex(f);
+  const col = { crm: find(x => x === 'crm'), name: find(x => x.startsWith('ten khach')), phone: find(x => x === 'sdt' || x.includes('dien thoai')), note: find(x => x.startsWith('ghi chu')), thit: find(x => x.startsWith('cay thit')) };
+  const pc = Object.fromEntries(T123_P.map(([k, l]) => [k, find(x => keyOf(x) === keyOf(l))]));
+  const body = table.slice(hi + 1), g = (r, i) => (i >= 0 && r[i] != null ? String(r[i]).replace(/\r/g, '').replace(/\s+/g, ' ').trim() : '');
+  let stCol = -1, best = 0;
+  for (let i = 0; i < (table[hi] || []).length; i++) { const n = body.filter(r => /^(hoat dong|nghi)$/.test(norm(r[i]))).length; if (n > best) { best = n; stCol = i; } }
+  const rows = []; let grp = '', sub = '', lastA = '';
+  for (const r of body) {
+    const a = g(r, 0) || lastA; lastA = a;
+    const name = g(r, col.name), nn = norm(name);
+    const am = norm(a).match(/^t\s*(\d)/);
+    if (nn.startsWith('tong banh tuyen')) { grp = nn.includes('toi') ? 'toi' : (nn.match(/(\d)/) || [])[1] ? 't' + nn.match(/(\d)/)[1] : grp; sub = ''; continue; }
+    if (!name || nn.startsWith('doanh thu') || nn === 'tong') continue;
+    if (!grp && am) grp = 't' + am[1];
+    sub = norm(a).startsWith('chieu') ? a.replace(/\s+/g, ' ').replace(/^chiều/i, 'Chiều –').trim() : (am ? '' : sub);
+    const q = {}; for (const [k] of T123_P) { const n = num(r[pc[k]]); if (pc[k] >= 0 && n > 0) q[k] = n; }
+    let phone = g(r, col.phone), note = g(r, col.note);
+    if (phone && !/\d{3}/.test(phone)) { note = [phone, note].filter(Boolean).join(' · '); phone = ''; }
+    rows.push({ g: grp || 't1', sub, crm: g(r, col.crm).replace(/\s+/g, '').toUpperCase(), name, phone, note, st: stCol >= 0 ? (norm(r[stCol]).startsWith('hoat') ? 'HOẠT ĐỘNG' : norm(r[stCol]) === 'nghi' ? 'NGHỈ' : '') : '', q, thit: g(r, col.thit) });
+  }
+  return rows;
+}
+function t1Import() {
+  const m = modal({
+    title: 'Cập nhật tuyến 123 từ Google Sheet', ok: 'Cập nhật', wide: true,
+    body: `<ol class="steps"><li>Mở sheet <b>2-KHÁCH TUYẾN 123</b>, chọn tab ngày cần lấy.</li><li>Bấm một ô, <b>Ctrl+A</b> rồi <b>Ctrl+C</b>.</li><li>Bấm vào ô dưới và <b>Ctrl+V</b>.</li></ol>
+      <textarea id="t1i-text" rows="4" style="width:100%;margin-top:8px" placeholder="Dán ở đây…"></textarea><div id="t1i-res" class="hint" style="margin-top:8px"></div>
+      <div class="fgrid" style="margin-top:8px"><label class="field" style="display:flex;flex-direction:row;gap:8px;align-items:center"><input type="checkbox" id="t1i-q"> Lấy cả số lượng vào ngày</label>
+      <label class="field">Ngày<input type="date" id="t1i-date" value="${S.date}"></label></div>`,
+    onOk: async root => {
+      if (!parsed) throw new Error('Chưa dán dữ liệu');
+      const byKey = {}; for (const [id, c] of Object.entries(S.t1.cust)) if (c) byKey[keyOf(c.name)] = id;
+      const patch = {}, idOf = {}; let nNew = 0, s = 0;
+      for (const r of parsed) {
+        s += 10; const id = byKey[keyOf(r.name)] || rid('t'); if (!byKey[keyOf(r.name)]) nNew++;
+        byKey[keyOf(r.name)] = id; idOf[keyOf(r.name)] = id;
+        patch[id] = Object.assign({}, S.t1.cust[id] || {}, { g: r.g, sub: r.sub, crm: r.crm, name: r.name, phone: r.phone, note: r.note, s });
+      }
+      await mergeInto('tuyen123/khach', { c: patch }, { c: {} });
+      Object.assign(S.t1.cust, patch);
+      if ($('#t1i-q', root).checked) {
+        const d = $('#t1i-date', root).value; if (!d) throw new Error('Chọn ngày');
+        const r = {}; for (const x of parsed) if (Object.keys(x.q).length || x.thit) r[idOf[keyOf(x.name)]] = { q: x.q, thit: x.thit, at: nowStr() };
+        await setDoc('t123/' + d, { date: d, r });
+      }
+      toast(`Đã cập nhật ${parsed.length} khách tuyến 123 (${nNew} khách mới)`); render(); return true;
+    },
+  });
+  let parsed = null;
+  const ta = $('#t1i-text', m.root);
+  ta.addEventListener('paste', e => {
+    const cd = e.clipboardData; if (!cd) return;
+    const html = cd.getData('text/html'), txt = cd.getData('text/plain');
+    const t = (html && tableFromHtml(html)) || (txt ? tableFromText(txt) : null);
+    if (!t) return;
+    e.preventDefault();
+    try {
+      parsed = parseT123(t);
+      ta.value = `(Đã dán ${t.length} dòng)`;
+      const cnt = T123_GROUPS.map(([g, n]) => `${n}: ${parsed.filter(r => r.g === g).length}`).join(' · ');
+      $('#t1i-res', m.root).textContent = `Đọc được ${parsed.length} khách (${cnt}), ${parsed.filter(r => Object.keys(r.q).length).length} khách có số lượng.`;
+    } catch (err) { parsed = null; $('#t1i-res', m.root).textContent = err.message; }
+  });
+}
+
 /* ================================================================ ĐỊNH MỨC & CÀI ĐẶT */
-const cfgDoc = () => ({ caps: S.cfg.caps, products: S.cfg.products, pay: S.cfg.pay, thungWords: S.cfg.thungWords, at: nowStr() });
+const cfgDoc = () => ({ caps: S.cfg.caps, products: S.cfg.products, pay: S.cfg.pay, thungWords: S.cfg.thungWords, t123: S.cfg.t123 || {}, at: nowStr() });
 function viewSettings(main) {
   const c = JSON.parse(JSON.stringify(S.cfg));
   const capRows = [['tui', 'Túi đen', [...SIZES, 'K']], ['nho', 'Thùng Nhỏ', SIZES], ['chung', 'Thùng Chung', SIZES], ['dai', 'Thùng đại', SIZES], ['giay', 'Thùng giấy', SIZES], ['cay', 'Cây kebab', ['K']]];

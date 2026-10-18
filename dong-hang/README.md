@@ -6,6 +6,10 @@ Web riêng (trang claude.ai, một file `dong-hang-antam.html`) thay cho Google 
   tự tính **định mức đóng hàng** (túi đen / thùng giấy / nhỏ / chung / đại / cây kebab) và **tổng cần chuẩn bị** của ngày.
 - **Định mức đóng hàng**: bản in tổng cần chuẩn bị + chi tiết từng khách; tải file in (HTML), tải Excel (CSV),
   **Sao chép cho Phân tuyến** (dán vào web Kho An Tâm › Phân tuyến giao hàng).
+- **Tuyến kebab 123**: nhập số lượng hằng ngày cho khách tuyến 1, 2, tối (gồm chiều Nguyên / Bi giao) và tuyến 3 như sheet
+  "2-KHÁCH TUYẾN 123"; tự tính TỔNG BÁNH TUYẾN và DOANH THU từng tuyến (giá sửa ở nút "Sửa giá"), chép số ngày trước,
+  **Đưa vào Bánh tuyến** ghi tổng sang dòng BÁNH TUYẾN của Đơn hàng ngày; "Cập nhật từ sheet" dán tab ngày để cập nhật khách.
+  Dữ liệu: `tuyen123/khach` (khách), `t123/<ngày>` (số lượng).
 - **Khách hàng**: danh mục khách (khu vực, CRM, địa chỉ, SĐT, ghi chú/chành xe, đóng gói mặc định).
 - **Thống kê**: theo khoảng ngày – số đơn, bánh, kebab, bao bì, theo khu vực / người tạo đơn / tài xế / thanh toán,
   khách đặt nhiều, khách ngưng đặt; so với cùng số ngày trước đó.
