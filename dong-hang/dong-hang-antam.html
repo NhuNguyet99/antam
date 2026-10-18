@@ -126,6 +126,10 @@ tbody tr.grp:hover td { background: var(--accent-soft); }
 .orders .cust.stick, .orders th.s-cust { left: 76px; }
 .orders tr.has-order td.s-crm { color: var(--accent); }
 .orders .grp-l { position: sticky; left: 8px; }
+/* ô tình trạng: xanh khi HOẠT ĐỘNG */
+.orders select.st-sel { color: var(--muted); }
+.orders select.st-sel.st-on { background: var(--good); border-color: var(--good); color: var(--accent-ink); font-weight: 700; }
+.orders select.st-sel option { background: var(--input); color: var(--ink); font-weight: 400; }
 /* báo cáo ngày (như các dòng tổng cuối sheet) */
 .rep { display: grid; gap: 12px; }
 .rep-big { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; }
@@ -724,7 +728,7 @@ function rowHtml(c, ps, pay) {
   return `<tr data-cid="${esc(c.id)}" class="${hasOrder(o) ? 'has-order' : ''}${q ? ' hit' : ''}">
     <td class="stick s-crm" title="${esc(c.crm || '')}">${c.crm ? hl(c.crm, q) : '–'}</td>
     <td class="cust stick"><b>${hl(c.name, q)}</b><div class="sub">${hl(c.phone || '', q)}${c.note ? ' · ' + hl(c.note, q) : ''}${q && c.q && matchCust({ q: c.q }, norm(q)) ? ' · ' + hl(c.q, q) : ''}</div></td>
-    <td><select class="in" data-k="hd"><option value="">${st === 'HOẠT ĐỘNG' ? 'HOẠT ĐỘNG' : 'NGHỈ'} (tự)</option><option ${o.hd === 'HOẠT ĐỘNG' ? 'selected' : ''}>HOẠT ĐỘNG</option><option ${o.hd === 'NGHỈ' ? 'selected' : ''}>NGHỈ</option></select></td>
+    <td><select class="in st-sel${st === 'HOẠT ĐỘNG' ? ' st-on' : ''}" data-k="hd"><option value="">${st === 'HOẠT ĐỘNG' ? 'HOẠT ĐỘNG' : 'NGHỈ'} (tự)</option><option ${o.hd === 'HOẠT ĐỘNG' ? 'selected' : ''}>HOẠT ĐỘNG</option><option ${o.hd === 'NGHỈ' ? 'selected' : ''}>NGHỈ</option></select></td>
     ${ps.map((pr, i) => { const v = (o.q || {})[pr.id], g = groupOf(pr), st = !i || groupOf(ps[i - 1]) !== g; return `<td class="pc g-${g}${st ? ' gstart' : ''}"><input class="q ${num(v) > 0 ? 'has' : ''}" data-p="${esc(pr.id)}" inputmode="decimal" value="${v ? esc(v) : ''}" aria-label="${esc(prodLabel(pr))}" title="${esc(prodLabel(pr))}"></td>`; }).join('')}
     <td><select class="in" data-k="pk">${['TÚI ĐEN', 'THÙNG'].map(x => `<option ${norm(x) === norm(pk) ? 'selected' : ''}>${x}</option>`).join('')}</select></td>
     <td class="pack" data-out="pack">${esc(packLabel(p))}</td>
@@ -778,7 +782,8 @@ function updateRow(tr, cid) {
   const o = orderOf(cid) || {}, c = S.cust[cid];
   $('[data-out=pack]', tr).textContent = packLabel(packing(o.q, packOf(o, c)));
   tr.classList.toggle('has-order', hasOrder(o));
-  const sel = $('select[data-k=hd]', tr); if (sel) sel.options[0].textContent = (qtyTotal(o.q) > 0 ? 'HOẠT ĐỘNG' : 'NGHỈ') + ' (tự)';
+  const sel = $('select[data-k=hd]', tr);
+  if (sel) { sel.options[0].textContent = (qtyTotal(o.q) > 0 ? 'HOẠT ĐỘNG' : 'NGHỈ') + ' (tự)'; sel.classList.toggle('st-on', statusOf(o) === 'HOẠT ĐỘNG'); }
 }
 // cập nhật số trên báo cáo mà không vẽ lại ô đang gõ
 function updateDayTotals() {
