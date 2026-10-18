@@ -10,6 +10,7 @@
   --accent: #0f6e5a; --accent-ink: #ffffff; --accent-soft: #e2f1ec; --crust: #b86a1d; --crust-soft: #f8ecdd;
   --good: #1f7a46; --good-soft: #e1f3e7; --bad: #b4232c; --bad-soft: #fbe5e6; --warn: #8a5a00; --warn-soft: #fbf0d6;
   --input: #ffffff; --hover: #f1f6f3; --shadow: 0 8px 28px rgba(20, 40, 30, .14);
+  --hit: #fff6c7; --hit-bar: #e0a400; --mark: #ffd84d;
   /* màu nhóm sản phẩm: đậm (vạch, chữ tiêu đề) / nhạt (nền cột) */
   --g-thuong: #a8650f; --g-thuong-s: #fdf3e2; --g-dacbiet: #4f7a1f; --g-dacbiet-s: #eef6e3; --g-tuoi: #1f6fa8; --g-tuoi-s: #e5f1fa;
   --g-kebab: #b23a2e; --g-kebab-s: #fcebe8; --g-thit: #6c4bb0; --g-thit-s: #f1ecfb; --g-khac: #5c6a64; --g-khac-s: #eef1ef;
@@ -23,6 +24,7 @@
     --accent: #3fb594; --accent-ink: #08130f; --accent-soft: #19362d; --crust: #e0a25e; --crust-soft: #3a2b1a;
     --good: #5fcf8e; --good-soft: #17331f; --bad: #ff8a8f; --bad-soft: #3d1c1f; --warn: #f0c062; --warn-soft: #382c12;
     --input: #121a16; --hover: #1f2b25; --shadow: 0 8px 28px rgba(0, 0, 0, .5); color-scheme: dark;
+    --hit: #3a3213; --hit-bar: #f0c040; --mark: #806410;
     --g-thuong: #f0b45e; --g-thuong-s: #2e2414; --g-dacbiet: #9fd067; --g-dacbiet-s: #1e2a14; --g-tuoi: #7cc0f0; --g-tuoi-s: #142634;
     --g-kebab: #f39488; --g-kebab-s: #33191a; --g-thit: #b9a0f2; --g-thit-s: #241d36; --g-khac: #aab8b1; --g-khac-s: #212a26;
   }
@@ -32,6 +34,7 @@
   --accent: #3fb594; --accent-ink: #08130f; --accent-soft: #19362d; --crust: #e0a25e; --crust-soft: #3a2b1a;
   --good: #5fcf8e; --good-soft: #17331f; --bad: #ff8a8f; --bad-soft: #3d1c1f; --warn: #f0c062; --warn-soft: #382c12;
   --input: #121a16; --hover: #1f2b25; --shadow: 0 8px 28px rgba(0, 0, 0, .5); color-scheme: dark;
+    --hit: #3a3213; --hit-bar: #f0c040; --mark: #806410;
     --g-thuong: #f0b45e; --g-thuong-s: #2e2414; --g-dacbiet: #9fd067; --g-dacbiet-s: #1e2a14; --g-tuoi: #7cc0f0; --g-tuoi-s: #142634;
     --g-kebab: #f39488; --g-kebab-s: #33191a; --g-thit: #b9a0f2; --g-thit-s: #241d36; --g-khac: #aab8b1; --g-khac-s: #212a26;
 }
@@ -123,6 +126,10 @@ tbody tr.grp:hover td { background: var(--accent-soft); }
 .orders .cust.stick, .orders th.s-cust { left: 76px; }
 .orders tr.has-order td.s-crm { color: var(--accent); }
 .orders .grp-l { position: sticky; left: 8px; }
+/* dòng khớp ô tìm kiếm */
+mark { background: var(--mark); color: inherit; border-radius: 3px; padding: 0 1px; }
+tr.hit > td:not(.pc), tbody tr.hit:hover > td:not(.pc) { background: var(--hit); }
+tr.hit > td:first-child { box-shadow: inset 4px 0 0 var(--hit-bar); }
 .orders th.stick { z-index: 3; }
 .orders tbody tr:hover td.stick { background: var(--hover); }
 .orders input.q { width: 52px; text-align: right; border: 1px solid var(--line); background: var(--input); border-radius: 5px; padding: 4px 6px; font-family: var(--f-num); font-size: 13px; }
@@ -587,6 +594,25 @@ function viewDay(main) {
   $('#f-cols').onchange = e => { S.filter.allCols = e.target.checked; saveF(); drawTable(); };
   drawTable();
 }
+// tô phần chữ khớp từ khóa (gõ không dấu vẫn khớp chữ có dấu)
+function hl(text, q) {
+  const t = String(text == null ? '' : text), qn = norm(q);
+  if (!qn || !t) return esc(t);
+  let n = '', map = [];
+  for (let i = 0; i < t.length; i++) { const c = noAcc(t[i]).toLowerCase().replace(/\s/, ' '); for (const ch of c) { n += ch; map.push(i); } }
+  const digits = qn.replace(/\D/g, '');
+  const spans = [];
+  let at = n.indexOf(qn);
+  while (qn && at >= 0) { spans.push([map[at], map[at + qn.length - 1] + 1]); at = n.indexOf(qn, at + qn.length); }
+  if (!spans.length && digits.length >= 3 && /^[\d\s.]+$/.test(qn)) { // SĐT gõ liền số: "0814189" khớp "0814.189.289"
+    const d = t.replace(/\D/g, ''), k = d.indexOf(digits);
+    if (k >= 0) { let c = 0, a = -1, b = -1; for (let i = 0; i < t.length; i++) if (/\d/.test(t[i])) { if (c === k) a = i; if (c === k + digits.length - 1) b = i + 1; c++; } if (a >= 0 && b > a) spans.push([a, b]); }
+  }
+  if (!spans.length) return esc(t);
+  let out = '', last = 0;
+  for (const [a, b] of spans) { if (a < last) continue; out += esc(t.slice(last, a)) + '<mark>' + esc(t.slice(a, b)) + '</mark>'; last = b; }
+  return out + esc(t.slice(last));
+}
 function matchCust(c, qn) {
   if (!qn) return true;
   return [c.name, c.crm, c.phone, c.note, c.q].some(x => norm(x).includes(qn)) || keyOf(c.phone).includes(qn.replace(/\D/g, '') || '§');
@@ -627,9 +653,10 @@ function drawTable() {
 function rowHtml(c, ps, pay) {
   const o = orderOf(c.id) || {}, st = statusOf(o), pk = packOf(o, c);
   const p = packing(o.q, pk);
-  return `<tr data-cid="${esc(c.id)}" class="${hasOrder(o) ? 'has-order' : ''}">
-    <td class="stick s-crm" title="${esc(c.crm || '')}">${esc(c.crm || '–')}</td>
-    <td class="cust stick"><b>${esc(c.name)}</b><div class="sub">${esc(c.phone || '')}${c.note ? ' · ' + esc(c.note) : ''}</div></td>
+  const q = S.filter.q;
+  return `<tr data-cid="${esc(c.id)}" class="${hasOrder(o) ? 'has-order' : ''}${q ? ' hit' : ''}">
+    <td class="stick s-crm" title="${esc(c.crm || '')}">${c.crm ? hl(c.crm, q) : '–'}</td>
+    <td class="cust stick"><b>${hl(c.name, q)}</b><div class="sub">${hl(c.phone || '', q)}${c.note ? ' · ' + hl(c.note, q) : ''}${q && c.q && matchCust({ q: c.q }, norm(q)) ? ' · ' + hl(c.q, q) : ''}</div></td>
     <td><select class="in" data-k="hd"><option value="">${st === 'HOẠT ĐỘNG' ? 'HOẠT ĐỘNG' : 'NGHỈ'} (tự)</option><option ${o.hd === 'HOẠT ĐỘNG' ? 'selected' : ''}>HOẠT ĐỘNG</option><option ${o.hd === 'NGHỈ' ? 'selected' : ''}>NGHỈ</option></select></td>
     ${ps.map((pr, i) => { const v = (o.q || {})[pr.id], g = groupOf(pr), st = !i || groupOf(ps[i - 1]) !== g; return `<td class="pc g-${g}${st ? ' gstart' : ''}"><input class="q ${num(v) > 0 ? 'has' : ''}" data-p="${esc(pr.id)}" inputmode="decimal" value="${v ? esc(v) : ''}" aria-label="${esc(prodLabel(pr))}" title="${esc(prodLabel(pr))}"></td>`; }).join('')}
     <td><select class="in" data-k="pk">${['TÚI ĐEN', 'THÙNG'].map(x => `<option ${norm(x) === norm(pk) ? 'selected' : ''}>${x}</option>`).join('')}</select></td>
@@ -777,8 +804,8 @@ function viewCust(main) {
     const list = all.filter(c => (!f.area || c.q === f.area) && matchCust(c, qn) && (f.off === 'all' || (f.off === '1' ? c.off : !c.off)));
     const lim = list.slice(0, 500);
     $('#cf-list').innerHTML = `<div class="tw"><table><thead><tr><th>Khu vực</th><th>CRM</th><th>Khách hàng – địa chỉ</th><th>SĐT</th><th>Ghi chú / chành xe</th><th>Đóng gói</th><th class="n">Bill</th><th></th></tr></thead>
-      <tbody>${lim.map(c => `<tr data-id="${esc(c.id)}"><td class="small">${esc(c.q)}</td><td class="mono">${esc(c.crm)}</td><td>${esc(c.name)}${c.off ? ' <span class="pill off">Ngừng</span>' : ''}</td><td class="mono small">${esc(c.phone)}</td>
-        <td class="small">${esc(c.note)}</td><td><span class="pill box">${esc(c.pk || autoPack(c))}</span>${c.pk ? '' : ' <span class="muted small">tự</span>'}</td><td class="n">${fmt(c.bill == null ? 1 : c.bill)}</td>
+      <tbody>${lim.map(c => `<tr data-id="${esc(c.id)}" class="${f.q.trim() ? 'hit' : ''}"><td class="small">${hl(c.q, f.q)}</td><td class="mono">${hl(c.crm, f.q)}</td><td>${hl(c.name, f.q)}${c.off ? ' <span class="pill off">Ngừng</span>' : ''}</td><td class="mono small">${hl(c.phone, f.q)}</td>
+        <td class="small">${hl(c.note, f.q)}</td><td><span class="pill box">${esc(c.pk || autoPack(c))}</span>${c.pk ? '' : ' <span class="muted small">tự</span>'}</td><td class="n">${fmt(c.bill == null ? 1 : c.bill)}</td>
         <td><button class="btn sm" data-edit>Sửa</button></td></tr>`).join('')}</tbody></table></div>
       <p class="hint" style="margin-top:8px">${list.length} khách${list.length > lim.length ? ` (hiện ${lim.length} đầu – gõ tìm để lọc)` : ''} · Tổng ${all.length} khách trong danh mục.</p>`;
     $$('#cf-list [data-edit]').forEach(b => b.onclick = () => editCustomer(b.closest('tr').dataset.id));
