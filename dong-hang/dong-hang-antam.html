@@ -117,6 +117,21 @@ tbody tr:hover td { background: var(--hover); }
 tbody tr.grp:hover td { background: var(--accent-soft); }
 /* bảng nhập đơn cuộn trong khung riêng để dòng tiêu đề nhóm / sản phẩm luôn hiện */
 .tw.otw { max-height: calc(100vh - 150px); max-height: calc(100dvh - 150px); overflow: auto; }
+/* dòng tóm tắt + chế độ mở to bảng */
+.mini { display: flex; flex-wrap: wrap; gap: 6px 16px; align-items: center; font-size: 13px; color: var(--ink-2); }
+.mini b { font-family: var(--f-num); font-size: 16px; color: var(--ink); }
+.mini .pchip b { font-size: 13px; color: inherit; }
+body.tbl-max .top { display: none; }
+body.tbl-max main { padding-block: 8px 12px; gap: 8px; }
+body.tbl-max #d-head { padding: 8px 12px; gap: 6px; }
+body.tbl-max #d-rep-wrap { display: none !important; }
+body.tbl-max #d-mini { display: flex !important; }
+body.tbl-max .daybar .date-big { font-size: 16px; }
+body.tbl-max main > .row .field { font-size: 0; gap: 0; }
+body.tbl-max main > .row .field input, body.tbl-max main > .row .field select, body.tbl-max main > .row .seg { font-size: 13px; }
+body.tbl-max main > .row .field input, body.tbl-max main > .row .field select { padding: 5px 8px; }
+body.tbl-max .tw.otw { max-height: calc(100vh - 160px); max-height: calc(100dvh - 160px); }
+body.tbl-max #d-table > .hint { display: none; }
 .orders td { vertical-align: middle; }
 .orders .cust { min-width: 230px; max-width: 340px; }
 .orders .cust b { font-weight: 600; }
@@ -580,6 +595,7 @@ function dayTotals(dayR) {
 
 /* ================================================================ khung trang */
 function setView(v) {
+  if (v !== 'don') document.body.classList.remove('tbl-max');
   S.view = v; store('view', v);
   $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === v));
   render(); window.scrollTo(0, 0);
@@ -616,6 +632,27 @@ const emptyCust = () => `<div class="card empty"><div class="big">Chưa có danh
 /* ================================================================ ĐƠN HÀNG NGÀY */
 const PAGE = 200;
 let shown = PAGE;
+// dòng tóm tắt luôn hiện (khi báo cáo đang ẩn)
+const miniHtml = rep => `<div class="mini" id="d-mini" ${S.repOpen ? 'hidden' : ''}>
+  <span><b data-r="tacos">${fmt(rep.tacos)}</b> TACOS</span><span><b data-r="kebab">${fmt(rep.kebab)}</b> KEBAB</span>
+  <span><b data-r="bill">${fmt(rep.bill)}</b> BILL</span><span><b data-r="count">${fmt(rep.count)}</b> đơn</span>
+  ${PAYS.map(([k, l]) => `<span class="pchip p-${k}">${esc(l)} <b data-r="pay:${k}">${fmt(rep.pay[k])}</b></span>`).join('')}</div>`;
+S.repOpen = store('repOpen') === true;
+function setRepOpen(v) {
+  S.repOpen = v; store('repOpen', v);
+  const w = $('#d-rep-wrap'), m = $('#d-mini'), b = $('#d-rep-t');
+  if (w) w.hidden = !v; if (m) m.hidden = v;
+  if (b) { b.textContent = '📊 Báo cáo ' + (v ? '▴' : '▾'); b.classList.toggle('pri', v); b.setAttribute('aria-expanded', v); }
+  if (v && document.body.classList.contains('tbl-max')) setMax(false);
+}
+// mở to bảng nhập liệu: ẩn menu trên và báo cáo, bảng cao gần hết màn hình
+function setMax(v) {
+  document.body.classList.toggle('tbl-max', v);
+  const b = $('#d-max'); if (b) b.textContent = v ? '⤡ Thu nhỏ' : '⛶ Mở to bảng';
+  if (v && S.repOpen) setRepOpen(false);
+  const t = $('#orders'); if (t) fixStickyTops(t);
+}
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.body.classList.contains('tbl-max') && !$('.modal-back')) setMax(false); });
 function reportHtml(rep, need, tuyen, editable) {
   const runs = groupRuns(S.cfg.products.filter(p => p.show !== false));
   const cells = (fn) => runs.map(r => r.list.map((p, i) => `<td class="pc g-${r.g}${i ? '' : ' gstart'}">${fn(p)}</td>`).join('')).join('');
@@ -658,7 +695,7 @@ function viewDay(main) {
   const d = S.date, f = S.filter;
   const tot = dayTotals(S.day ? S.day.r : {});
   main.innerHTML = `
-    <div class="card" style="display:grid;gap:12px">
+    <div class="card" id="d-head" style="display:grid;gap:12px">
       <div class="daybar">
         <button class="btn sm" id="d-prev" aria-label="Ngày trước">◀</button>
         <input type="date" class="in" id="d-date" value="${d}" style="border:1px solid var(--line);border-radius:6px;padding:5px 8px;background:var(--input)">
@@ -666,15 +703,18 @@ function viewDay(main) {
         <button class="btn sm" id="d-today">Hôm nay</button>
         <span class="date-big">${vn(d)}</span><span class="dow">${dow(d)}</span>
         <span class="grow"></span>
+        <button class="btn sm${S.repOpen ? ' pri' : ''}" id="d-rep-t" aria-expanded="${S.repOpen}">📊 Báo cáo ${S.repOpen ? '▴' : '▾'}</button>
+        <button class="btn sm" id="d-max">${document.body.classList.contains('tbl-max') ? '⤡ Thu nhỏ' : '⛶ Mở to bảng'}</button>
         <button class="btn sm" id="d-print">Xem định mức đóng hàng</button>
       </div>
-      ${reportHtml(dayReport(S.day ? S.day.r : {}, S.day && S.day.tuyen), tot.need, S.day && S.day.tuyen, true)}
+      ${miniHtml(dayReport(S.day ? S.day.r : {}, S.day && S.day.tuyen))}
+      <div id="d-rep-wrap" ${S.repOpen ? '' : 'hidden'}>${reportHtml(dayReport(S.day ? S.day.r : {}, S.day && S.day.tuyen), tot.need, S.day && S.day.tuyen, true)}</div>
     </div>
     <div class="row">
       <label class="field grow" style="min-width:200px">Tìm khách (tên, CRM, SĐT, địa chỉ) – tìm trong tất cả khách để thêm đơn<input id="f-q" value="${esc(f.q)}" placeholder="VD: K1326 hoặc Wallace"></label>
       <label class="field">Khu vực<select id="f-area"><option value="">Tất cả khu vực</option>${areas().map(a => `<option ${a === f.area ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select></label>
       <div class="field">Hiện<div class="seg" id="f-mode"><button data-m="co" class="${f.mode === 'co' ? 'on' : ''}">Khách có đơn</button><button data-m="all" class="${f.mode === 'all' ? 'on' : ''}">Tất cả khách</button></div></div>
-      <label class="field" style="flex-direction:row;display:flex;align-items:center;gap:6px;padding-bottom:8px"><input type="checkbox" id="f-cols" ${f.allCols ? 'checked' : ''}> Hiện mọi cột sản phẩm</label>
+      <label class="field" style="flex-direction:row;display:flex;align-items:center;gap:6px;padding-bottom:8px"><input type="checkbox" id="f-cols" ${f.allCols ? 'checked' : ''} title="Hiện mọi cột sản phẩm"> Hiện mọi cột sản phẩm</label>
       <button class="btn" id="d-add">+ Khách mới</button>
     </div>
     <div id="d-table"></div>`;
@@ -683,6 +723,8 @@ function viewDay(main) {
   $('#d-today').onclick = () => { shown = PAGE; watchDay(today()); render(); };
   $('#d-date').onchange = e => { if (e.target.value) { shown = PAGE; watchDay(e.target.value); render(); } };
   $('#d-print').onclick = () => setView('in');
+  $('#d-rep-t').onclick = () => setRepOpen(!S.repOpen);
+  $('#d-max').onclick = () => setMax(!document.body.classList.contains('tbl-max'));
   bindReport();
   $('#d-add').onclick = () => editCustomer(null);
   const saveF = () => store('filter', S.filter);
@@ -867,7 +909,7 @@ function updateRow(tr, cid) {
 }
 // cập nhật số trên báo cáo mà không vẽ lại ô đang gõ
 function updateDayTotals() {
-  const root = $('#d-report'); if (!root || !S.day) return;
+  const root = $('#d-head'); if (!root || !S.day) return;
   const rep = dayReport(S.day.r, S.day.tuyen), t = dayTotals(S.day.r);
   const val = key => {
     const [k, id] = key.split(':');
