@@ -129,11 +129,9 @@ tbody tr.grp:hover td { background: var(--accent-soft); }
 /* cột tích thanh toán */
 .p-ctt { --pc: var(--bad); --pcs: var(--bad-soft); } .p-dtt { --pc: var(--good); --pcs: var(--good-soft); }
 .p-ht { --pc: var(--warn); --pcs: var(--warn-soft); } .p-tm { --pc: var(--g-tuoi); --pcs: var(--g-tuoi-s); } .p-none { --pc: var(--muted); --pcs: var(--line-2); }
-.orders th.pay-h { --gc: var(--ink-2); --gs: var(--panel); }
-.orders th.pay-th { color: var(--pc); background: var(--pcs); min-width: 54px; }
-.orders td.pay-td { text-align: center; }
-.orders .pay-td.gstart, .orders th.pay-th.gstart { border-left: 2px solid var(--line); }
-.pay-cb { width: 20px; height: 20px; accent-color: var(--pc); cursor: pointer; vertical-align: middle; }
+.orders select.pay-sel { min-width: 104px; color: var(--muted); }
+.orders select.pay-sel.pay-on { background: var(--pc); border-color: var(--pc); color: var(--accent-ink); font-weight: 700; }
+.orders select.pay-sel option { background: var(--input); color: var(--ink); font-weight: 400; }
 .paychips { display: flex; flex-wrap: wrap; gap: 8px; }
 .pchip { border-radius: 999px; padding: 4px 12px; background: var(--pcs); color: var(--pc); font-weight: 600; font-size: 13px; }
 .pchip b { font-family: var(--f-num); margin-left: 4px; }
@@ -535,6 +533,12 @@ function dayOrders(dayR) {
 }
 // 4 cột tích thanh toán (mỗi đơn 1 lựa chọn, lưu vào o.tt như cột TÌNH TRẠNG của sheet)
 const PAYS = [['ctt', 'CTT', 'Chưa TT', 'Chưa thanh toán'], ['dtt', 'ĐTT', 'ĐÃ TT', 'Đã thanh toán'], ['ht', 'Hỗ trợ', 'HỖ TRỢ', 'Hỗ trợ'], ['tm', 'Tiền mặt', 'TIỀN MẶT', 'Tiền mặt']];
+// ô chọn thanh toán (như ô Tình trạng): tô màu theo lựa chọn
+function paySelect(tt) {
+  const k = payKey(tt), extra = tt && !k ? `<option selected>${esc(tt)}</option>` : '';
+  return `<select class="in pay-sel${k ? ' p-' + k + ' pay-on' : ''}" data-k="tt" aria-label="Thanh toán"><option value="">—</option>`
+    + PAYS.map(([key, l, v, full]) => `<option value="${esc(v)}" ${key === k ? 'selected' : ''} title="${esc(full)}">${esc(l)}</option>`).join('') + extra + '</select>';
+}
 const payKey = tt => { const n = norm(tt); if (!n) return ''; const hit = PAYS.find(([, , v]) => norm(v) === n) || PAYS.find(([, l]) => norm(l) === n); return hit ? hit[0] : ''; };
 // Báo cáo ngày như cuối sheet: TỔNG TÚI (đơn), BÁNH TUYẾN, TỔNG CÁI = (túi + bánh tuyến) × cái/túi, TACOS, KEBAB, BILL
 function dayReport(dayR, tuyen) {
@@ -619,7 +623,7 @@ function reportHtml(rep, need, tuyen, editable) {
       <div><div class="v" data-r="count">${fmt(rep.count)}</div><div class="k">ĐƠN HOẠT ĐỘNG</div></div>
     </div>
     <div class="paychips">${PAYS.map(([k, l, , full]) => `<span class="pchip p-${k}" title="${esc(full)}">${esc(l)} <b data-r="pay:${k}">${fmt(rep.pay[k])}</b></span>`).join('')}
-      <span class="pchip p-none" title="Đơn chưa tích ô thanh toán nào">Chưa tích <b data-r="pay:none">${fmt(rep.pay.none)}</b></span></div>
+      <span class="pchip p-none" title="Đơn chưa chọn thanh toán">Chưa chọn <b data-r="pay:none">${fmt(rep.pay.none)}</b></span></div>
     <div class="tw"><table class="orders rept"><thead>
       <tr><th class="stick rl" rowspan="2"></th>${runs.map(r => `<th class="gh g-${r.g} gstart" colspan="${r.list.length}">${esc(GROUPS[r.g].name)}</th>`).join('')}</tr>
       <tr>${runs.map(r => r.list.map((p, i) => `<th class="p g-${r.g}${i ? '' : ' gstart'}" title="${esc(p.name)} · ${perOf(p)} cái/túi">${esc(prodShort(p))}</th>`).join('')).join('')}</tr></thead><tbody>
@@ -724,7 +728,7 @@ function drawTable() {
     return;
   }
   let lastArea = null, html = '';
-  const cols = 6 + PAYS.length + ps.length;
+  const cols = 7 + ps.length;
   rows.slice(0, shown).forEach(c => {
     if (c.q !== lastArea) { lastArea = c.q; html += `<tr class="grp"><td colspan="${cols}"><span class="grp-l">${esc(c.q || 'Chưa có khu vực')}</span></td></tr>`; }
     html += rowHtml(c, ps, pay);
@@ -732,8 +736,8 @@ function drawTable() {
   const runs = groupRuns(ps);
   el.innerHTML = `<div class="tw otw"><table class="orders" id="orders"><thead><tr>
       <th class="stick s-crm" rowspan="2">CRM</th><th class="stick s-cust" rowspan="2">Khách hàng</th><th rowspan="2">Tình trạng</th>${runs.map(r => `<th class="gh g-${r.g} gstart" colspan="${r.list.length}">${esc(GROUPS[r.g].name)}</th>`).join('')}
-      <th rowspan="2">Đóng gói</th><th rowspan="2">Định mức</th><th class="gh pay-h gstart" colspan="${PAYS.length}">Thanh toán</th><th rowspan="2"></th></tr>
-      <tr>${runs.map(r => r.list.map((p, i) => `<th class="p g-${r.g}${i ? '' : ' gstart'}" title="${esc(p.name)}">${esc(prodShort(p))}</th>`).join('')).join('')}${PAYS.map(([k, l, , full], i) => `<th class="p pay-th p-${k}${i ? '' : ' gstart'}" title="${esc(full)}">${esc(l)}</th>`).join('')}</tr></thead><tbody>${html}</tbody></table></div>
+      <th rowspan="2">Đóng gói</th><th rowspan="2">Định mức</th><th rowspan="2">Thanh toán</th><th rowspan="2"></th></tr>
+      <tr>${runs.map(r => r.list.map((p, i) => `<th class="p g-${r.g}${i ? '' : ' gstart'}" title="${esc(p.name)}">${esc(prodShort(p))}</th>`).join('')).join('')}</tr></thead><tbody>${html}</tbody></table></div>
     ${rows.length > shown ? `<div class="more"><button class="btn" id="d-more">Xem thêm ${Math.min(PAGE, rows.length - shown)} khách (còn ${rows.length - shown})</button></div>` : ''}
     <p class="hint" style="margin-top:8px">${rows.length} khách. Gõ số lượng là tự lưu và tự tính định mức. Bấm ⋯ để nhập người bàn giao, người giao, tài xế, công nợ, ngày thanh toán, người check, ghi chú.</p>`;
   if ($('#d-more')) $('#d-more').onclick = () => { shown += PAGE; drawTable(); };
@@ -750,7 +754,7 @@ function rowHtml(c, ps, pay) {
     ${ps.map((pr, i) => { const v = (o.q || {})[pr.id], g = groupOf(pr), st = !i || groupOf(ps[i - 1]) !== g; return `<td class="pc g-${g}${st ? ' gstart' : ''}"><input class="q ${num(v) > 0 ? 'has' : ''}" data-p="${esc(pr.id)}" inputmode="decimal" value="${v ? esc(v) : ''}" aria-label="${esc(prodLabel(pr))}" title="${esc(prodLabel(pr))}"></td>`; }).join('')}
     <td><select class="in" data-k="pk">${['TÚI ĐEN', 'THÙNG'].map(x => `<option ${norm(x) === norm(pk) ? 'selected' : ''}>${x}</option>`).join('')}</select></td>
     <td class="pack" data-out="pack">${esc(packLabel(p))}</td>
-    ${PAYS.map(([k, l, , full], i) => `<td class="pay-td${i ? '' : ' gstart'}"><input type="checkbox" class="pay-cb p-${k}" data-pay="${k}" ${payKey(o.tt) === k ? 'checked' : ''} aria-label="${esc(full)}" title="${esc(full)}"></td>`).join('')}
+    <td>${paySelect(o.tt)}</td>
     <td><button class="btn sm ghost" data-more title="Chi tiết đơn">⋯</button></td></tr>`;
 }
 // ghi 1 dòng (gộp các lần gõ liên tiếp)
@@ -793,12 +797,7 @@ function bindRows(el) {
       inp.addEventListener('focus', () => inp.select());
     });
     $$('select[data-k]', tr).forEach(sel => sel.onchange = () => { patchRow(cid, { [sel.dataset.k]: sel.value }); updateRow(tr, cid); updateDayTotals(); });
-    // ô tích thanh toán: tích ô này thì bỏ tích các ô khác của dòng
-    $$('input[data-pay]', tr).forEach(cb => cb.onchange = () => {
-      $$('input[data-pay]', tr).forEach(x => { if (x !== cb) x.checked = false; });
-      const hit = PAYS.find(([k]) => k === cb.dataset.pay);
-      patchRow(cid, { tt: cb.checked ? hit[2] : '' }); updateDayTotals();
-    });
+
     $('[data-more]', tr).onclick = () => editOrder(cid);
   });
 }
@@ -808,6 +807,8 @@ function updateRow(tr, cid) {
   tr.classList.toggle('has-order', hasOrder(o));
   const sel = $('select[data-k=hd]', tr);
   if (sel) { sel.options[0].textContent = (qtyTotal(o.q) > 0 ? 'HOẠT ĐỘNG' : 'NGHỈ') + ' (tự)'; sel.classList.toggle('st-on', statusOf(o) === 'HOẠT ĐỘNG'); }
+  const ps_ = $('select.pay-sel', tr);
+  if (ps_) { const k = payKey(o.tt); ps_.className = 'in pay-sel' + (k ? ' p-' + k + ' pay-on' : ''); }
 }
 // cập nhật số trên báo cáo mà không vẽ lại ô đang gõ
 function updateDayTotals() {
