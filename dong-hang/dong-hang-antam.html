@@ -1448,8 +1448,22 @@ function colChooser({ title, groups, key, onChange, extra = '', bindExtra }) {
 }
 // hộp in báo cáo: tất cả hoặc theo bộ lọc đang chọn → tải file HTML rồi mở bằng trình duyệt, Ctrl+P
 // In trực tiếp: dựng bản in ngay trong trang rồi mở hộp thoại in của trình duyệt. Khung trang chặn in (không có sự kiện
-// beforeprint) thì tải file in về – mở file là hộp thoại in tự hiện.
+// beforeprint – như khi mở trên claude.ai) thì mở bản in ở tab mới, tab đó tự mở hộp thoại in; trình duyệt chặn cả tab mới
+// thì mới tải file in về.
+let printBlocked = false;
 async function directPrint(title, body, file) {
+  if (!printBlocked && await printInPage(title, body)) return true;
+  printBlocked = true;
+  const url = URL.createObjectURL(new Blob([printablePage(title, body, true)], { type: 'text/html;charset=utf-8' }));
+  let w = null;
+  try { w = window.open(url, '_blank'); } catch (e) { w = null; }
+  setTimeout(() => URL.revokeObjectURL(url), 120000);
+  if (w) { toast('Đã mở bản in ở tab mới – hộp thoại in tự hiện (nếu không, bấm Ctrl+P ở tab đó)'); return true; }
+  toast('Trình duyệt chặn mở tab mới – đang tải file in, mở file là hộp thoại in tự hiện');
+  await saveFile(file, printablePage(title, body, true), 'text/html');
+  return false;
+}
+async function printInPage(title, body) {
   const area = $('#print-area'), root = document.documentElement, old = { theme: root.dataset.theme, title: document.title };
   let before = false, after = false;
   const onBefore = () => { before = true; }, onAfter = () => { after = true; };
@@ -1461,10 +1475,7 @@ async function directPrint(title, body, file) {
   removeEventListener('beforeprint', onBefore); removeEventListener('afterprint', onAfter);
   area.innerHTML = ''; document.body.classList.remove('printing'); document.title = old.title;
   if (old.theme === undefined) delete root.dataset.theme; else root.dataset.theme = old.theme;
-  if (before) return true;
-  toast('Trang này không mở được hộp thoại in – đang tải file in, mở file là hộp thoại in tự hiện');
-  await saveFile(file, printablePage(title, body, true), 'text/html');
-  return false;
+  return before;
 }
 function printModal({ title, note, nAll, nFlt, unit, actOpt, build }) {
   const m = modal({
@@ -1491,8 +1502,11 @@ function printablePage(title, body, autoPrint) {
     body{background:#fff;color:#111;padding:16px} .tw{overflow:visible;border:0} th{position:static} tr.grp td{background:#eef4f1;color:#0f6e5a}
     @page{size:A4 landscape;margin:10mm} table{font-size:12px} *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     h3{break-after:avoid} tr{break-inside:avoid}
+    .pbar{position:sticky;top:0;z-index:5;display:flex;gap:10px;align-items:center;justify-content:center;padding:8px;margin:-16px -16px 12px;background:#0f6e5a;color:#fff;font:14px system-ui,sans-serif}
+    .pbar button{font:inherit;font-weight:700;padding:6px 16px;border-radius:6px;border:0;background:#fff;color:#0f6e5a;cursor:pointer}
+    @media print{.pbar{display:none}}
     .rep{grid-template-columns:minmax(0,1fr)} .rept{table-layout:fixed;font-size:10px} .rept th,.rept td{padding:3px 2px}
-    .rept th.p{min-width:0;max-width:none;font-size:9.5px} .rept th.rl,.rept td.rl{width:84px;min-width:84px;white-space:normal}</style></head><body>${body}${autoPrint ? '<script>addEventListener("load",function(){setTimeout(function(){print()},400)})<\/script>' : ''}</body></html>`;
+    .rept th.p{min-width:0;max-width:none;font-size:9.5px} .rept th.rl,.rept td.rl{width:84px;min-width:84px;white-space:normal}</style></head><body>${autoPrint ? '<div class="pbar"><button onclick="print()">🖨 In</button><span>Hộp thoại in tự mở; nếu không, bấm nút In hoặc Ctrl+P (khổ A4 ngang).</span></div>' : ''}${body}${autoPrint ? '<script>addEventListener("load",function(){setTimeout(function(){print()},400)})<\/script>' : ''}</body></html>`;
 }
 async function saveFile(filename, data, type) {
   const dl = await window.claude.use('downloads');
