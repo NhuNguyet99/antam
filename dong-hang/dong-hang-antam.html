@@ -168,13 +168,18 @@ tbody tr.grp:hover td { background: var(--accent-soft); }
 .pr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 3px 10px; }
 .pr-grid label { font-size: 13px; }
 .t1p .u { font-weight: 400; font-size: 10px; color: var(--muted); }
-.rts th, .rts td, .gsum th, .gsum td { font-size: 11px; padding: 3px 4px; }
-.gsum { margin-top: 4px; background: var(--warn-soft); width: auto; min-width: 50%; break-inside: avoid; }
+.rts th, .rts td { font-size: 11px; padding: 3px 4px; }
+/* khung tổng của từng tuyến: chữ to, đậm, viền đậm cho dễ đọc khi bốc hàng */
+.gsum { margin-top: 6px; background: var(--warn-soft); width: auto; min-width: 50%; break-inside: avoid; border: 2px solid var(--ink) !important; }
+.gsum th, .gsum td { font-size: 15px; font-weight: 800; padding: 6px 10px; color: var(--ink); border-color: var(--ink-2) !important; }
+.gsum th .u { font-size: 12px; font-weight: 600; color: var(--ink-2); }
+.gsum td.n b { font-size: 20px; font-weight: 800; }
+.gsum td b { font-weight: 800; }
 .rts td:first-child { min-width: 150px; }
 .pgh { break-after: avoid; }
 .gsum th { background: var(--warn-soft) !important; }
-.gsum td:first-child, .gsum th:first-child { white-space: nowrap; font-weight: 700; }
-.pgh { margin: 14px 0 4px; font-size: 13px; color: var(--accent); text-transform: uppercase; letter-spacing: .03em; }
+.gsum td:first-child, .gsum th:first-child { white-space: nowrap; }
+.pgh { margin: 16px 0 4px; font-size: 16px; font-weight: 800; color: var(--accent); text-transform: uppercase; letter-spacing: .03em; }
 .sign { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 18px 0 8px; text-align: center; break-inside: avoid; }
 .sign div { display: grid; gap: 2px; padding-bottom: 60px; }
 .sign span { font-size: 11px; color: var(--muted); font-style: italic; }
