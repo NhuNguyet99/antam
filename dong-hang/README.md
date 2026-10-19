@@ -32,8 +32,8 @@ Web riêng (trang claude.ai, một file `dong-hang-antam.html`) thay cho Google 
   **Thanh toán** (CTT, ĐTT, Hỗ trợ, Tiền mặt, chưa chọn) và **Tuyến**; Tuyến 123: tuyến và khách hỗ trợ — kèm số đơn sẽ in;
   chọn phần in (số tổng, bảng túi/cái, bao bì, tổng theo tuyến, danh sách khách), cột của danh sách, tiêu đề, nhóm theo
   (tuyến / khu vực / thanh toán), khổ ngang / dọc, mỗi nhóm một trang, dòng ký tên.
-  Bản in có bảng **Tổng theo tuyến giao – số lượng từng sản phẩm** (đơn, số túi từng sản phẩm, TACOS / KEBAB, bao bì) và
-  dưới danh sách mỗi tuyến / nhóm là bảng **TỔNG** của nhóm đó (số lượng từng sản phẩm, TACOS / KEBAB, bao bì). Lựa chọn nhớ trên máy (`dh_prDon`, `dh_prT1`).
+  Bản in có bảng **Tổng theo tuyến giao – số lượng từng sản phẩm** (đơn, số lượng từng sản phẩm, bao bì) và
+  dưới danh sách mỗi tuyến / nhóm là bảng **TỔNG** của nhóm đó (số lượng từng sản phẩm, bao bì). Lựa chọn nhớ trên máy (`dh_prDon`, `dh_prT1`).
 - **Lọc theo yêu cầu + In báo cáo** (cả Đơn hàng ngày và Tuyến kebab 123): lọc bằng ô tìm, chọn khu vực / tuyến và dòng
   "▼ Lọc theo cột" dưới tiêu đề bảng (CRM, hỗ trợ, tình trạng, từng sản phẩm có/trống, túi 50, túi lẻ, ghi chú…).
   Ở Tuyến 123, bảng tổng tính theo các khách đang lọc. Nút **🖨 In báo cáo** cho chọn in *theo bộ lọc* hoặc *tất cả*,

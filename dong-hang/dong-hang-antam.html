@@ -1436,24 +1436,24 @@ function prodText(q) {
 // sản phẩm có số lượng trong các đơn (bỏ cột đang ẩn), theo thứ tự danh mục
 const usedProducts = r => { const H = hideSet('hideDon'), t = dayTotals(r).prod; return S.cfg.products.filter(p => p.show !== false && !H.has('p:' + p.id) && t[p.id] > 0); };
 const pTh = p => `<th class="n" title="${esc(p.name)}">${esc(prodLabel(p))}${perOf(p) > 1 ? '<br><span class="u">túi</span>' : ''}</th>`;
-// bảng tổng theo tuyến: số đơn, số lượng từng sản phẩm (túi; kebab, cây thịt: cái), TACOS / KEBAB (cái), bao bì
+// bảng tổng theo tuyến: số đơn, số lượng từng sản phẩm (túi; kebab, cây thịt: cái), bao bì
 function rtSummaryHtml(r) {
   const by = {};
   for (const x of dayOrders(r)) { const k = routeOf(x.o, S.cust[x.cid] || x.c)[0]; (by[k] = by[k] || {})[x.cid] = x.o; }
   const keys = Object.keys(by).sort((a, b) => routeIdx(a) - routeIdx(b) || a.localeCompare(b));
   if (!keys.length) return '';
   const ps = usedProducts(r), all = dayTotals(r), needs = NEED.filter(([k]) => all.need[k] > 0);
-  const row = (lb, sub, cls = '') => { const t = dayTotals(sub), rp = dayReport(sub, null); return `<tr class="${cls}"><td><b>${esc(lb)}</b></td><td class="n">${fmt(t.count)}</td>${ps.map(p => `<td class="n">${t.prod[p.id] ? fmt(t.prod[p.id]) : ''}</td>`).join('')}<td class="n"><b>${fmt(rp.tacos)}</b></td><td class="n"><b>${fmt(rp.kebab)}</b></td>${needs.map(([k]) => `<td class="n">${t.need[k] ? fmt(t.need[k]) : ''}</td>`).join('')}</tr>`; };
-  return `<h3 style="margin:0 0 6px">Tổng theo tuyến giao – số lượng từng sản phẩm</h3><table class="t1p rts" style="margin-bottom:16px"><thead><tr><th>Tuyến</th><th class="n">Đơn</th>${ps.map(pTh).join('')}<th class="n">TACOS<br><span class="u">cái</span></th><th class="n">KEBAB<br><span class="u">cái</span></th>${needs.map(([, n]) => `<th class="n">${esc(n)}</th>`).join('')}</tr></thead>
+  const row = (lb, sub, cls = '') => { const t = dayTotals(sub); return `<tr class="${cls}"><td><b>${esc(lb)}</b></td><td class="n">${fmt(t.count)}</td>${ps.map(p => `<td class="n">${t.prod[p.id] ? fmt(t.prod[p.id]) : ''}</td>`).join('')}${needs.map(([k]) => `<td class="n">${t.need[k] ? fmt(t.need[k]) : ''}</td>`).join('')}</tr>`; };
+  return `<h3 style="margin:0 0 6px">Tổng theo tuyến giao – số lượng từng sản phẩm</h3><table class="t1p rts" style="margin-bottom:16px"><thead><tr><th>Tuyến</th><th class="n">Đơn</th>${ps.map(pTh).join('')}${needs.map(([, n]) => `<th class="n">${esc(n)}</th>`).join('')}</tr></thead>
     <tbody>${keys.map(k => row(k ? routeLabel(k) : '⚠ Chưa chia tuyến', by[k])).join('')}${keys.length > 1 ? row('TỔNG', r, 'tot') : ''}</tbody></table>`;
 }
 // tổng số lượng của 1 nhóm (dưới danh sách khách của tuyến / khu vực / thanh toán)
 function groupSumHtml(label, rows) {
-  const sub = Object.fromEntries(rows.map(x => [x.cid, x.o])), t = dayTotals(sub), rp = dayReport(sub, null), ps = usedProducts(sub);
+  const sub = Object.fromEntries(rows.map(x => [x.cid, x.o])), t = dayTotals(sub), ps = usedProducts(sub);
   const needs = NEED.filter(([k]) => t.need[k] > 0).map(([k, n]) => `${n} <b>${fmt(t.need[k])}</b>`).join(' · ');
-  return `<table class="t1p gsum"><thead><tr><th>TỔNG ${esc(label.toUpperCase())}</th>${ps.map(pTh).join('')}<th class="n">TACOS<br><span class="u">cái</span></th><th class="n">KEBAB<br><span class="u">cái</span></th></tr></thead><tbody>
-    <tr><td>Số lượng</td>${ps.map(p => `<td class="n"><b>${fmt(t.prod[p.id])}</b></td>`).join('')}<td class="n"><b>${fmt(rp.tacos)}</b></td><td class="n"><b>${fmt(rp.kebab)}</b></td></tr>
-    ${needs ? `<tr><td>Bao bì</td><td colspan="${ps.length + 2}">${needs}</td></tr>` : ''}</tbody></table>`;
+  return `<table class="t1p gsum"><thead><tr><th>TỔNG ${esc(label.toUpperCase())}</th>${ps.map(pTh).join('')}</tr></thead><tbody>
+    <tr><td>Số lượng</td>${ps.map(p => `<td class="n"><b>${fmt(t.prod[p.id])}</b></td>`).join('')}</tr>
+    ${needs ? `<tr><td>Bao bì</td><td colspan="${ps.length}">${needs}</td></tr>` : ''}</tbody></table>`;
 }
 // cột bảng chi tiết của bản in đơn hàng (STT, Khách hàng luôn có)
 const DON_PRINT_COLS = [['g', 'Khu vực / Tuyến'], ['crm', 'CRM'], ['phone', 'SĐT'], ['note', 'Ghi chú'], ['prod', 'Sản phẩm'], ['pk', 'Đóng gói'], ['pack', 'Định mức'], ['tt', 'Thanh toán']];
