@@ -5,7 +5,12 @@ Web riêng (trang claude.ai, một file `dong-hang-antam.html`) thay cho Google 
 - **Đơn hàng ngày**: danh sách khách theo khu vực, gõ số lượng từng loại bánh là tự lưu (nhiều người nhập cùng lúc được),
   tự tính **định mức đóng hàng** (túi đen / thùng giấy / nhỏ / chung / đại / cây kebab) và **tổng cần chuẩn bị** của ngày.
 - **Định mức đóng hàng**: bản in tổng cần chuẩn bị + chi tiết từng khách; tải file in (HTML), tải Excel (CSV),
-  **Sao chép cho Phân tuyến** (dán vào web Kho An Tâm › Phân tuyến giao hàng).
+  **Sao chép cho Phân tuyến** (dán vào web Kho An Tâm › Phân tuyến giao hàng; có cột TUYẾN nên kho giữ đúng tuyến đã chia).
+- **Tự động chia tuyến** (Đơn hàng ngày): mỗi đơn tự vào tuyến giao theo Khu vực của khách (không khớp thì theo địa chỉ, ghi chú),
+  dùng cùng mã tuyến và quy tắc với web Kho (HM, TBTP, BTBC, TD, BTH, GV, BD, Q12, Q1PN, Qle, AS, BI, Tship, ĐB 1).
+  Cột **Tuyến** chọn tay được và web nhớ cho khách; hàng nút "🚚 Chia tuyến" đếm số đơn từng tuyến (bấm để lọc, ⚠ Chưa chia);
+  "Xếp theo: Tuyến / Khu vực"; bản in có bảng **Tổng theo tuyến giao** (đơn, TACOS, KEBAB, túi, thùng, cây) và chi tiết nhóm theo tuyến.
+  Sửa tuyến / quy tắc ở "⚙ Quy tắc chia tuyến" hoặc Định mức & cài đặt (lưu trong `cfg/main.routes`; khách: `rt`, đơn: `rt`).
 - **Tuyến kebab 123**: theo sheet "2-KHÁCH TUYẾN 123" (mẫu tab ngày 18/10): Tuyến 1, Tuyến 2, Tuyến chiều, Tuyến 3.
   Cột Hỗ trợ (tích), CRM, tên, SĐT, tình trạng (tự HOẠT ĐỘNG khi có số), 22/25/28/31 cm (túi), VÀNG/ĐEN (cái),
   CÂY THỊT (kg), Túi 50 / túi lẻ (tự tính từ VÀNG), ghi chú khách + ghi chú ngày. Tổng bánh, túi 50 và DOANH THU từng tuyến

@@ -81,6 +81,7 @@ Mục **Phân tuyến giao hàng** chia khách đặt hàng trong ngày vào cá
    **Lấy khách & chia tuyến**. Cách khác: tải file về (.xlsx hoặc .csv) và chọn file. Với file .xlsx, web tự mở sheet
    trùng ngày đã chọn.
 3. Web chỉ lấy khách có cột **TRẠNG THÁI = HOẠT ĐỘNG**. Khách được xếp tuyến theo thứ tự ưu tiên:
+   - cột **TUYẾN** (danh sách chép từ web Đóng hàng An Tâm › Sao chép cho Phân tuyến đã chia tuyến sẵn);
    - tuyến đã chọn tay cho mã khách đó lần trước;
    - cột **QUẬN**;
    - **địa chỉ** của khách.

@@ -136,6 +136,18 @@ tbody tr.grp:hover td { background: var(--accent-soft); }
 .t1t td[data-out=le], .t1t .t1tot td.small { white-space: nowrap; }
 .t1t .t1ht { white-space: nowrap; }
 .t1flt { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 10px; border-radius: 6px; background: var(--hit); font-size: 13px; }
+.rtchips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.rtchip { border: 1px solid var(--line); background: var(--panel); color: var(--ink-2); border-radius: 999px; padding: 3px 10px; font-size: 12.5px; font-weight: 600; cursor: pointer; font-family: var(--f-body); }
+.rtchip b { font-family: var(--f-num); color: var(--accent); margin-left: 2px; }
+.rtchip:hover { background: var(--hover); }
+.rtchip.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.rtchip.on b { color: inherit; }
+.rtchip.none { border-color: var(--bad); color: var(--bad); background: var(--bad-soft); }
+.rtchip.none b { color: var(--bad); }
+.rtchip.none.on { background: var(--bad); color: #fff; } .rtchip.none.on b { color: #fff; }
+.orders select.rt-sel { width: 92px; }
+.orders select.rt-none { border-color: var(--bad); color: var(--bad); background: var(--bad-soft); }
+.orders tr.grp.rt-none td { background: var(--bad-soft); color: var(--bad); }
 .prs { display: grid; gap: 10px; }
 .prs label { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
 .prs label input { margin-top: 3px; }
@@ -379,6 +391,7 @@ const DEFAULT_CFG = {
   ],
   pay: ['ĐÃ TT', 'Chưa TT', 'TIỀN MẶT', 'HỖ TRỢ', 'CÔNG NỢ', 'CHUYỂN KHOẢN'],
   thungWords: 'chành, bà tám, gửi tàu',
+  routes: null, // null = dùng DEFAULT_ROUTES
 };
 // Nhóm sản phẩm: mỗi nhóm một màu trên bảng nhập đơn
 const GROUPS = {
@@ -582,6 +595,106 @@ const packLabel = r => LABEL_ORDER.filter(k => r[k]).map(k => `${r[k]} ${NEED.fi
 function orderOf(cid) { return (S.day && S.day.r[cid]) || null; }
 function statusOf(o) { if (!o) return 'NGHỈ'; if (o.hd) return o.hd; return qtyTotal(o.q) > 0 ? 'HOẠT ĐỘNG' : 'NGHỈ'; }
 const hasOrder = o => !!o && statusOf(o) === 'HOẠT ĐỘNG';
+/* ================================================================ PHÂN TUYẾN GIAO HÀNG */
+// Danh sách tuyến + quy tắc chia giống web Kho An Tâm › Phân tuyến giao hàng (mã tuyến trùng mã bên kho):
+// mỗi tuyến ghi các quận / chành xe / từ khóa thuộc tuyến
+const DEFAULT_ROUTES = [
+  ['HM', 'Hóc Môn', 'hóc môn, củ chi'],
+  ['TBTP', 'Tân Bình - Tân Phú', 'tân bình, tân phú'],
+  ['BTBC', 'Bình Tân - Bình Chánh', 'bình tân, bình chánh'],
+  ['TD', 'Thủ Đức', 'thủ đức, quận 2, quận 9'],
+  ['BTH', 'Bình Thạnh', 'bình thạnh'],
+  ['GV', 'Gò Vấp (tự book ship)', 'gò vấp'],
+  ['BD', 'Bình Dương (khách book ship)', 'bình dương, thủ dầu một, dĩ an, thuận an, bến cát, tân uyên'],
+  ['Q12', 'Quận 12', 'quận 12'],
+  ['Q1PN', 'Q1 - Phú Nhuận - Q3 - Q8', 'quận 1, phú nhuận, quận 3, quận 8'],
+  ['Qle', 'Tuyến các quận lẻ', 'quận 4, quận 5, quận 6, quận 7, quận 10, quận 11, nhà bè, cần giờ'],
+  ['AS', 'Tỉnh - An Sương (bà Tám)', 'chành xe q12, bà tám, chành an sương'],
+  ['BI', 'Tỉnh - tuyến Bi (kebab)', 'chành tân bình, chành gò vấp, chành tân phú, chành bình tân, chành bình thạnh, chành thủ đức, chành phú nhuận, chành xe q1, chành xe q5, chành xe q6, chành xe q10, chành xe q11'],
+  ['Tship', 'Khách tự book ship', 'book ship cho khách, khách tự book ship'],
+  ['ĐB 1', 'Khách QL + CK + Hẹn giờ', 'qua lấy'],
+].map(([code, name, kw]) => ({ code, name, kw }));
+const routes = () => (S.cfg.routes && S.cfg.routes.length ? S.cfg.routes : DEFAULT_ROUTES);
+const routeIdx = code => { if (!code) return -1; const i = routes().findIndex(r => r.code === code); return i < 0 ? 998 : i; };
+const routeLabel = code => { const r = routes().find(x => x.code === code); return r ? `${r.code} · ${r.name}` : code; };
+// "Q5", "q.5", "Quận 5" đều thành "quan 5"; bỏ dấu, chữ thường
+const normPlace = s => ' ' + noAcc(s).toLowerCase().replace(/[^a-z0-9]+/g, ' ').replace(/\b(?:q|quan)\s*(\d{1,2})\b/g, 'quan $1').replace(/\s+/g, ' ').trim() + ' ';
+// từ khóa khớp sớm nhất (khu vực) / muộn nhất (địa chỉ – quận thường ở cuối); trùng vị trí thì từ khóa dài hơn thắng
+function matchRoute(text, fromEnd) {
+  const hay = normPlace(text); if (!hay.trim()) return '';
+  let best = null;
+  for (const r of routes()) for (const k of String(r.kw || '').split(/[,;\n]/)) {
+    const kw = normPlace(k); if (!kw.trim()) continue;
+    const pos = fromEnd ? hay.lastIndexOf(kw) : hay.indexOf(kw); if (pos < 0) continue;
+    if (!best || (fromEnd ? pos > best.pos : pos < best.pos) || (pos === best.pos && kw.length > best.len)) best = { pos, len: kw.length, code: r.code };
+  }
+  return best ? best.code : '';
+}
+let rtMemo = new Map(), rtMemoCfg = null;
+function autoRouteOf(c) {
+  if (rtMemoCfg !== S.cfg) { rtMemo = new Map(); rtMemoCfg = S.cfg; }
+  const key = [c.q, c.name, c.note].join('\u0001'); if (rtMemo.has(key)) return rtMemo.get(key);
+  let r = ['', ''], x;
+  if ((x = matchRoute(c.q, false))) r = [x, 'khu vực']; else if ((x = matchRoute(c.name, true))) r = [x, 'địa chỉ']; else if ((x = matchRoute(c.note, true))) r = [x, 'ghi chú'];
+  rtMemo.set(key, r); return r;
+}
+// tuyến của 1 đơn: chọn tay trong ngày → tuyến đã nhớ của khách → tự chia theo khu vực / địa chỉ / ghi chú
+function routeOf(o, c) {
+  if (o && o.rt) return [o.rt, 'chọn tay'];
+  if (c && c.rt) return [c.rt, 'nhớ cho khách'];
+  return c ? autoRouteOf(c) : ['', ''];
+}
+function rtSelect(o, c) {
+  const [code, src] = routeOf(o, c), auto = c ? autoRouteOf(c)[0] : '', cur = (o && o.rt) || (c && c.rt) || '';
+  const extra = cur && !routes().some(r => r.code === cur) ? `<option value="${esc(cur)}" selected>${esc(cur)}</option>` : '';
+  return `<select class="in rt-sel${code ? '' : ' rt-none'}" data-k="rt" aria-label="Tuyến giao" title="${code ? esc(routeLabel(code)) + ' – ' + src : 'Chưa khớp tuyến nào – chọn tuyến'}">
+    <option value="">${auto ? esc(auto) + ' (tự)' : '⚠ chưa chia'}</option>${routes().map(r => `<option value="${esc(r.code)}" ${r.code === cur ? 'selected' : ''}>${esc(r.code)} – ${esc(r.name)}</option>`).join('')}${extra}</select>`;
+}
+// số đơn từng tuyến trong ngày (nút bấm để lọc)
+function rtChipsHtml() {
+  const cnt = {}, cur = colF().rt || '';
+  for (const { o, c, cid } of dayOrders(S.day ? S.day.r : {})) { const k = routeOf(o, S.cust[cid] || c)[0] || '-'; cnt[k] = (cnt[k] || 0) + 1; }
+  const chip = (k, label, n, title) => `<button class="rtchip${k === '-' ? ' none' : ''}${cur === k ? ' on' : ''}" data-rt="${esc(k)}" title="${esc(title)}">${esc(label)} <b>${n}</b></button>`;
+  const keys = Object.keys(cnt).filter(k => k !== '-').sort((a, b) => routeIdx(a) - routeIdx(b) || a.localeCompare(b));
+  return `<span class="small muted">🚚 Chia tuyến:</span>${cnt['-'] ? chip('-', '⚠ Chưa chia', cnt['-'], 'Đơn chưa khớp tuyến nào – chọn ở cột Tuyến') : ''}${keys.map(k => chip(k, k, cnt[k], routeLabel(k))).join('')}
+    ${keys.length || cnt['-'] ? '' : '<span class="small muted">chưa có đơn</span>'}<button class="btn sm ghost" id="rt-cfg" title="Sửa danh sách tuyến và quy tắc chia tự động">⚙ Quy tắc chia tuyến</button>`;
+}
+function drawRtChips() {
+  const el = $('#d-rt'); if (!el) return;
+  el.innerHTML = rtChipsHtml();
+  $$('[data-rt]', el).forEach(b => b.onclick = () => { const f = colF(); f.rt = f.rt === b.dataset.rt ? '' : b.dataset.rt; store('filter', S.filter); shown = PAGE; drawTable(); });
+  $('#rt-cfg', el).onclick = editRoutes;
+}
+function editRoutes() {
+  let list = routes().map(r => Object.assign({}, r));
+  const m = modal({
+    title: 'Tuyến giao hàng & quy tắc chia tự động', ok: 'Lưu', wide: true,
+    body: `<p class="hint" style="margin-top:0">Mỗi đơn tự vào tuyến có từ khóa khớp với <b>Khu vực</b> của khách (không khớp thì xét địa chỉ trong tên khách, rồi ghi chú).
+      Ghi các quận / chành xe / từ khóa cách nhau dấu phẩy, có dấu hay không dấu đều được, "Q5" = "quận 5". Chọn tay ở cột <b>Tuyến</b> của Đơn hàng ngày thì web nhớ cho khách đó.
+      Nên để <b>mã tuyến giống web Kho</b> để khi chép sang Phân tuyến giao hàng của kho, đơn vào đúng tuyến.</p>
+      <div class="tw"><table><thead><tr><th>Mã</th><th>Tên tuyến</th><th>Khu vực / từ khóa thuộc tuyến</th><th></th></tr></thead><tbody id="rt-body"></tbody></table></div>
+      <div class="row" style="margin-top:8px"><button class="btn sm" id="rt-add">+ Thêm tuyến</button><button class="btn sm" id="rt-def">Khôi phục mặc định</button><span class="grow"></span><span class="hint" id="rt-st"></span></div>`,
+    onOk: async () => {
+      read(); list = list.filter(r => r.code);
+      if (!list.length) throw new Error('Cần ít nhất 1 tuyến');
+      const dup = list.find((r, i) => list.findIndex(x => x.code.toLowerCase() === r.code.toLowerCase()) !== i); if (dup) throw new Error('Trùng mã tuyến ' + dup.code);
+      S.cfg.routes = list; rtMemoCfg = null;
+      await setDoc('cfg/main', cfgDoc()); toast('Đã lưu tuyến – các đơn được chia lại theo quy tắc mới'); render(); return true;
+    },
+  });
+  const body = $('#rt-body', m.root);
+  const read = () => $$('tr[data-i]', body).forEach(tr => { const r = list[+tr.dataset.i]; $$('input', tr).forEach(i => { r[i.dataset.k] = i.value.trim(); }); });
+  const draw = () => {
+    body.innerHTML = list.map((r, i) => `<tr data-i="${i}"><td><input class="in" data-k="code" value="${esc(r.code)}" style="width:96px"></td><td><input class="in" data-k="name" value="${esc(r.name)}" style="width:100%;min-width:170px"></td>
+      <td><input class="in" data-k="kw" value="${esc(r.kw)}" style="width:100%;min-width:280px"></td><td><button class="btn sm ghost" data-del aria-label="Xóa tuyến">✕</button></td></tr>`).join('');
+    $$('[data-del]', body).forEach(b => b.onclick = () => { read(); list.splice(+b.closest('tr').dataset.i, 1); draw(); });
+    const none = dayOrders(S.day ? S.day.r : {}).filter(({ o, c, cid }) => !routeOf(o, S.cust[cid] || c)[0]).length;
+    $('#rt-st', m.root).textContent = `${list.length} tuyến · hôm nay ${none} đơn chưa khớp tuyến`;
+  };
+  $('#rt-add', m.root).onclick = () => { read(); list.push({ code: '', name: '', kw: '' }); draw(); $('tr:last-child input', body).focus(); };
+  $('#rt-def', m.root).onclick = () => { list = DEFAULT_ROUTES.map(r => Object.assign({}, r)); draw(); };
+  draw();
+}
 function dayOrders(dayR) {
   return live(dayR).filter(([cid, o]) => hasOrder(o)).map(([cid, o]) => ({ cid, o, c: S.cust[cid] || { id: cid, name: (o.snap && o.snap.name) || '(khách đã xóa)', q: (o.snap && o.snap.q) || '' } }));
 }
@@ -743,11 +856,13 @@ function viewDay(main) {
         <button class="btn sm" id="d-print">Xem định mức đóng hàng</button>
       </div>
       ${miniHtml(dayReport(S.day ? S.day.r : {}, S.day && S.day.tuyen))}
+      <div class="rtchips" id="d-rt"></div>
       <div id="d-rep-wrap" ${S.repOpen ? '' : 'hidden'}>${reportHtml(dayReport(S.day ? S.day.r : {}, S.day && S.day.tuyen), tot.need, S.day && S.day.tuyen, true)}</div>
     </div>
     <div class="row">
       <label class="field grow" style="min-width:200px">Tìm khách (tên, CRM, SĐT, địa chỉ) – tìm trong tất cả khách để thêm đơn<input id="f-q" value="${esc(f.q)}" placeholder="VD: K1326 hoặc Wallace"></label>
       <label class="field">Khu vực<select id="f-area"><option value="">Tất cả khu vực</option>${areas().map(a => `<option ${a === f.area ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select></label>
+      <div class="field">Xếp theo<div class="seg" id="f-by"><button data-b="tuyen" class="${(f.by || 'tuyen') === 'tuyen' ? 'on' : ''}">Tuyến</button><button data-b="area" class="${f.by === 'area' ? 'on' : ''}">Khu vực</button></div></div>
       <div class="field">Hiện<div class="seg" id="f-mode"><button data-m="co" class="${f.mode === 'co' ? 'on' : ''}">Khách có đơn</button><button data-m="all" class="${f.mode === 'all' ? 'on' : ''}">Tất cả khách</button></div></div>
       <label class="field" style="flex-direction:row;display:flex;align-items:center;gap:6px;padding-bottom:8px"><input type="checkbox" id="f-cols" ${f.allCols ? 'checked' : ''} title="Hiện mọi cột sản phẩm"> Hiện mọi cột sản phẩm</label>
       <button class="btn" id="d-add">+ Khách mới</button>
@@ -766,6 +881,7 @@ function viewDay(main) {
   const saveF = () => store('filter', S.filter);
   let qt; $('#f-q').oninput = e => { clearTimeout(qt); qt = setTimeout(() => { S.filter.q = e.target.value; saveF(); shown = PAGE; drawTable(); }, 220); };
   $('#f-area').onchange = e => { S.filter.area = e.target.value; saveF(); shown = PAGE; drawTable(); };
+  $$('#f-by button').forEach(b => b.onclick = () => { S.filter.by = b.dataset.b; saveF(); $$('#f-by button').forEach(x => x.classList.toggle('on', x === b)); drawTable(); });
   $$('#f-mode button').forEach(b => b.onclick = () => { S.filter.mode = b.dataset.m; saveF(); shown = PAGE; render(); });
   $('#f-cols').onchange = e => { S.filter.allCols = e.target.checked; saveF(); drawTable(); };
   drawTable();
@@ -795,7 +911,7 @@ function matchCust(c, qn) {
 }
 // Lọc theo cột (dòng lọc dưới tiêu đề bảng): {crm, st, pay, pk, pack, p: {mã sp: 'co' | 'trong'}}
 const colF = () => (S.filter.cols = Object.assign({ p: {} }, S.filter.cols || {}));
-const colFCount = () => { const f = colF(); return ['crm', 'st', 'pay', 'pk', 'pack'].filter(k => f[k]).length + Object.values(f.p || {}).filter(Boolean).length; };
+const colFCount = () => { const f = colF(); return ['crm', 'st', 'pay', 'rt', 'pk', 'pack'].filter(k => f[k]).length + Object.values(f.p || {}).filter(Boolean).length; };
 function packKind(o, c) {
   const r = packing((o || {}).q, packOf(o, c)), out = [];
   if (r.tui || r.tuiK) out.push('tui'); if (r.giay || r.nho || r.chung || r.dai) out.push('thung'); if (r.cay) out.push('cay');
@@ -806,6 +922,7 @@ function passCols(c) {
   if (f.crm && (f.crm === 'co') !== !!c.crm) return false;
   if (f.st && statusOf(o) !== f.st) return false;
   if (f.pay && (f.pay === 'none' ? !!payKey(o.tt) : payKey(o.tt) !== f.pay)) return false;
+  if (f.rt) { const rt = routeOf(o, c)[0]; if (f.rt === '-' ? rt : rt !== f.rt) return false; }
   if (f.pk && norm(packOf(o, c)) !== norm(f.pk)) return false;
   if (f.pack && !packKind(o, c).includes(f.pack)) return false;
   for (const [pid, v] of Object.entries(f.p || {})) { if (!v) continue; const has = num((o.q || {})[pid]) > 0; if ((v === 'co') !== has) return false; }
@@ -818,6 +935,7 @@ function dayFltText() {
   if (x.crm) out.push(x.crm === 'co' ? 'Có mã CRM' : 'Chưa có mã CRM');
   if (x.st) out.push('Tình trạng: ' + x.st);
   if (x.pay) out.push('Thanh toán: ' + (x.pay === 'none' ? 'Chưa chọn' : (PAYS.find(p => p[0] === x.pay) || [, x.pay])[1]));
+  if (x.rt) out.push(x.rt === '-' ? 'Chưa chia tuyến' : 'Tuyến: ' + routeLabel(x.rt));
   if (x.pk) out.push('Đóng gói: ' + x.pk);
   if (x.pack) out.push('Định mức: ' + { tui: 'có túi đen', thung: 'có thùng', cay: 'có cây kebab', none: 'trống' }[x.pack]);
   for (const [pid, v] of Object.entries(x.p || {})) if (v) { const p = S.cfg.products.find(y => y.id === pid); out.push(`${p ? prodLabel(p) : pid}: ${v === 'co' ? 'có' : 'trống'}`); }
@@ -849,6 +967,7 @@ function filterRow(ps) {
     <th class="stick s-cust">${n ? `<button class="btn sm" id="flt-clear">✕ Xóa lọc (${n})</button>` : '<span class="muted small">▼ Lọc theo cột</span>'}</th>
     <th>${fSel('st', [['HOẠT ĐỘNG', 'HOẠT ĐỘNG'], ['NGHỈ', 'NGHỈ']], f.st, 'tình trạng')}</th>
     <th>${fSel('pay', PAYS.map(([k, l]) => [k, l]).concat([['none', 'Chưa chọn']]), f.pay, 'thanh toán')}</th>
+    <th>${fSel('rt', [['-', '⚠ Chưa chia']].concat(routes().map(r => [r.code, r.code + ' – ' + r.name])), f.rt || '', 'tuyến')}</th>
     ${ps.map((p, i) => `<th class="pf g-${groupOf(p)}${!i || groupOf(ps[i - 1]) !== groupOf(p) ? ' gstart' : ''}">${fSel('p:' + p.id, [['co', 'Có'], ['trong', 'Trống']], (f.p || {})[p.id] || '', prodLabel(p))}</th>`).join('')}
     <th>${fSel('pk', [['TÚI ĐEN', 'TÚI ĐEN'], ['THÙNG', 'THÙNG']], f.pk, 'đóng gói')}</th>
     <th>${fSel('pack', [['tui', 'Có túi đen'], ['thung', 'Có thùng'], ['cay', 'Có cây kebab'], ['none', 'Trống']], f.pack, 'định mức')}</th>
@@ -871,7 +990,11 @@ function fixStickyTops(table) {
 function drawTable() {
   const el = $('#d-table'); if (!el) return;
   const ps = visibleProducts(), pay = S.cfg.pay || [];
-  const rows = filteredRows();
+  const byRt = (S.filter.by || 'tuyen') === 'tuyen';
+  let rows = filteredRows();
+  const rk = c => routeOf(orderOf(c.id), c)[0];
+  if (byRt) rows = rows.map((c, i) => [c, routeIdx(rk(c)), i]).sort((a, b) => a[1] - b[1] || a[2] - b[2]).map(x => x[0]);
+  drawRtChips();
   if (!rows.length && !colFCount()) {
     const nf = colFCount();
     el.innerHTML = `<div class="card empty"><div class="big">${nf ? 'Không có dòng nào khớp bộ lọc cột' : S.filter.q ? 'Không tìm thấy khách' : S.filter.mode === 'co' ? 'Ngày này chưa có đơn' : 'Không có khách ở khu vực này'}</div>
@@ -881,15 +1004,20 @@ function drawTable() {
     return;
   }
   let lastArea = null, html = '';
-  const cols = 7 + ps.length;
+  const cols = 8 + ps.length, gk = c => (byRt ? rk(c) : c.q), gcnt = {};
+  for (const c of rows) if (hasOrder(orderOf(c.id))) gcnt[gk(c)] = (gcnt[gk(c)] || 0) + 1;
   if (!rows.length) html = `<tr><td colspan="${cols}" class="muted" style="padding:18px 12px"><span class="grp-l">Không có dòng nào khớp bộ lọc cột.${S.filter.mode === 'co' ? ' Đang xem "Khách có đơn" – muốn lọc khách NGHỈ hãy chọn "Tất cả khách".' : ''}</span></td></tr>`;
   rows.slice(0, shown).forEach(c => {
-    if (c.q !== lastArea) { lastArea = c.q; html += `<tr class="grp"><td colspan="${cols}"><span class="grp-l">${esc(c.q || 'Chưa có khu vực')}</span></td></tr>`; }
+    if (gk(c) !== lastArea) {
+      lastArea = gk(c);
+      const n = gcnt[lastArea] || 0, lb = byRt ? (lastArea ? '🚚 ' + routeLabel(lastArea) : '⚠ Chưa chia tuyến – chọn tuyến ở cột Tuyến') : (lastArea || 'Chưa có khu vực');
+      html += `<tr class="grp${byRt && !lastArea ? ' rt-none' : ''}"><td colspan="${cols}"><span class="grp-l">${esc(lb)}${n ? ` · ${n} đơn` : ''}</span></td></tr>`;
+    }
     html += rowHtml(c, ps, pay);
   });
   const runs = groupRuns(ps);
   el.innerHTML = `<div class="tw otw"><table class="orders" id="orders"><thead><tr>
-      <th class="stick s-crm" rowspan="2">CRM</th><th class="stick s-cust" rowspan="2">Khách hàng</th><th rowspan="2">Tình trạng</th><th rowspan="2">Thanh toán</th>${runs.map(r => `<th class="gh g-${r.g} gstart" colspan="${r.list.length}">${esc(GROUPS[r.g].name)}</th>`).join('')}
+      <th class="stick s-crm" rowspan="2">CRM</th><th class="stick s-cust" rowspan="2">Khách hàng</th><th rowspan="2">Tình trạng</th><th rowspan="2">Thanh toán</th><th rowspan="2" title="Tuyến giao hàng (tự chia theo khu vực, chọn tay được)">Tuyến</th>${runs.map(r => `<th class="gh g-${r.g} gstart" colspan="${r.list.length}">${esc(GROUPS[r.g].name)}</th>`).join('')}
       <th rowspan="2">Đóng gói</th><th rowspan="2">Định mức</th><th rowspan="2"></th></tr>
       <tr>${runs.map(r => r.list.map((p, i) => `<th class="p g-${r.g}${i ? '' : ' gstart'}" title="${esc(p.name)}">${esc(prodShort(p))}</th>`).join('')).join('')}</tr>
       ${filterRow(ps)}</thead><tbody>${html}</tbody></table></div>
@@ -907,6 +1035,7 @@ function rowHtml(c, ps, pay) {
     <td class="cust stick"><b>${hl(c.name, q)}</b><div class="sub">${hl(c.phone || '', q)}${c.note ? ' · ' + hl(c.note, q) : ''}${q && c.q && matchCust({ q: c.q }, norm(q)) ? ' · ' + hl(c.q, q) : ''}</div></td>
     <td><select class="in st-sel${st === 'HOẠT ĐỘNG' ? ' st-on' : ''}" data-k="hd"><option value="">${st === 'HOẠT ĐỘNG' ? 'HOẠT ĐỘNG' : 'NGHỈ'} (tự)</option><option ${o.hd === 'HOẠT ĐỘNG' ? 'selected' : ''}>HOẠT ĐỘNG</option><option ${o.hd === 'NGHỈ' ? 'selected' : ''}>NGHỈ</option></select></td>
     <td>${paySelect(o.tt)}</td>
+    <td>${rtSelect(o, c)}</td>
     ${ps.map((pr, i) => { const v = (o.q || {})[pr.id], g = groupOf(pr), st = !i || groupOf(ps[i - 1]) !== g; return `<td class="pc g-${g}${st ? ' gstart' : ''}"><input class="q ${num(v) > 0 ? 'has' : ''}" data-p="${esc(pr.id)}" inputmode="decimal" value="${v ? esc(v) : ''}" aria-label="${esc(prodLabel(pr))}" title="${esc(prodLabel(pr))}"></td>`; }).join('')}
     <td><select class="in" data-k="pk">${['TÚI ĐEN', 'THÙNG'].map(x => `<option ${norm(x) === norm(pk) ? 'selected' : ''}>${x}</option>`).join('')}</select></td>
     <td class="pack" data-out="pack">${esc(packLabel(p))}</td>
@@ -951,7 +1080,13 @@ function bindRows(el) {
       });
       inp.addEventListener('focus', () => inp.select());
     });
-    $$('select[data-k]', tr).forEach(sel => sel.onchange = () => { patchRow(cid, { [sel.dataset.k]: sel.value }); updateRow(tr, cid); updateDayTotals(); });
+    $$('select[data-k]', tr).forEach(sel => sel.onchange = () => {
+      patchRow(cid, { [sel.dataset.k]: sel.value }); updateRow(tr, cid); updateDayTotals();
+      if (sel.dataset.k !== 'rt') return;
+      const c = S.cust[cid];
+      if (c && (c.rt || '') !== sel.value) { c.rt = sel.value; guard(() => saveCustomer(c)); }
+      if ((S.filter.by || 'tuyen') === 'tuyen' || colF().rt) drawTable(); else sel.classList.toggle('rt-none', !routeOf(orderOf(cid), c)[0]);
+    });
 
     $('[data-more]', tr).onclick = () => editOrder(cid);
   });
@@ -976,6 +1111,7 @@ function updateDayTotals() {
     if (k === 'pay') return rep.pay[id];
     return rep[k];
   };
+  drawRtChips();
   $$('[data-r]', root).forEach(el => {
     const key = el.dataset.r;
     if (key === 'tuyenTxt') { el.textContent = rep.tuyenTxt ? 'Bánh tuyến: ' + rep.tuyenTxt : 'Bánh tuyến: chưa nhập. Nhập số túi ở dòng BÁNH TUYẾN (được cộng vào Tổng cái).'; return; }
@@ -1059,12 +1195,13 @@ function editCustomer(id) {
       <label class="field">Bill<input id="ec-bill" type="number" min="0" value="${esc(c.bill == null ? 1 : c.bill)}"></label>
       <label class="field wide">Ghi chú / chành xe<input id="ec-note" value="${esc(c.note || '')}"></label>
       <label class="field">Đóng gói mặc định<select id="ec-pk"><option value="">Tự chọn (theo ghi chú)</option>${['TÚI ĐEN', 'THÙNG'].map(x => `<option ${x === c.pk ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
+      <label class="field">Tuyến giao<select id="ec-rt"><option value="">Tự chia (${esc(autoRouteOf(c)[0] || 'chưa khớp')})</option>${routes().map(r => `<option value="${esc(r.code)}" ${r.code === c.rt ? 'selected' : ''}>${esc(r.code)} – ${esc(r.name)}</option>`).join('')}</select></label>
       <label class="field">Giao dịch<select id="ec-off"><option value="">Đang giao dịch</option><option value="1" ${c.off ? 'selected' : ''}>Ngừng (ẩn khỏi danh sách)</option></select></label>
     </div><datalist id="dl-area">${areas().map(a => `<option value="${esc(a)}">`).join('')}</datalist>
     ${id ? '<div style="margin-top:12px"><button class="btn danger sm" id="ec-del">Xóa khách</button></div>' : ''}`,
     onOk: async root => {
       const v = k => $(k, root).value.trim();
-      Object.assign(c, { q: v('#ec-q'), crm: v('#ec-crm'), name: v('#ec-name'), phone: v('#ec-phone'), bill: num(v('#ec-bill')), note: v('#ec-note'), pk: v('#ec-pk'), off: !!v('#ec-off') });
+      Object.assign(c, { q: v('#ec-q'), crm: v('#ec-crm'), name: v('#ec-name'), phone: v('#ec-phone'), bill: num(v('#ec-bill')), note: v('#ec-note'), pk: v('#ec-pk'), rt: v('#ec-rt'), off: !!v('#ec-off') });
       if (!c.name) throw new Error('Cần nhập tên khách hàng');
       S.cust[c.id] = c; await saveCustomer(c); toast('Đã lưu khách ' + c.name);
       if (S.view === 'don' && !id) { S.filter.q = c.crm || c.name; store('filter', S.filter); }
@@ -1111,22 +1248,34 @@ function viewCust(main) {
 function prodText(q) {
   return S.cfg.products.filter(p => num((q || {})[p.id]) > 0).map(p => `${prodLabel(p)}: ${fmt(q[p.id])}`).join(', ');
 }
+function rtSummaryHtml(r) {
+  const by = {};
+  for (const x of dayOrders(r)) { const k = routeOf(x.o, S.cust[x.cid] || x.c)[0]; (by[k] = by[k] || {})[x.cid] = x.o; }
+  const keys = Object.keys(by).sort((a, b) => routeIdx(a) - routeIdx(b) || a.localeCompare(b));
+  if (!keys.length) return '';
+  const row = (lb, sub, cls = '') => { const t = dayTotals(sub), rp = dayReport(sub, null); return `<tr class="${cls}"><td><b>${esc(lb)}</b></td><td class="n">${fmt(t.count)}</td><td class="n">${fmt(rp.tacos)}</td><td class="n">${fmt(rp.kebab)}</td>${NEED.map(([k]) => `<td class="n">${t.need[k] ? fmt(t.need[k]) : ''}</td>`).join('')}</tr>`; };
+  return `<h3 style="margin:0 0 6px">Tổng theo tuyến giao</h3><table class="t1p" style="margin-bottom:16px"><thead><tr><th>Tuyến</th><th class="n">Đơn</th><th class="n">TACOS (cái)</th><th class="n">KEBAB (cái)</th>${NEED.map(([, n]) => `<th class="n">${esc(n)}</th>`).join('')}</tr></thead>
+    <tbody>${keys.map(k => row(k ? routeLabel(k) : '⚠ Chưa chia tuyến', by[k])).join('')}${keys.length > 1 ? row('TỔNG', r, 'tot') : ''}</tbody></table>`;
+}
 function printDoc(d, r, tuyen, opt = {}) {
-  const t = dayTotals(r), list = dayOrders(r).sort((a, b) => (a.c.s || 0) - (b.c.s || 0));
+  const byRt = (opt.by || S.filter.by || 'tuyen') === 'tuyen', rk = x => routeOf(x.o, S.cust[x.cid] || x.c)[0];
+  const t = dayTotals(r), list = dayOrders(r).map(x => Object.assign(x, { rt: rk(x) }))
+    .sort((a, b) => (byRt ? routeIdx(a.rt) - routeIdx(b.rt) : 0) || (a.c.s || 0) - (b.c.s || 0));
   let area = null, i = 0, rows = '';
-  for (const { o, c } of list) {
-    if (c.q !== area) { area = c.q; rows += `<tr class="grp"><td colspan="9">${esc(area || 'Chưa có khu vực')}</td></tr>`; }
+  for (const { o, c, rt } of list) {
+    const g = byRt ? rt : c.q;
+    if (g !== area) { area = g; rows += `<tr class="grp"><td colspan="10">${esc(byRt ? (g ? routeLabel(g) : 'Chưa chia tuyến') : g || 'Chưa có khu vực')}</td></tr>`; }
     const pk = packOf(o, c);
-    rows += `<tr><td class="n">${++i}</td><td>${esc(c.crm || '')}</td><td>${esc(c.name)}</td><td>${esc(c.phone || '')}</td><td>${esc([c.note, o.gc].filter(Boolean).join(' · '))}</td>
+    rows += `<tr><td class="n">${++i}</td><td>${esc(byRt ? c.q || '' : rt)}</td><td>${esc(c.crm || '')}</td><td>${esc(c.name)}</td><td>${esc(c.phone || '')}</td><td>${esc([c.note, o.gc].filter(Boolean).join(' · '))}</td>
       <td>${esc(prodText(o.q))}</td><td>${esc(pk)}</td><td class="pack">${esc(packLabel(packing(o.q, pk)))}</td><td>${esc(o.tt || '')}</td></tr>`;
   }
   return `<h2 style="text-align:center;margin-bottom:4px">${esc(opt.title || 'ĐỊNH MỨC ĐÓNG HÀNG')} NGÀY ${vn(d)}</h2>
     <p class="hint" style="text-align:center;margin:0 0 ${opt.note ? 4 : 14}px">${dow(d)} · ${t.count} đơn</p>
     ${opt.note ? `<p style="text-align:center;margin:0 0 14px"><b>Theo lọc:</b> ${esc(opt.note)}</p>` : ''}
     <div style="margin-bottom:16px">${reportHtml(dayReport(r, tuyen), t.need, tuyen, false).replace('id="d-report"', '')}</div>
-    ${opt.det === false ? '' : `<h3 style="margin-bottom:6px">Chi tiết đóng hàng từng khách</h3>
-    <div class="tw"><table><thead><tr><th class="n">STT</th><th>CRM</th><th>Khách hàng</th><th>SĐT</th><th>Ghi chú</th><th>Sản phẩm</th><th>Đóng gói</th><th>Định mức</th><th>Thanh toán</th></tr></thead>
-      <tbody>${rows || '<tr><td colspan="9" class="muted">Chưa có đơn</td></tr>'}</tbody></table></div>`}
+    ${rtSummaryHtml(r)}${opt.det === false ? '' : `<h3 style="margin-bottom:6px">Chi tiết đóng hàng từng khách</h3>
+    <div class="tw"><table><thead><tr><th class="n">STT</th><th>${byRt ? 'Khu vực' : 'Tuyến'}</th><th>CRM</th><th>Khách hàng</th><th>SĐT</th><th>Ghi chú</th><th>Sản phẩm</th><th>Đóng gói</th><th>Định mức</th><th>Thanh toán</th></tr></thead>
+      <tbody>${rows || '<tr><td colspan="10" class="muted">Chưa có đơn</td></tr>'}</tbody></table></div>`}
     <p class="hint" style="margin-top:12px">In lúc ${nowStr()}</p>`;
 }
 function viewPrint(main) {
@@ -1210,9 +1359,10 @@ function sheetRows(d, r) {
 // Mẫu web Kho An Tâm › Phân tuyến: QUẬN, CRM, KHÁCH, SĐT, GHI CHÚ, …, TRẠNG THÁI, TÌNH TRẠNG rồi các cột sản phẩm
 function routingRows(r) {
   const ps = S.cfg.products;
-  const out = [['QUẬN', 'CRM', 'KHÁCH HÀNG', 'SĐT', 'GHI CHÚ', 'BILL', 'NGƯỜI TẠO ĐƠN', 'TÀI XẾ', 'TRẠNG THÁI', 'TÌNH TRẠNG'].concat(ps.map(p => p.name))];
-  for (const { o, c } of dayOrders(r).sort((a, b) => (a.c.s || 0) - (b.c.s || 0))) {
-    out.push([c.q, c.crm, c.name, c.phone, [c.note, o.gc].filter(Boolean).join(' · '), o.bill == null ? (c.bill == null ? 1 : c.bill) : o.bill, o.tao, o.tx, 'HOẠT ĐỘNG', o.tt]
+  const out = [['QUẬN', 'TUYẾN', 'CRM', 'KHÁCH HÀNG', 'SĐT', 'GHI CHÚ', 'BILL', 'NGƯỜI TẠO ĐƠN', 'TÀI XẾ', 'TRẠNG THÁI', 'TÌNH TRẠNG'].concat(ps.map(p => p.name))];
+  const list = dayOrders(r).map(x => Object.assign(x, { rt: routeOf(x.o, S.cust[x.cid] || x.c)[0] }));
+  for (const { o, c, rt } of list.sort((a, b) => routeIdx(a.rt) - routeIdx(b.rt) || (a.c.s || 0) - (b.c.s || 0))) {
+    out.push([c.q, rt, c.crm, c.name, c.phone, [c.note, o.gc].filter(Boolean).join(' · '), o.bill == null ? (c.bill == null ? 1 : c.bill) : o.bill, o.tao, o.tx, 'HOẠT ĐỘNG', o.tt]
       .concat(ps.map(p => (num((o.q || {})[p.id]) > 0 ? num(o.q[p.id]) : ''))));
   }
   return out;
@@ -1978,7 +2128,7 @@ function t1Import() {
 }
 
 /* ================================================================ ĐỊNH MỨC & CÀI ĐẶT */
-const cfgDoc = () => ({ caps: S.cfg.caps, products: S.cfg.products, pay: S.cfg.pay, thungWords: S.cfg.thungWords, t123: S.cfg.t123 || {}, at: nowStr() });
+const cfgDoc = () => ({ caps: S.cfg.caps, products: S.cfg.products, pay: S.cfg.pay, thungWords: S.cfg.thungWords, t123: S.cfg.t123 || {}, routes: S.cfg.routes || null, at: nowStr() });
 function viewSettings(main) {
   const c = JSON.parse(JSON.stringify(S.cfg));
   const capRows = [['tui', 'Túi đen', [...SIZES, 'K']], ['nho', 'Thùng Nhỏ', SIZES], ['chung', 'Thùng Chung', SIZES], ['dai', 'Thùng đại', SIZES], ['giay', 'Thùng giấy', SIZES], ['cay', 'Cây kebab', ['K']]];
@@ -2004,6 +2154,9 @@ function viewSettings(main) {
       </tbody></table></div>
       <div><button class="btn" id="s-addp">+ Thêm sản phẩm</button></div>
     </div>
+    <div class="card" style="display:grid;gap:10px"><h2>Tuyến giao hàng</h2>
+      <p class="hint" style="margin:0">${routes().length} tuyến: ${routes().map(r => esc(r.code)).join(', ')}. Đơn hàng ngày tự chia đơn vào tuyến theo khu vực / địa chỉ của khách; chọn tay ở cột Tuyến thì nhớ cho khách.</p>
+      <div><button class="btn" id="s-routes">🚚 Sửa tuyến & quy tắc chia</button></div></div>
     <div class="card" style="display:grid;gap:10px"><h2>Tình trạng thanh toán</h2>
       <label class="field">Các lựa chọn (cách nhau dấu phẩy)<input id="s-pay" value="${esc((c.pay || []).join(', '))}"></label></div>
     <div class="row"><button class="btn pri" id="s-save">Lưu cài đặt</button><button class="btn" id="s-reset">Khôi phục định mức theo sheet</button><span class="hint" id="s-st"></span></div>`;
@@ -2017,6 +2170,7 @@ function viewSettings(main) {
       $('[data-del]', tr).onclick = async () => { if (await confirmBox(`Xóa sản phẩm "${p.name}"? Số lượng đã nhập của sản phẩm này sẽ không còn hiện.`, 'Xóa', true)) { c.products.splice(+tr.dataset.i, 1); draw(); dirty(); } };
     });
     $('#s-addp').onclick = () => { const p = P('Sản phẩm mới', '', ''); p.id = rid('p'); c.products.push(p); draw(); dirty(); };
+    $('#s-routes').onclick = editRoutes;
     $('#s-words').oninput = e => { c.thungWords = e.target.value; dirty(); };
     $('#s-pay').oninput = e => { c.pay = e.target.value.split(',').map(x => x.trim()).filter(Boolean); dirty(); };
     $('#s-reset').onclick = () => { c.caps = JSON.parse(JSON.stringify(DEFAULT_CFG.caps)); draw(); dirty(); };

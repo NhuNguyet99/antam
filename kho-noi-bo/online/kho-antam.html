@@ -3855,7 +3855,7 @@ const DEFAULT_ROUTE_RULES = [
 ];
 // Cột không lấy vào số lượng giao (vd "SỐ TÚI 50" – kho không cần cập nhật)
 const SKIP_COL = h => /(^| )tui( |$)/.test(h);
-const RT_META = ['quan', 'crm', 'khach', 'sdt', 'ghi chu', 'bill', 'nguoi', 'trang thai', 'tinh trang', 'cong no', 'tai xe'];
+const RT_META = ['quan', 'tuyen', 'crm', 'khach', 'sdt', 'ghi chu', 'bill', 'nguoi', 'trang thai', 'tinh trang', 'cong no', 'tai xe'];
 function normPlace(s) {
   return ' ' + noAccent(s).replace(/[^a-z0-9]+/g, ' ').replace(/\b(?:q|quan)\s*(\d{1,2})\b/g, 'quan $1').replace(/\s+/g, ' ').trim() + ' ';
 }
@@ -3915,6 +3915,7 @@ function sheetRouteCode(label, cfg) {
 }
 function autoRoute(row, cfg) {
   if (row.grp) return [sheetRouteCode(row.grp, cfg), 'cột tuyến của sheet'];
+  if (row.rt) return [sheetRouteCode(row.rt, cfg), 'web đóng hàng'];
   const key = custKeys(row).find(k => cfg.memory[k]);
   if (key) return [cfg.memory[key], 'nhớ'];
   let c = matchRule(row.q, cfg.rules, false);
@@ -3983,12 +3984,13 @@ function parseOrderSheet(table) {
     const h = table[hi].map(H);
     const find = f => h.findIndex(f);
     col = { q: find(x => x === 'quan'), crm: find(x => x === 'crm'), cust: find(x => x.startsWith('khach')), phone: find(x => x.includes('sdt') || x.includes('dien thoai')),
-      note: find(x => x.startsWith('ghi chu')), status: find(x => x.startsWith('trang thai')), pay: find(x => x.startsWith('tinh trang')) };
+      note: find(x => x.startsWith('ghi chu')), status: find(x => x.startsWith('trang thai')), pay: find(x => x.startsWith('tinh trang')),
+      rt: find(x => x === 'tuyen') }; // cột TUYẾN: tuyến web Đóng hàng An Tâm đã chia sẵn
     const lastMeta = h.reduce((a, x, i) => (RT_META.some(k => x.startsWith(k)) ? i : a), -1);
     h.forEach((x, i) => { if (i > lastMeta && x && !SKIP_COL(x)) { pcols.push(i); cols.push(String(table[hi][i]).replace(/\s+/g, ' ').trim()); } });
   } else {
     // dán không kèm dòng tiêu đề: dùng vị trí cột của mẫu báo cáo (A Quận, B CRM, C Khách, D SĐT, E Ghi chú, I Trạng thái, J Tình trạng, P→AE sản phẩm)
-    col = { q: 0, crm: 1, cust: 2, phone: 3, note: 4, status: 8, pay: 9 };
+    col = { q: 0, crm: 1, cust: 2, phone: 3, note: 4, status: 8, pay: 9, rt: -1 };
     cols = ['22 CM', '25 CM', '28 CM', '31 CM', '34 CM', 'BÁNH TƯƠI 1', 'BÁNH TƯƠI 2', 'BÁNH TƯƠI 3', 'BÁNH TƯƠI 4', 'VÀNG', 'MÈ ĐEN', 'MÈ TRẮNG', 'THAN TRE', 'CÂY THỊT 5KG', 'CÂY THỊT 18KG', 'SẢN PHẨM KHÁC'];
     pcols = cols.map((_, i) => 15 + i);
   }
@@ -4003,7 +4005,7 @@ function parseOrderSheet(table) {
     pcols.forEach((ci, k) => { const n = parseNum(r[ci]); if (n && !isNaN(n)) qty[k] = n; });
     const c = splitCustomer(cust);
     rows.push({ q: g(r, col.q), crm: crmCode(g(r, col.crm)), cust, code: c.code, name: c.name, addr: c.addr, phone: g(r, col.phone), note: g(r, col.note),
-      pay: g(r, col.pay), qty, route: '', src: '' });
+      pay: g(r, col.pay), qty, route: '', src: '', rt: g(r, col.rt) });
   }
   return { cols, rows, total, header: hi >= 0 };
 }
