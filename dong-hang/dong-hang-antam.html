@@ -157,6 +157,21 @@ tbody tr.grp:hover td { background: var(--accent-soft); }
 .colpick legend { font-size: 12px; font-weight: 700; color: var(--ink-2); padding: 0 4px; }
 .colpick label { display: flex; gap: 6px; align-items: center; font-size: 13px; cursor: pointer; }
 .prs { display: grid; gap: 10px; }
+.prs2 { grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); align-items: start; }
+.prs2 fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 8px 12px 10px; margin: 0; display: grid; gap: 6px; }
+.prs2 legend { font-size: 12px; font-weight: 700; color: var(--ink-2); padding: 0 4px; text-transform: uppercase; letter-spacing: .03em; }
+.prs2 .pr-foot { grid-column: 1 / -1; align-items: center; }
+@media (min-width: 900px) { .prs2 > fieldset:first-child { grid-column: span 2; grid-row: span 3; } }
+.prs2 .field { display: grid; gap: 3px; }
+.pr-cond { border-top: 1px dashed var(--line); padding-top: 6px; display: grid; gap: 4px; }
+.pr-ch { display: flex; align-items: center; gap: 6px; flex-wrap: wrap; font-size: 13px; }
+.pr-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(140px, 1fr)); gap: 3px 10px; }
+.pr-grid label { font-size: 13px; }
+.pgh { margin: 14px 0 4px; font-size: 13px; color: var(--accent); text-transform: uppercase; letter-spacing: .03em; }
+.sign { display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px; margin: 18px 0 8px; text-align: center; break-inside: avoid; }
+.sign div { display: grid; gap: 2px; padding-bottom: 60px; }
+.sign span { font-size: 11px; color: var(--muted); font-style: italic; }
+.nowrap { white-space: nowrap; }
 /* in: chỉ in vùng #print-area, nền trắng, khổ A4 ngang (trên claude.ai: chuẩn bị sẵn rồi bấm Ctrl+P) */
 #print-area { display: none; }
 .paper { --bg: #f4f6f3; --panel: #ffffff; --ink: #1d2a24; --ink-2: #4c5c54; --muted: #7b8a82; --line: #dfe5e0; --line-2: #eef2ef;
@@ -198,7 +213,6 @@ tbody tr.grp:hover td { background: var(--accent-soft); }
   #print-area .rept th, #print-area .rept td { padding: 3px 2px; }
   #print-area .rept th.p { min-width: 0; max-width: none; font-size: 9.5px; }
   #print-area .rept th.rl, #print-area .rept td.rl { width: 84px; min-width: 84px; white-space: normal; }
-  @page { size: A4 landscape; margin: 10mm; }
 }
 .prs label { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
 .prs label input { margin-top: 3px; }
@@ -928,11 +942,11 @@ function refreshRep() {
 function hiddenDonText() {
   return [...hideSet('hideDon')].map(k => { if (!k.startsWith('p:')) return (DON_COLS.find(c => c[0] === k) || [, k])[1]; const p = S.cfg.products.find(x => x.id === k.slice(2)); return p ? prodLabel(p) : ''; }).filter(Boolean).join(', ');
 }
-function reportHtml(rep, need, tuyen, editable) {
-  const runs = groupRuns(repProducts(tuyen));
+function reportHtml(rep, need, tuyen, editable, part = {}) {
+  const runs = groupRuns(repProducts(tuyen)), on = k => part[k] !== false;
   const cells = (fn) => runs.map(r => r.list.map((p, i) => `<td class="pc g-${r.g}${i ? '' : ' gstart'}">${fn(p)}</td>`).join('')).join('');
   const nz = (v, key) => `<span data-r="${key}" class="${v ? '' : 'zero'}">${fmt(v)}</span>`;
-  return `<div class="rep" id="d-report">
+  return `<div class="rep" id="d-report">${on('big') ? `
     <div class="rep-big">
       <div class="hot"><div class="v" data-r="tacos">${fmt(rep.tacos)}</div><div class="k">TACOS · tổng cái bánh các size</div></div>
       <div class="hot"><div class="v" data-r="kebab">${fmt(rep.kebab)}</div><div class="k">KEBAB · tổng cái (gồm mè, than tre)</div></div>
@@ -940,7 +954,7 @@ function reportHtml(rep, need, tuyen, editable) {
       <div><div class="v" data-r="count">${fmt(rep.count)}</div><div class="k">ĐƠN HOẠT ĐỘNG</div></div>
     </div>
     <div class="paychips">${PAYS.map(([k, l, , full]) => `<span class="pchip p-${k}" title="${esc(full)}">${esc(l)} <b data-r="pay:${k}">${fmt(rep.pay[k])}</b></span>`).join('')}
-      <span class="pchip p-none" title="Đơn chưa chọn thanh toán">Chưa chọn <b data-r="pay:none">${fmt(rep.pay.none)}</b></span></div>
+      <span class="pchip p-none" title="Đơn chưa chọn thanh toán">Chưa chọn <b data-r="pay:none">${fmt(rep.pay.none)}</b></span></div>` : ''}${on('rept') ? `
     <div class="tw"><table class="orders rept"><thead>
       <tr><th class="stick rl" rowspan="2"></th>${runs.map(r => `<th class="gh g-${r.g} gstart" colspan="${r.list.length}">${esc(GROUPS[r.g].name)}</th>`).join('')}</tr>
       <tr>${runs.map(r => r.list.map((p, i) => `<th class="p g-${r.g}${i ? '' : ' gstart'}" title="${esc(p.name)} · ${perOf(p)} cái/túi">${esc(prodShort(p))}</th>`).join('')).join('')}</tr></thead><tbody>
@@ -950,8 +964,8 @@ function reportHtml(rep, need, tuyen, editable) {
       <tr class="r-tui"><td class="stick rl">TỔNG TÚI</td>${cells(p => nz(rep.tui[p.id] || 0, 'tui:' + p.id))}</tr>
       <tr class="r-cai"><td class="stick rl">TỔNG CÁI</td>${cells(p => nz(rep.cai[p.id] || 0, 'cai:' + p.id))}</tr>
     </tbody></table></div>
-    <p class="hint" data-r="tuyenTxt">${rep.tuyenTxt ? 'Bánh tuyến: ' + esc(rep.tuyenTxt) : 'Bánh tuyến: chưa nhập. Nhập số túi ở dòng BÁNH TUYẾN (được cộng vào Tổng cái).'}</p>
-    <div><h4>Tổng cần chuẩn bị (bao bì)</h4><div class="need">${NEED.map(([k, n]) => `<div class="box"><div class="k">${esc(n)}</div><div class="v" data-r="need:${k}">${fmt(need[k])}</div></div>`).join('')}</div></div>
+    <p class="hint" data-r="tuyenTxt">${rep.tuyenTxt ? 'Bánh tuyến: ' + esc(rep.tuyenTxt) : 'Bánh tuyến: chưa nhập. Nhập số túi ở dòng BÁNH TUYẾN (được cộng vào Tổng cái).'}</p>` : ''}${on('need') ? `
+    <div><h4>Tổng cần chuẩn bị (bao bì)</h4><div class="need">${NEED.map(([k, n]) => `<div class="box"><div class="k">${esc(n)}</div><div class="v" data-r="need:${k}">${fmt(need[k])}</div></div>`).join('')}</div></div>` : ''}
   </div>`;
 }
 function needHtml(t) {
@@ -1075,13 +1089,29 @@ function dayFltText() {
   return out.join(' · ');
 }
 function dayPrint(d) {
-  const r = S.day ? S.day.r : {}, note = dayFltText();
+  const r = S.day ? S.day.r : {}, note = dayFltText(), all = dayOrders(r);
   const ids = new Set(filteredRows().filter(c => hasOrder(orderOf(c.id))).map(c => c.id));
-  const sub = Object.fromEntries(Object.entries(r).filter(([cid]) => ids.has(cid)));
+  const rtOf = x => routeOf(x.o, S.cust[x.cid] || x.c)[0] || '-', payOf = x => payKey(x.o.tt) || 'none';
+  const count = f => { const m = {}; all.forEach(x => { const k = f(x); m[k] = (m[k] || 0) + 1; }); return m; };
+  const nRt = count(rtOf), nPay = count(payOf), H = hideSet('hideDon');
   printModal({
-    title: 'In báo cáo đơn hàng · ' + vn(d), note, nAll: dayOrders(r).length, nFlt: dayOrders(sub).length, unit: 'đơn',
-    build: o => ({ name: `bao-cao-don-hang-${d}${o.flt ? '-loc' : ''}.html`, title: `Báo cáo đơn hàng ${vn(d)}`,
-      body: printDoc(d, o.flt ? sub : r, o.flt ? null : S.day && S.day.tuyen, { title: 'BÁO CÁO ĐƠN HÀNG', note: o.flt ? note : '', det: o.det }) }),
+    title: 'In theo yêu cầu – đơn hàng ngày ' + vn(d), key: 'prDon', defTitle: 'BÁO CÁO ĐƠN HÀNG', unit: 'đơn', nAll: all.length,
+    flt: note ? { n: all.filter(x => ids.has(x.cid)).length, note } : null,
+    conds: [
+      { key: 'pay', name: 'Thanh toán', items: PAYS.map(([k, , , full]) => [k, full, nPay[k] || 0]).concat([['none', 'Chưa chọn', nPay.none || 0]]) },
+      { key: 'rt', name: 'Tuyến', items: Object.keys(nRt).sort((a, b) => routeIdx(a === '-' ? '' : a) - routeIdx(b === '-' ? '' : b)).map(k => [k, k === '-' ? 'Chưa chia tuyến' : routeLabel(k), nRt[k]]) },
+    ],
+    sections: [['big', 'Số tổng (TACOS, KEBAB, BILL, thanh toán)'], ['rept', 'Bảng Bánh tuyến / Tổng túi / Tổng cái'], ['need', 'Bao bì cần chuẩn bị'], ['rt', 'Tổng theo tuyến giao'], ['det', 'Danh sách / chi tiết từng khách']],
+    cols: DON_PRINT_COLS, colOn: k => !H.has(k),
+    byOpts: [['tuyen', 'Tuyến giao'], ['area', 'Khu vực'], ['pay', 'Thanh toán']], byDef: S.filter.by === 'area' ? 'area' : 'tuyen',
+    build: o => {
+      const keep = x => (o.scope !== 'flt' || ids.has(x.cid)) && o.cond.pay.has(payOf(x)) && o.cond.rt.has(rtOf(x));
+      const picked = all.filter(keep), whole = picked.length === all.length;
+      const sub = Object.fromEntries(picked.map(x => [x.cid, x.o]));
+      const note2 = [o.scope === 'flt' ? note : '', o.condNote].filter(Boolean).join(' · ');
+      return { count: picked.length, name: `bao-cao-don-hang-${d}${whole ? '' : '-chon'}.html`, title: `${o.head} ${vn(d)}`,
+        body: printDoc(d, sub, whole ? S.day && S.day.tuyen : null, { title: o.head, note: note2, sec: o.sec, cols: o.cols, by: o.by, brk: o.brk, sign: o.sign }) };
+    },
   });
 }
 function filteredRows() {
@@ -1405,32 +1435,42 @@ function rtSummaryHtml(r) {
   return `<h3 style="margin:0 0 6px">Tổng theo tuyến giao</h3><table class="t1p" style="margin-bottom:16px"><thead><tr><th>Tuyến</th><th class="n">Đơn</th><th class="n">TACOS (cái)</th><th class="n">KEBAB (cái)</th>${NEED.map(([, n]) => `<th class="n">${esc(n)}</th>`).join('')}</tr></thead>
     <tbody>${keys.map(k => row(k ? routeLabel(k) : '⚠ Chưa chia tuyến', by[k])).join('')}${keys.length > 1 ? row('TỔNG', r, 'tot') : ''}</tbody></table>`;
 }
+// cột bảng chi tiết của bản in đơn hàng (STT, Khách hàng luôn có)
+const DON_PRINT_COLS = [['g', 'Khu vực / Tuyến'], ['crm', 'CRM'], ['phone', 'SĐT'], ['note', 'Ghi chú'], ['prod', 'Sản phẩm'], ['pk', 'Đóng gói'], ['pack', 'Định mức'], ['tt', 'Thanh toán']];
+const payLabel = k => (k === 'none' ? 'Chưa chọn thanh toán' : (PAYS.find(p => p[0] === k) || [, k, , k])[3]);
+const signHtml = () => `<div class="sign">${['Người lập bảng', 'Người đóng hàng', 'Người giao hàng'].map(x => `<div><b>${x}</b><span>(ký, ghi rõ họ tên)</span></div>`).join('')}</div>`;
+// opt: title, note, sec {big, rept, need, rt, det}, cols (Set mã cột), by ('tuyen' | 'area' | 'pay'), brk (mỗi nhóm 1 trang), sign
 function printDoc(d, r, tuyen, opt = {}) {
-  const byRt = (opt.by || S.filter.by || 'tuyen') === 'tuyen', rk = x => routeOf(x.o, S.cust[x.cid] || x.c)[0];
-  const t = dayTotals(r), list = dayOrders(r).map(x => Object.assign(x, { rt: rk(x) }))
-    .sort((a, b) => (byRt ? routeIdx(a.rt) - routeIdx(b.rt) : 0) || (a.c.s || 0) - (b.c.s || 0));
-  const H = hideSet('hideDon'), hid = hiddenDonText();
-  // cột chi tiết: [mã ẩn được, tiêu đề, ô]
-  const dc = [['', 'STT', x => `<td class="n">${x.i}</td>`], [byRt ? '' : 'rt', byRt ? 'Khu vực' : 'Tuyến', x => `<td>${esc(byRt ? x.c.q || '' : x.rt)}</td>`],
-    ['crm', 'CRM', x => `<td>${esc(x.c.crm || '')}</td>`], ['', 'Khách hàng', x => `<td>${esc(x.c.name)}</td>`], ['', 'SĐT', x => `<td>${esc(x.c.phone || '')}</td>`],
-    ['', 'Ghi chú', x => `<td>${esc([x.c.note, x.o.gc].filter(Boolean).join(' · '))}</td>`], ['', 'Sản phẩm', x => `<td>${esc(prodText(x.o.q))}</td>`],
-    ['pk', 'Đóng gói', x => `<td>${esc(x.pk)}</td>`], ['pack', 'Định mức', x => `<td class="pack">${esc(packLabel(packing(x.o.q, x.pk)))}</td>`], ['tt', 'Thanh toán', x => `<td>${esc(x.o.tt || '')}</td>`]]
-    .filter(([k]) => !k || !H.has(k));
-  let area = null, i = 0, rows = '';
-  for (const { o, c, rt } of list) {
-    const g = byRt ? rt : c.q;
-    if (g !== area) { area = g; rows += `<tr class="grp"><td colspan="${dc.length}">${esc(byRt ? (g ? routeLabel(g) : 'Chưa chia tuyến') : g || 'Chưa có khu vực')}</td></tr>`; }
-    const x = { i: ++i, o, c, rt, pk: packOf(o, c) };
-    rows += `<tr>${dc.map(([, , f]) => f(x)).join('')}</tr>`;
-  }
+  const sec = Object.assign({ big: true, rept: true, need: true, rt: true, det: true }, opt.sec || {});
+  if (opt.det === false) sec.det = false;
+  const H = hideSet('hideDon'), C = opt.cols || new Set(DON_PRINT_COLS.map(([k]) => k).filter(k => !H.has(k))), hid = hiddenDonText();
+  const by = opt.by || (S.filter.by === 'area' ? 'area' : 'tuyen'), rk = x => routeOf(x.o, S.cust[x.cid] || x.c)[0];
+  const gOf = x => (by === 'tuyen' ? x.rt : by === 'pay' ? payKey(x.o.tt) || 'none' : x.c.q || '');
+  const ar = by === 'area' ? areas() : [];
+  const gIdx = g => (by === 'tuyen' ? routeIdx(g) : by === 'pay' ? (g === 'none' ? 99 : PAYS.findIndex(p => p[0] === g)) : ar.indexOf(g));
+  const gLabel = g => (by === 'tuyen' ? (g ? routeLabel(g) : 'Chưa chia tuyến') : by === 'pay' ? payLabel(g) : g || 'Chưa có khu vực');
+  const t = dayTotals(r), list = dayOrders(r).map(x => Object.assign(x, { rt: rk(x) })).map(x => Object.assign(x, { g: gOf(x) }))
+    .sort((a, b) => gIdx(a.g) - gIdx(b.g) || (a.c.s || 0) - (b.c.s || 0));
+  const dc = [[true, 'STT', x => `<td class="n">${x.i}</td>`], [C.has('g'), by === 'tuyen' ? 'Khu vực' : 'Tuyến', x => `<td>${esc(by === 'tuyen' ? x.c.q || '' : x.rt)}</td>`],
+    [C.has('crm'), 'CRM', x => `<td>${esc(x.c.crm || '')}</td>`], [true, 'Khách hàng', x => `<td>${esc(x.c.name)}</td>`], [C.has('phone'), 'SĐT', x => `<td class="nowrap">${esc(x.c.phone || '')}</td>`],
+    [C.has('note'), 'Ghi chú', x => `<td>${esc([x.c.note, x.o.gc].filter(Boolean).join(' · '))}</td>`], [C.has('prod'), 'Sản phẩm', x => `<td>${esc(prodText(x.o.q))}</td>`],
+    [C.has('pk'), 'Đóng gói', x => `<td>${esc(x.pk)}</td>`], [C.has('pack'), 'Định mức', x => `<td class="pack">${esc(packLabel(packing(x.o.q, x.pk)))}</td>`],
+    [C.has('tt'), 'Thanh toán', x => `<td class="nowrap">${esc(x.o.tt || '')}</td>`]].filter(x => x[0]);
+  const groups = [];
+  for (const x of list) { let G = groups[groups.length - 1]; if (!G || G.g !== x.g) groups.push(G = { g: x.g, rows: [] }); G.rows.push(x); }
+  const top = sec.big || sec.rept || sec.need || sec.rt;
+  let i = 0;
+  const det = groups.map((G, gi) => `<section${opt.brk && (gi || top) ? ' style="break-before:page"' : ''}><h4 class="pgh">${esc(gLabel(G.g))} · ${G.rows.length} đơn</h4>
+    <table class="t1p"><thead><tr>${dc.map(([, h]) => `<th${h === 'STT' ? ' class="n"' : ''}>${h}</th>`).join('')}</tr></thead>
+    <tbody>${G.rows.map(x => { x.i = ++i; x.pk = packOf(x.o, x.c); return `<tr>${dc.map(([, , f]) => f(x)).join('')}</tr>`; }).join('')}</tbody></table>${opt.brk && opt.sign ? signHtml() : ''}</section>`).join('');
   return `<h2 style="text-align:center;margin-bottom:4px">${esc(opt.title || 'ĐỊNH MỨC ĐÓNG HÀNG')} NGÀY ${vn(d)}</h2>
     <p class="hint" style="text-align:center;margin:0 0 ${opt.note ? 4 : 14}px">${dow(d)} · ${t.count} đơn</p>
-    ${opt.note ? `<p style="text-align:center;margin:0 0 14px"><b>Theo lọc:</b> ${esc(opt.note)}</p>` : ''}
-    ${hid ? `<p class="hint" style="text-align:center;margin:-8px 0 12px">Đang ẩn cột: ${esc(hid)} (bảng tổng TACOS / KEBAB và cột Sản phẩm vẫn tính đủ)</p>` : ''}
-    <div style="margin-bottom:16px">${reportHtml(dayReport(r, tuyen), t.need, tuyen, false).replace('id="d-report"', '')}</div>
-    ${rtSummaryHtml(r)}${opt.det === false ? '' : `<h3 style="margin-bottom:6px">Chi tiết đóng hàng từng khách</h3>
-    <div class="tw"><table><thead><tr>${dc.map(([, h]) => `<th${h === 'STT' ? ' class="n"' : ''}>${h}</th>`).join('')}</tr></thead>
-      <tbody>${rows || `<tr><td colspan="${dc.length}" class="muted">Chưa có đơn</td></tr>`}</tbody></table></div>`}
+    ${opt.note ? `<p style="text-align:center;margin:0 0 14px"><b>Chọn in:</b> ${esc(opt.note)}</p>` : ''}
+    ${hid && (sec.rept || sec.det) ? `<p class="hint" style="text-align:center;margin:-8px 0 12px">Đang ẩn cột: ${esc(hid)} (số tổng vẫn tính đủ)</p>` : ''}
+    ${sec.big || sec.rept || sec.need ? `<div style="margin-bottom:16px">${reportHtml(dayReport(r, tuyen), t.need, tuyen, false, sec).replace('id="d-report"', '')}</div>` : ''}
+    ${sec.rt ? rtSummaryHtml(r) : ''}
+    ${sec.det ? `${opt.brk ? '' : '<h3 style="margin-bottom:6px">Chi tiết đóng hàng từng khách</h3>'}${det || '<p class="muted">Không có đơn nào</p>'}` : ''}
+    ${opt.sign && !(opt.brk && sec.det) ? signHtml() : ''}
     <p class="hint" style="margin-top:12px">In lúc ${nowStr()}</p>`;
 }
 function viewPrint(main) {
@@ -1474,13 +1514,15 @@ function colChooser({ title, groups, key, onChange, extra = '', bindExtra }) {
 // In: thử mở hộp thoại in của trình duyệt. Trên claude.ai trang không được tự mở hộp thoại in, nên web giữ sẵn bản in
 // trong trang và hiện xem trước – bấm Ctrl+P (⌘+P) là trình duyệt in đúng bản này (giống web Kho).
 const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
-function setPrint(title, body) {
+function setPrint(title, body, land = true) {
+  let ps = $('#page-style'); if (!ps) { ps = document.createElement('style'); ps.id = 'page-style'; document.head.appendChild(ps); }
+  ps.textContent = body ? `@media print { @page { size: A4 ${land ? 'landscape' : 'portrait'}; margin: 10mm; } }` : '';
   $('#print-area').innerHTML = body || '';
   document.body.classList.toggle('printing', !!body);
   if (body) { setPrint.old = setPrint.old || document.title; document.title = title; } else if (setPrint.old) { document.title = setPrint.old; setPrint.old = null; }
 }
-async function directPrint(title, body, file) {
-  setPrint(title, body);
+async function directPrint(title, body, file, land = true) {
+  setPrint(title, body, land);
   let before = false, after = false;
   const onB = () => { before = true; }, onA = () => { after = true; };
   addEventListener('beforeprint', onB); addEventListener('afterprint', onA);
@@ -1495,40 +1537,71 @@ async function directPrint(title, body, file) {
   const key = `<kbd>${IS_MAC ? '⌘' : 'Ctrl'}</kbd> + <kbd>P</kbd>`;
   const m = modal({
     title: 'Bản in đã sẵn sàng – bấm ' + (IS_MAC ? '⌘' : 'Ctrl') + ' + P', wide: true,
-    body: `<div class="callout" style="margin:0 0 10px;padding:10px 12px;border-radius:8px;background:var(--accent-soft)">Bấm ${key} trên bàn phím để mở hộp thoại in – chỉ in bản bên dưới (khổ A4 ngang).
+    body: `<div class="callout" style="margin:0 0 10px;padding:10px 12px;border-radius:8px;background:var(--accent-soft)">Bấm ${key} trên bàn phím để mở hộp thoại in – chỉ in bản bên dưới (khổ A4 ${land ? 'ngang' : 'dọc'}).
         <span class="hint">Điện thoại: menu trình duyệt → In. In xong bấm Đóng.</span></div>
       <div class="pv-box"><div class="paper">${body}</div></div>
       <div class="row" style="margin-top:10px"><span class="grow"></span><button class="btn sm" id="pv-file">⬇ Tải file in</button></div>`,
     onClose: () => setPrint(''),
   });
-  $('#pv-file', m.root).onclick = () => guard(() => saveFile(file, printablePage(title, body, true), 'text/html'));
+  $('#pv-file', m.root).onclick = () => guard(() => saveFile(file, printablePage(title, body, true, land), 'text/html'));
   const ok = $('[data-x]', m.root); if (ok) ok.focus();
   return false;
 }
-function printModal({ title, note, nAll, nFlt, unit, actOpt, build }) {
+// In theo yêu cầu: phạm vi (tất cả / theo bộ lọc), điều kiện (bỏ tích để không in: thanh toán, tuyến…), phần in,
+// cột bảng chi tiết, nhóm theo, khổ giấy, mỗi nhóm 1 trang, dòng ký tên. Lựa chọn được nhớ trên máy (store key).
+// conds: [{key, name, items: [[mã, tên, số]]}] · sections / cols / extra: [[mã, tên]] · byOpts: [[mã, tên]]
+function printModal({ title, key, defTitle, unit, nAll, flt, conds = [], sections, cols, colOn, extra = [], byOpts, byDef, build }) {
+  const sv = Object.assign({ sec: {}, cols: {}, x: {}, land: true, brk: false, sign: false, head: '', by: byDef }, store(key) || {});
+  const ck = (attr, k, label, on) => `<label><input type="checkbox" data-${attr}="${esc(k)}" ${on ? 'checked' : ''}><span>${label}</span></label>`;
   const m = modal({
-    title, ok: '🖨 In',
-    body: `<div class="prs">
-      ${note ? `<label><input type="radio" name="pr-s" value="flt" checked><span><b>Theo bộ lọc đang chọn</b> – ${fmt(nFlt)} ${unit}<span class="hint">${esc(note)}</span></span></label>
-        <label><input type="radio" name="pr-s" value="all"><span><b>Tất cả</b> – ${fmt(nAll)} ${unit}</span></label>`
-        : `<p class="hint" style="margin:0">Đang in <b>tất cả</b> (${fmt(nAll)} ${unit}). Muốn in theo yêu cầu: đóng hộp này, chọn lọc ở ô tìm / dòng "▼ Lọc theo cột" dưới tiêu đề bảng rồi bấm In báo cáo.</p>`}
-      ${actOpt ? '<label><input type="checkbox" id="pr-act" checked><span>Chi tiết chỉ in khách có hàng (HOẠT ĐỘNG)</span></label>' : ''}
-      <label><input type="checkbox" id="pr-det" checked><span>Kèm bảng chi tiết từng khách</span></label>
-      <div class="row" style="align-items:center;margin-top:4px"><span class="hint grow">Bấm <b>🖨 In</b> → bấm <b>Ctrl+P</b> để in (khổ A4 ngang). Cần lưu lại hoặc gửi đi thì bấm Tải file in.</span>
-        <button class="btn sm" id="pr-file">⬇ Tải file in</button></div></div>`,
-    onOk: async root => { const r = build(opts(root)); await directPrint(r.title, r.body, r.name); return true; },
+    title, ok: '🖨 In', wide: true,
+    body: `<div class="prs prs2">
+      <fieldset><legend>Phạm vi</legend>
+        <label><input type="radio" name="pr-s" value="all" ${flt ? '' : 'checked'}><span><b>Tất cả</b> – ${fmt(nAll)} ${unit}</span></label>
+        ${flt ? `<label><input type="radio" name="pr-s" value="flt" checked><span><b>Theo bộ lọc đang chọn</b> – ${fmt(flt.n)} ${unit}<span class="hint">${esc(flt.note)}</span></span></label>` : ''}
+        ${conds.map(c => `<div class="pr-cond" data-cond="${esc(c.key)}"><div class="pr-ch"><b>${esc(c.name)}</b> <span class="hint">bỏ tích để không in</span>
+          <button type="button" class="btn sm ghost" data-allc>Tất cả</button><button type="button" class="btn sm ghost" data-nonec>Bỏ hết</button></div>
+          <div class="pr-grid">${c.items.map(([k, l, n]) => ck('c', k, `${esc(l)}${n != null ? ` <span class="muted">(${fmt(n)})</span>` : ''}`, true)).join('')}</div></div>`).join('')}
+        <p class="hint" id="pr-cnt" style="margin:0"></p>
+      </fieldset>
+      <fieldset><legend>In những phần</legend>${sections.map(([k, l]) => ck('sec', k, esc(l), sv.sec[k] !== false)).join('')}
+        ${extra.map(([k, l, def]) => ck('x', k, esc(l), sv.x[k] === undefined ? def : sv.x[k])).join('')}</fieldset>
+      <fieldset><legend>Cột của bảng chi tiết</legend><div class="pr-grid">${cols.map(([k, l]) => ck('col', k, esc(l), sv.cols[k] !== undefined ? sv.cols[k] : colOn(k))).join('')}</div></fieldset>
+      <fieldset><legend>Trình bày</legend>
+        <label class="field">Tiêu đề<input id="pr-head" value="${esc(sv.head || defTitle)}"></label>
+        ${byOpts ? `<label class="field">Nhóm theo<select id="pr-by">${byOpts.map(([k, l]) => `<option value="${k}" ${sv.by === k ? 'selected' : ''}>${esc(l)}</option>`).join('')}</select></label>` : ''}
+        <div class="seg" id="pr-land"><button type="button" data-v="1" class="${sv.land ? 'on' : ''}">Khổ ngang</button><button type="button" data-v="0" class="${sv.land ? '' : 'on'}">Khổ dọc</button></div>
+        ${ck('o', 'brk', 'Mỗi nhóm in sang trang mới', sv.brk)}
+        ${ck('o', 'sign', 'Thêm dòng ký tên (người lập – người đóng hàng – người giao)', sv.sign)}</fieldset>
+      <div class="row pr-foot"><span class="hint grow">Bấm <b>🖨 In</b> → <b>Ctrl+P</b>. Lựa chọn được nhớ cho lần sau.</span><button type="button" class="btn sm" id="pr-file">⬇ Tải file in</button></div></div>`,
+    onOk: async root => { const o = read(root); if (!o.ok) throw new Error('Không có ' + unit + ' nào để in – hãy tích lại điều kiện'); const r = build(o); await directPrint(r.title, r.body, r.name, o.land); return true; },
   });
-  const opts = root => {
+  let land = !!sv.land;
+  const read = root => {
     const sc = $('input[name=pr-s]:checked', root);
-    return { flt: !!note && (!sc || sc.value === 'flt'), det: $('#pr-det', root).checked, act: actOpt ? $('#pr-act', root).checked : false };
+    const cond = Object.fromEntries(conds.map(c => [c.key, new Set($$(`[data-cond="${c.key}"] [data-c]:checked`, root).map(i => i.dataset.c))]));
+    const all = Object.fromEntries(conds.map(c => [c.key, cond[c.key].size === c.items.length]));
+    const map = attr => Object.fromEntries($$(`[data-${attr}]`, root).map(i => [i.getAttribute('data-' + attr), i.checked]));
+    const o = { scope: sc ? sc.value : 'all', cond, condAll: all, sec: map('sec'), x: map('x'), colsMap: map('col'), land, brk: $('[data-o=brk]', root).checked, sign: $('[data-o=sign]', root).checked,
+      head: $('#pr-head', root).value.trim() || defTitle, by: byOpts ? $('#pr-by', root).value : byDef };
+    o.cols = new Set(Object.keys(o.colsMap).filter(k => o.colsMap[k]));
+    o.condNote = conds.filter(c => !all[c.key]).map(c => `${c.name}: ${c.items.filter(([k]) => cond[c.key].has(k)).map(([, l]) => l).join(', ') || '(không chọn)'}`).join(' · ');
+    o.ok = conds.every(c => cond[c.key].size);
+    store(key, { sec: o.sec, cols: o.colsMap, x: o.x, land, brk: o.brk, sign: o.sign, head: o.head === defTitle ? '' : o.head, by: o.by });
+    return o;
   };
-  $('#pr-file', m.root).onclick = () => guard(async () => { const r = build(opts(m.root)); await saveFile(r.name, printablePage(r.title, r.body), 'text/html'); m.close(); });
+  const cnt = () => { const o = read(m.root), r = build(o); $('#pr-cnt', m.root).textContent = r.count != null ? `Sẽ in ${fmt(r.count)} ${unit}.` : ''; };
+  $$('#pr-land button', m.root).forEach(b => b.onclick = () => { land = b.dataset.v === '1'; $$('#pr-land button', m.root).forEach(x => x.classList.toggle('on', x === b)); });
+  $$('[data-allc], [data-nonec]', m.root).forEach(b => b.onclick = () => { $$('[data-c]', b.closest('.pr-cond')).forEach(i => { i.checked = b.hasAttribute('data-allc'); }); cnt(); });
+  $$('[data-c], input[name=pr-s]', m.root).forEach(i => i.addEventListener('change', cnt));
+  $('#pr-file', m.root).onclick = () => guard(async () => { const o = read(m.root), r = build(o); await saveFile(r.name, printablePage(r.title, r.body, false, o.land), 'text/html'); m.close(); });
+  cnt();
 }
-function printablePage(title, body, autoPrint) {
+function printablePage(title, body, autoPrint, land = true) {
   const css = $('#app-css').textContent;
   return `<!doctype html><html lang="vi" data-theme="light"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${css}
     body{background:#fff;color:#111;padding:16px} .tw{overflow:visible;border:0} th{position:static} tr.grp td{background:#eef4f1;color:#0f6e5a}
-    @page{size:A4 landscape;margin:10mm} table{font-size:12px} *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
+    @page{size:A4 ${land ? 'landscape' : 'portrait'};margin:10mm} table{font-size:12px} *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     h3{break-after:avoid} tr{break-inside:avoid}
     .pbar{position:sticky;top:0;z-index:5;display:flex;gap:10px;align-items:center;justify-content:center;padding:8px;margin:-16px -16px 12px;background:#0f6e5a;color:#fff;font:14px system-ui,sans-serif}
     .pbar button{font:inherit;font-weight:700;padding:6px 16px;border-radius:6px;border:0;background:#fff;color:#0f6e5a;cursor:pointer}
@@ -2154,34 +2227,47 @@ function t1Bind() {
     $('[data-edit]', tr).onclick = () => t1EditCust(cid);
   });
 }
+// o: head, note, sec {sum, det}, act, cols (Set), brk, sign
 function t1PrintDoc(d, list, o) {
   const groups = T123_GROUPS.map(([g, name]) => ({ g, name, rows: list.filter(c => c.g === g) })).filter(x => x.rows.length), all = t1Sum(list);
-  const lab = k => (k === 'thit' ? 'Thịt (kg)' : T1_SH[k]), P = t1P(), on = t1On;
+  const C = o.cols, on = k => C.has(k), lab = k => (k === 'thit' ? 'Thịt (kg)' : T1_SH[k]), P = T123_P.filter(([k]) => on(k));
+  const sec = Object.assign({ sum: true, det: true }, o.sec || {});
   const bagTh = cls => `${on('full') ? `<th class="n">Túi 50</th>` : ''}${on('le') ? `<th${cls}>Túi lẻ</th>` : ''}`;
   const sumRow = (name, s, cls = '') => `<tr class="${cls}"><td><b>${esc(name)}</b></td><td class="n">${fmt(s.n)}</td>${P.map(([k]) => `<td class="n">${s.q[k] ? fmt(s.q[k]) : ''}</td>`).join('')}${on('full') ? `<td class="n">${fmt(s.full)}</td>` : ''}${on('le') ? `<td class="n">${fmt(s.le)}</td>` : ''}<td class="n">${fmt(s.dt)}</td></tr>`;
-  const nLead = 3 + ['ht', 'crm', 'st'].filter(on).length;
-  const hid = [...hideSet('hideT1')].map(k => ({ crm: 'CRM', ht: 'Hỗ trợ', st: 'Tình trạng', note: 'Ghi chú', full: 'Túi 50', le: 'Túi lẻ' }[k] || lab(k))).join(', ');
-  let det = '';
-  if (o.det) for (const x of groups) {
+  let det = '', gi = 0;
+  if (sec.det) for (const x of groups) {
     const rows = o.act ? x.rows.filter(c => t1Status(t1Order(c.id)) === 'HOẠT ĐỘNG') : x.rows, s = t1Sum(rows);
     if (!rows.length) continue;
-    det += `<h3 style="margin:16px 0 6px">${esc(x.name)} · ${rows.length} khách</h3><table class="t1p"><thead><tr><th class="n">STT</th>${on('ht') ? '<th>Hỗ trợ</th>' : ''}${on('crm') ? '<th>CRM</th>' : ''}<th>Khách hàng</th><th>SĐT</th>${on('st') ? '<th>Tình trạng</th>' : ''}${P.map(([k]) => `<th class="n">${lab(k)}</th>`).join('')}${bagTh('')}${on('note') ? '<th>Ghi chú</th>' : ''}</tr></thead><tbody>
-      ${rows.map((c, i) => { const od = t1Order(c.id), b = t1Bags(od); return `<tr><td class="n">${i + 1}</td>${on('ht') ? `<td>${c.ht ? 'HỖ TRỢ' : ''}</td>` : ''}${on('crm') ? `<td>${esc(c.crm || '')}</td>` : ''}<td>${esc(c.name)}</td><td>${esc(c.phone || '')}</td>${on('st') ? `<td>${t1Status(od)}</td>` : ''}${P.map(([k]) => `<td class="n">${t1V(od, k) ? fmt(t1V(od, k)) : ''}</td>`).join('')}${on('full') ? `<td class="n">${b.full || ''}</td>` : ''}${on('le') ? `<td>${b.le ? '1 túi ' + b.le : ''}</td>` : ''}${on('note') ? `<td>${esc([c.note, od.gc].filter(Boolean).join(' · '))}</td>` : ''}</tr>`; }).join('')}
-      <tr class="tot"><td colspan="${nLead}"><b>TỔNG ${esc(x.name.toUpperCase())}</b> · ${s.n} khách giao · doanh thu ${fmt(s.dt)}đ</td>${P.map(([k]) => `<td class="n">${s.q[k] ? fmt(s.q[k]) : ''}</td>`).join('')}${on('full') ? `<td class="n">${fmt(s.full)}</td>` : ''}${on('le') ? `<td>${s.le ? s.le + ' túi lẻ' : ''}</td>` : ''}${on('note') ? '<td></td>' : ''}</tr></tbody></table>`;
+    det += `<section${o.brk && (gi++ || sec.sum) ? ' style="break-before:page"' : ''}><h4 class="pgh">${esc(x.name)} · ${rows.length} khách</h4><table class="t1p"><thead><tr><th class="n">STT</th>${on('ht') ? '<th>Hỗ trợ</th>' : ''}${on('crm') ? '<th>CRM</th>' : ''}<th>Khách hàng</th>${on('phone') ? '<th>SĐT</th>' : ''}${on('st') ? '<th>Tình trạng</th>' : ''}${P.map(([k]) => `<th class="n">${lab(k)}</th>`).join('')}${bagTh('')}${on('note') ? '<th>Ghi chú</th>' : ''}</tr></thead><tbody>
+      ${rows.map((c, i) => { const od = t1Order(c.id), b = t1Bags(od); return `<tr><td class="n">${i + 1}</td>${on('ht') ? `<td>${c.ht ? 'HỖ TRỢ' : ''}</td>` : ''}${on('crm') ? `<td>${esc(c.crm || '')}</td>` : ''}<td>${esc(c.name)}</td>${on('phone') ? `<td class="nowrap">${esc(c.phone || '')}</td>` : ''}${on('st') ? `<td>${t1Status(od)}</td>` : ''}${P.map(([k]) => `<td class="n">${t1V(od, k) ? fmt(t1V(od, k)) : ''}</td>`).join('')}${on('full') ? `<td class="n">${b.full || ''}</td>` : ''}${on('le') ? `<td>${b.le ? '1 túi ' + b.le : ''}</td>` : ''}${on('note') ? `<td>${esc([c.note, od.gc].filter(Boolean).join(' · '))}</td>` : ''}</tr>`; }).join('')}
+      <tr class="tot"><td colspan="${2 + ['ht', 'crm', 'phone', 'st'].filter(on).length}"><b>TỔNG ${esc(x.name.toUpperCase())}</b> · ${s.n} khách giao · doanh thu ${fmt(s.dt)}đ</td>${P.map(([k]) => `<td class="n">${s.q[k] ? fmt(s.q[k]) : ''}</td>`).join('')}${on('full') ? `<td class="n">${fmt(s.full)}</td>` : ''}${on('le') ? `<td>${s.le ? s.le + ' túi lẻ' : ''}</td>` : ''}${on('note') ? '<td></td>' : ''}</tr></tbody></table>${o.brk && o.sign ? signHtml() : ''}</section>`;
   }
-  return `<h2 style="text-align:center;margin-bottom:4px">BÁO CÁO TUYẾN KEBAB 123 · NGÀY ${vn(d)}</h2>
+  return `<h2 style="text-align:center;margin-bottom:4px">${esc(o.head || 'BÁO CÁO TUYẾN KEBAB 123')} · NGÀY ${vn(d)}</h2>
     <p class="hint" style="text-align:center;margin:0 0 4px">${dow(d)} · ${all.n} khách giao · Doanh thu ${fmt(all.dt)}đ</p>
-    ${o.note ? `<p style="text-align:center;margin:0 0 12px"><b>Theo lọc:</b> ${esc(o.note)}</p>` : '<div style="height:8px"></div>'}
-    ${hid ? `<p class="hint" style="text-align:center;margin:-4px 0 12px">Đang ẩn cột: ${esc(hid)} (doanh thu vẫn tính đủ)</p>` : ''}
-    <table class="t1p"><thead><tr><th>Tuyến</th><th class="n">Khách giao</th>${P.map(([k]) => `<th class="n">${lab(k)}</th>`).join('')}${bagTh(' class="n"')}<th class="n">Doanh thu (đ)</th></tr></thead>
-      <tbody>${groups.map(x => sumRow(x.name, t1Sum(x.rows))).join('')}${sumRow('TỔNG', all, 'tot')}</tbody></table>
-    ${det}<p class="hint" style="margin-top:12px">In lúc ${nowStr()}</p>`;
+    ${o.note ? `<p style="text-align:center;margin:0 0 12px"><b>Chọn in:</b> ${esc(o.note)}</p>` : '<div style="height:8px"></div>'}
+    ${sec.sum ? `<table class="t1p"><thead><tr><th>Tuyến</th><th class="n">Khách giao</th>${P.map(([k]) => `<th class="n">${lab(k)}</th>`).join('')}${bagTh(' class="n"')}<th class="n">Doanh thu (đ)</th></tr></thead>
+      <tbody>${groups.map(x => sumRow(x.name, t1Sum(x.rows))).join('')}${sumRow('TỔNG', all, 'tot')}</tbody></table>` : ''}
+    ${det}${o.sign && !(o.brk && sec.det) ? signHtml() : ''}<p class="hint" style="margin-top:12px">In lúc ${nowStr()}</p>`;
 }
+const T1_PRINT_COLS = () => [['ht', 'Hỗ trợ'], ['crm', 'CRM'], ['phone', 'SĐT'], ['st', 'Tình trạng']].concat(T123_P.map(([k]) => [k, k === 'thit' ? 'Cây thịt (kg)' : T1_SH[k]])).concat([['full', 'Túi 50'], ['le', 'Túi lẻ'], ['note', 'Ghi chú']]);
 function t1Print() {
-  const d = S.t1.date || S.date, all0 = t1List(), list = all0.filter(t1Pass), note = t1FCount() ? t1FltText() : '';
+  const d = S.t1.date || S.date, all0 = t1List(), flist = all0.filter(t1Pass), fset = new Set(flist.map(c => c.id)), note = t1FCount() ? t1FltText() : '';
+  const act = c => t1Status(t1Order(c.id)) === 'HOẠT ĐỘNG';
+  const n = (f) => all0.filter(f).length;
   printModal({
-    title: 'In báo cáo tuyến 123 · ' + vn(d), note, nAll: all0.length, nFlt: list.length, unit: 'khách', actOpt: true,
-    build: o => ({ name: `bao-cao-tuyen-123-${d}${o.flt ? '-loc' : ''}.html`, title: `Báo cáo tuyến 123 ${vn(d)}`, body: t1PrintDoc(d, o.flt ? list : all0, Object.assign(o, { note: o.flt ? note : '' })) }),
+    title: 'In theo yêu cầu – tuyến kebab 123 ' + vn(d), key: 'prT1', defTitle: 'BÁO CÁO TUYẾN KEBAB 123', unit: 'khách', nAll: all0.length,
+    flt: note ? { n: flist.length, note } : null,
+    conds: [
+      { key: 'g', name: 'Tuyến', items: T123_GROUPS.map(([g, name]) => [g, name, n(c => c.g === g)]) },
+      { key: 'ht', name: 'Hỗ trợ', items: [['co', 'Khách hỗ trợ', n(c => c.ht)], ['khong', 'Không hỗ trợ', n(c => !c.ht)]] },
+    ],
+    sections: [['sum', 'Bảng tổng theo tuyến'], ['det', 'Danh sách / chi tiết từng khách']], extra: [['act', 'Chỉ in khách có hàng (HOẠT ĐỘNG)', true]],
+    cols: T1_PRINT_COLS(), colOn: k => k === 'phone' || t1On(k),
+    build: o => {
+      const list = all0.filter(c => (o.scope !== 'flt' || fset.has(c.id)) && o.cond.g.has(c.g) && o.cond.ht.has(c.ht ? 'co' : 'khong'));
+      return { count: o.x.act ? list.filter(act).length : list.length, name: `bao-cao-tuyen-123-${d}${list.length === all0.length ? '' : '-chon'}.html`, title: `${o.head} ${vn(d)}`,
+        body: t1PrintDoc(d, list, { head: o.head, note: [o.scope === 'flt' ? note : '', o.condNote].filter(Boolean).join(' · '), sec: o.sec, act: o.x.act, cols: o.cols, brk: o.brk, sign: o.sign }) };
+    },
   });
 }
 function t1Totals() {
