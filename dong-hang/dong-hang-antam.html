@@ -157,9 +157,33 @@ tbody tr.grp:hover td { background: var(--accent-soft); }
 .colpick legend { font-size: 12px; font-weight: 700; color: var(--ink-2); padding: 0 4px; }
 .colpick label { display: flex; gap: 6px; align-items: center; font-size: 13px; cursor: pointer; }
 .prs { display: grid; gap: 10px; }
-/* in trực tiếp: chỉ in vùng #print-area, nền trắng, khổ A4 ngang */
+/* in: chỉ in vùng #print-area, nền trắng, khổ A4 ngang (trên claude.ai: chuẩn bị sẵn rồi bấm Ctrl+P) */
 #print-area { display: none; }
+.paper { --bg: #f4f6f3; --panel: #ffffff; --ink: #1d2a24; --ink-2: #4c5c54; --muted: #7b8a82; --line: #dfe5e0; --line-2: #eef2ef;
+  --accent: #0f6e5a; --accent-ink: #ffffff; --accent-soft: #e2f1ec; --crust: #b86a1d; --crust-soft: #f8ecdd;
+  --good: #1f7a46; --good-soft: #e1f3e7; --bad: #b4232c; --bad-soft: #fbe5e6; --warn: #8a5a00; --warn-soft: #fbf0d6;
+  --input: #ffffff; --hover: #f1f6f3; --shadow: 0 8px 28px rgba(20, 40, 30, .14);
+  --hit: #fff6c7; --hit-bar: #e0a400; --mark: #ffd84d;
+  /* màu nhóm sản phẩm: đậm (vạch, chữ tiêu đề) / nhạt (nền cột) */
+  --g-thuong: #a8650f; --g-thuong-s: #fdf3e2; --g-dacbiet: #4f7a1f; --g-dacbiet-s: #eef6e3; --g-tuoi: #1f6fa8; --g-tuoi-s: #e5f1fa;
+  --g-kebab: #b23a2e; --g-kebab-s: #fcebe8; --g-thit: #6c4bb0; --g-thit-s: #f1ecfb; --g-khac: #5c6a64; --g-khac-s: #eef1ef;
+  --f-body: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-num: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --r: 8px; color-scheme: light; background: #fff; color: var(--ink); }
+.pv-box { max-height: min(62vh, 640px); overflow: auto; border: 1px solid var(--line); border-radius: 8px; }
+.pv-box .paper { padding: 14px; min-width: 900px; }
 @media print {
+  :root:root:not([data-x]) { --bg: #f4f6f3; --panel: #ffffff; --ink: #1d2a24; --ink-2: #4c5c54; --muted: #7b8a82; --line: #dfe5e0; --line-2: #eef2ef;
+  --accent: #0f6e5a; --accent-ink: #ffffff; --accent-soft: #e2f1ec; --crust: #b86a1d; --crust-soft: #f8ecdd;
+  --good: #1f7a46; --good-soft: #e1f3e7; --bad: #b4232c; --bad-soft: #fbe5e6; --warn: #8a5a00; --warn-soft: #fbf0d6;
+  --input: #ffffff; --hover: #f1f6f3; --shadow: 0 8px 28px rgba(20, 40, 30, .14);
+  --hit: #fff6c7; --hit-bar: #e0a400; --mark: #ffd84d;
+  /* màu nhóm sản phẩm: đậm (vạch, chữ tiêu đề) / nhạt (nền cột) */
+  --g-thuong: #a8650f; --g-thuong-s: #fdf3e2; --g-dacbiet: #4f7a1f; --g-dacbiet-s: #eef6e3; --g-tuoi: #1f6fa8; --g-tuoi-s: #e5f1fa;
+  --g-kebab: #b23a2e; --g-kebab-s: #fcebe8; --g-thit: #6c4bb0; --g-thit-s: #f1ecfb; --g-khac: #5c6a64; --g-khac-s: #eef1ef;
+  --f-body: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-num: "JetBrains Mono", ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  --r: 8px; color-scheme: light; }
   body.printing > *:not(#print-area) { display: none !important; }
   body.printing::before { display: none; }
   body.printing { background: #fff; color: #111; padding: 0; }
@@ -1418,7 +1442,7 @@ function viewPrint(main) {
       <button class="btn" id="p-csv">Tải Excel (CSV)</button>
       <button class="btn" id="p-html">⬇ Tải file in</button><button class="btn pri" id="p-print">🖨 In</button></div>
     <div class="card" id="p-doc">${printDoc(d, r, S.day && S.day.tuyen)}</div>
-    <p class="hint">Bấm <b>🖨 In</b> để mở hộp thoại in (khổ A4 ngang). Nếu trình duyệt không cho in ngay trong trang, web tự tải file in – mở file là hộp thoại in hiện ra.</p>`;
+    <p class="hint">Bấm <b>🖨 In</b> (hoặc bấm thẳng <b>Ctrl+P</b>) để in bản này, khổ A4 ngang.</p>`;
   const go = nd => { watchDay(nd); render(); };
   $('#p-prev').onclick = () => go(addDays(d, -1)); $('#p-next').onclick = () => go(addDays(d, 1));
   $('#p-date').onchange = e => e.target.value && go(e.target.value);
@@ -1447,45 +1471,39 @@ function colChooser({ title, groups, key, onChange, extra = '', bindExtra }) {
   cnt();
 }
 // hộp in báo cáo: tất cả hoặc theo bộ lọc đang chọn → tải file HTML rồi mở bằng trình duyệt, Ctrl+P
-// In trực tiếp: dựng bản in ngay trong trang rồi mở hộp thoại in của trình duyệt. Khung trang chặn in (không có sự kiện
-// beforeprint – như khi mở trên claude.ai) thì mở bản in ở tab mới, tab đó tự mở hộp thoại in; trình duyệt chặn cả tab mới
-// thì mới tải file in về.
-// Thứ tự: mở tab in (gọi ngay trong lúc bấm, trước mọi lệnh chờ, để trình duyệt không chặn) → in ngay trong trang →
-// tải file in (claude.ai chặn cả hộp thoại in lẫn tab mới của trang: chỉ còn cách này).
+// In: thử mở hộp thoại in của trình duyệt. Trên claude.ai trang không được tự mở hộp thoại in, nên web giữ sẵn bản in
+// trong trang và hiện xem trước – bấm Ctrl+P (⌘+P) là trình duyệt in đúng bản này (giống web Kho).
+const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+function setPrint(title, body) {
+  $('#print-area').innerHTML = body || '';
+  document.body.classList.toggle('printing', !!body);
+  if (body) { setPrint.old = setPrint.old || document.title; document.title = title; } else if (setPrint.old) { document.title = setPrint.old; setPrint.old = null; }
+}
 async function directPrint(title, body, file) {
-  if (openPrintTab(title, body)) { toast('Đã mở bản in ở tab mới – hộp thoại in tự hiện (nếu không, bấm Ctrl+P ở tab đó)'); return true; }
-  if (await printInPage(title, body)) return true;
-  if (store('printTip') !== 1) {
-    store('printTip', 1);
-    const go = await new Promise(res => modal({ title: 'In báo cáo trên claude.ai', ok: 'Tải bản in', onOk: () => true, onClose: res,
-      body: `<p style="margin-top:0">claude.ai không cho trang web tự mở hộp thoại in hay mở tab mới, nên web sẽ tải <b>bản in</b> về máy.</p>
-        <ol style="margin:0;padding-left:20px;line-height:1.7"><li>Bấm <b>Save file</b> ở hộp hỏi của claude.ai.</li><li>Mở file vừa tải (thanh tải xuống của trình duyệt) – <b>hộp thoại in tự bật</b>, chọn máy in và bấm In.</li></ol>
-        <p class="hint">Thông báo này chỉ hiện lần đầu.</p>` }));
-    if (!go) return false;
-  }
-  await saveFile(file, printablePage(title, body, true), 'text/html');
-  return false;
-}
-function openPrintTab(title, body) {
-  let w = null;
-  const url = URL.createObjectURL(new Blob([printablePage(title, body, true)], { type: 'text/html;charset=utf-8' }));
-  try { w = window.open(url, '_blank'); } catch (e) { w = null; }
-  setTimeout(() => URL.revokeObjectURL(url), 120000);
-  return !!w;
-}
-async function printInPage(title, body) {
-  const area = $('#print-area'), root = document.documentElement, old = { theme: root.dataset.theme, title: document.title };
+  setPrint(title, body);
   let before = false, after = false;
-  const onBefore = () => { before = true; }, onAfter = () => { after = true; };
-  addEventListener('beforeprint', onBefore); addEventListener('afterprint', onAfter);
-  area.innerHTML = body; document.body.classList.add('printing'); root.dataset.theme = 'light'; document.title = title;
+  const onB = () => { before = true; }, onA = () => { after = true; };
+  addEventListener('beforeprint', onB); addEventListener('afterprint', onA);
   try { window.print(); } catch (e) { console.warn('print', e); }
-  await sleep(250);
-  if (before && !after) await new Promise(res => { const t = setInterval(() => { if (after) { clearInterval(t); res(); } }, 300); setTimeout(() => { clearInterval(t); res(); }, 180000); });
-  removeEventListener('beforeprint', onBefore); removeEventListener('afterprint', onAfter);
-  area.innerHTML = ''; document.body.classList.remove('printing'); document.title = old.title;
-  if (old.theme === undefined) delete root.dataset.theme; else root.dataset.theme = old.theme;
-  return before;
+  await sleep(80);
+  if (before) {
+    if (!after) await new Promise(res => { const t = setInterval(() => { if (after) { clearInterval(t); res(); } }, 300); setTimeout(() => { clearInterval(t); res(); }, 180000); });
+    removeEventListener('beforeprint', onB); removeEventListener('afterprint', onA); setPrint('');
+    return true;
+  }
+  removeEventListener('beforeprint', onB); removeEventListener('afterprint', onA);
+  const key = `<kbd>${IS_MAC ? '⌘' : 'Ctrl'}</kbd> + <kbd>P</kbd>`;
+  const m = modal({
+    title: 'Bản in đã sẵn sàng – bấm ' + (IS_MAC ? '⌘' : 'Ctrl') + ' + P', wide: true,
+    body: `<div class="callout" style="margin:0 0 10px;padding:10px 12px;border-radius:8px;background:var(--accent-soft)">Bấm ${key} trên bàn phím để mở hộp thoại in – chỉ in bản bên dưới (khổ A4 ngang).
+        <span class="hint">Điện thoại: menu trình duyệt → In. In xong bấm Đóng.</span></div>
+      <div class="pv-box"><div class="paper">${body}</div></div>
+      <div class="row" style="margin-top:10px"><span class="grow"></span><button class="btn sm" id="pv-file">⬇ Tải file in</button></div>`,
+    onClose: () => setPrint(''),
+  });
+  $('#pv-file', m.root).onclick = () => guard(() => saveFile(file, printablePage(title, body, true), 'text/html'));
+  const ok = $('[data-x]', m.root); if (ok) ok.focus();
+  return false;
 }
 function printModal({ title, note, nAll, nFlt, unit, actOpt, build }) {
   const m = modal({
@@ -1496,7 +1514,7 @@ function printModal({ title, note, nAll, nFlt, unit, actOpt, build }) {
         : `<p class="hint" style="margin:0">Đang in <b>tất cả</b> (${fmt(nAll)} ${unit}). Muốn in theo yêu cầu: đóng hộp này, chọn lọc ở ô tìm / dòng "▼ Lọc theo cột" dưới tiêu đề bảng rồi bấm In báo cáo.</p>`}
       ${actOpt ? '<label><input type="checkbox" id="pr-act" checked><span>Chi tiết chỉ in khách có hàng (HOẠT ĐỘNG)</span></label>' : ''}
       <label><input type="checkbox" id="pr-det" checked><span>Kèm bảng chi tiết từng khách</span></label>
-      <div class="row" style="align-items:center;margin-top:4px"><span class="hint grow">Bấm <b>🖨 In</b> để mở hộp thoại in (khổ A4 ngang). Cần lưu lại hoặc gửi đi thì bấm Tải file in.</span>
+      <div class="row" style="align-items:center;margin-top:4px"><span class="hint grow">Bấm <b>🖨 In</b> → bấm <b>Ctrl+P</b> để in (khổ A4 ngang). Cần lưu lại hoặc gửi đi thì bấm Tải file in.</span>
         <button class="btn sm" id="pr-file">⬇ Tải file in</button></div></div>`,
     onOk: async root => { const r = build(opts(root)); await directPrint(r.title, r.body, r.name); return true; },
   });
