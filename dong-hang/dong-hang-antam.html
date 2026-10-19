@@ -136,6 +136,10 @@ tbody tr.grp:hover td { background: var(--accent-soft); }
 .t1t td[data-out=le], .t1t .t1tot td.small { white-space: nowrap; }
 .t1t .t1ht { white-space: nowrap; }
 .t1flt { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 10px; border-radius: 6px; background: var(--hit); font-size: 13px; }
+.kho-bar { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; font-size: 12.5px; }
+.kho-st { color: var(--muted); }
+.kho-st.ok { color: var(--good); font-weight: 600; }
+.kho-st.wait { color: var(--warn); }
 .rtchips { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
 .rtchip { border: 1px solid var(--line); background: var(--panel); color: var(--ink-2); border-radius: 999px; padding: 3px 10px; font-size: 12.5px; font-weight: 600; cursor: pointer; font-family: var(--f-body); }
 .rtchip b { font-family: var(--f-num); color: var(--accent); margin-left: 2px; }
@@ -495,6 +499,8 @@ async function boot() {
   $('#me-name').textContent = S.me || 'Đặt tên';
   // cài đặt: dùng mặc định ngay, có bản đã lưu thì thay
   S.loaded.cfg = true;
+  db.doc('khoout/index').onSnapshot(s => { S.khoIdx = (s.exists && (s.data() || {}).s) || {}; drawKho(); }, () => {});
+  db.doc('khoack/index').onSnapshot(s => { S.khoAck = (s.exists && (s.data() || {}).s) || {}; drawKho(); }, () => {});
   db.doc('cfg/main').onSnapshot(s => {
     const d = s.exists ? s.data() : null;
     S.cfg = Object.assign(JSON.parse(JSON.stringify(DEFAULT_CFG)), d || {});
@@ -595,6 +601,65 @@ const packLabel = r => LABEL_ORDER.filter(k => r[k]).map(k => `${r[k]} ${NEED.fi
 function orderOf(cid) { return (S.day && S.day.r[cid]) || null; }
 function statusOf(o) { if (!o) return 'NGHỈ'; if (o.hd) return o.hd; return qtyTotal(o.q) > 0 ? 'HOẠT ĐỘNG' : 'NGHỈ'; }
 const hasOrder = o => !!o && statusOf(o) === 'HOẠT ĐỘNG';
+/* ================================================================ TỰ CHUYỂN SANG WEB KHO → GIAO HÀNG */
+// Đơn hàng ngày (đã chia tuyến) và tuyến kebab 123 được để sẵn ở "khoout/<ngày>" và "khoout/<ngày>-t123" (danh mục ở
+// "khoout/index"). Tác vụ định kỳ mỗi giờ chép sang web Kho An Tâm (ghi đã chép vào "khoack/index"); web kho tự lập bảng
+// Phân tuyến giao hàng rồi tự chuyển tiếp sang Giao hàng An Tâm.
+const KHO_DELAY = 30000;
+const khoTimers = {};
+const khoId = (kind, d) => (kind === 't123' ? d + '-t123' : d);
+function khoOutLater(kind, d) {
+  if (!d || S.readOnly) return;
+  const id = khoId(kind, d);
+  clearTimeout(khoTimers[id]);
+  khoTimers[id] = setTimeout(() => { delete khoTimers[id]; khoOut(kind, d).catch(e => toast('Gửi sang kho: ' + e.message, true)); }, KHO_DELAY);
+  drawKho();
+}
+const tsvOf = rows => rows.map(r => r.map(x => String(x == null ? '' : x).replace(/[\t\r\n]+/g, ' ')).join('\t')).join('\n');
+// bảng tuyến kebab 123 theo mẫu "2-KHÁCH TUYẾN 123" mà web kho đọc được: cột A = T1 / T2 / chiều / T3
+function t1KhoRows(dayR) {
+  const lab = { t1: 'T1', t2: 'T2', chieu: 'chiều', t3: 'T3' };
+  const out = [['TUYẾN', 'HỖ TRỢ', 'CRM', 'TÊN KHÁCH HÀNG', 'SĐT', 'TÌNH TRẠNG'].concat(T123_P.map(([, l]) => l)).concat(['GHI CHÚ'])];
+  for (const c of t1List()) {
+    const o = (dayR || {})[c.id] || {};
+    out.push([lab[c.g] || c.g, c.ht ? 'HỖ TRỢ' : '', c.crm, c.name, c.phone, t1Status(o)].concat(T123_P.map(([k]) => t1V(o, k) || '')).concat([[c.note, o.gc].filter(Boolean).join(' · ')]));
+  }
+  return out;
+}
+async function khoOut(kind, d) {
+  const id = khoId(kind, d), snap = await S.db.doc((kind === 't123' ? 't123/' : 'ngay/') + d).get();
+  const r = (snap.exists ? snap.data() || {} : {}).r || {};
+  const rows = kind === 't123' ? t1KhoRows(r) : routingRows(r);
+  const n = kind === 't123' ? live(r).filter(([, o]) => t1Status(o) === 'HOẠT ĐỘNG').length : rows.length - 1;
+  const stamp = nowStr() + ' ' + rid('s'), at = nowStr();
+  const title = kind === 't123' ? 'Tuyến kebab 123 (web Đóng hàng)' : 'Đơn hàng ngày (web Đóng hàng)';
+  await setDoc('khoout/' + id, { stamp, date: d, kind, title, tsv: tsvOf(rows), n, at });
+  const old = addDays(today(), -10), prev = (S.khoIdx || {}), patch = { [id]: { stamp, date: d, kind, n, at } };
+  for (const [k, e] of Object.entries(prev)) if (e && e.date < old) { patch[k] = null; S.db.doc('khoout/' + k).delete().catch(() => {}); }
+  await mergeInto('khoout/index', { s: patch }, { s: {} });
+  S.khoIdx = Object.assign({}, prev, patch); drawKho();
+}
+function khoStatusHtml(id) {
+  const e = (S.khoIdx || {})[id], ack = (S.khoAck || {})[id], hm = x => String(x || '').slice(11, 16);
+  if (khoTimers[id]) return '<span class="kho-st wait">⏳ Đang gom thay đổi để gửi sang kho…</span>';
+  if (!e) return '<span class="kho-st">🔗 Chưa gửi sang kho</span>';
+  if (ack && ack === e.stamp) return `<span class="kho-st ok" title="Web kho tự lập bảng Phân tuyến rồi chuyển tiếp sang Giao hàng An Tâm">✓ Đã chuyển sang kho · ${fmt(e.n)} khách (bản ${hm(e.at)})</span>`;
+  return `<span class="kho-st wait" title="Tác vụ tự động chạy mỗi giờ (phút thứ 7) chép sang web kho">📤 Chờ chuyển sang kho · bản ${hm(e.at)}, ${fmt(e.n)} khách – tự chuyển trong ≤ 1 giờ</span>`;
+}
+function drawKho() {
+  $$('[data-kho]').forEach(el => { el.innerHTML = khoStatusHtml(el.dataset.kho); });
+}
+function khoBar(kind, d) {
+  return `<span class="kho-bar"><span data-kho="${esc(khoId(kind, d))}">${khoStatusHtml(khoId(kind, d))}</span>
+    <button class="btn sm ghost" data-kho-send="${kind}" title="Để sẵn bản mới nhất cho web kho ngay bây giờ">📤 Gửi kho</button></span>`;
+}
+function bindKhoBar(d) {
+  $$('[data-kho-send]').forEach(b => b.onclick = () => guard(async () => {
+    const kind = b.dataset.khoSend, id = khoId(kind, d);
+    clearTimeout(khoTimers[id]); delete khoTimers[id];
+    await khoOut(kind, d); toast('Đã để sẵn cho web kho – tác vụ tự động chép sang trong ≤ 1 giờ');
+  }));
+}
 /* ================================================================ PHÂN TUYẾN GIAO HÀNG */
 // Danh sách tuyến + quy tắc chia giống web Kho An Tâm › Phân tuyến giao hàng (mã tuyến trùng mã bên kho):
 // mỗi tuyến ghi các quận / chành xe / từ khóa thuộc tuyến
@@ -679,7 +744,7 @@ function editRoutes() {
       if (!list.length) throw new Error('Cần ít nhất 1 tuyến');
       const dup = list.find((r, i) => list.findIndex(x => x.code.toLowerCase() === r.code.toLowerCase()) !== i); if (dup) throw new Error('Trùng mã tuyến ' + dup.code);
       S.cfg.routes = list; rtMemoCfg = null;
-      await setDoc('cfg/main', cfgDoc()); toast('Đã lưu tuyến – các đơn được chia lại theo quy tắc mới'); render(); return true;
+      await setDoc('cfg/main', cfgDoc()); khoOutLater('don', S.date); toast('Đã lưu tuyến – các đơn được chia lại theo quy tắc mới'); render(); return true;
     },
   });
   const body = $('#rt-body', m.root);
@@ -857,6 +922,7 @@ function viewDay(main) {
       </div>
       ${miniHtml(dayReport(S.day ? S.day.r : {}, S.day && S.day.tuyen))}
       <div class="rtchips" id="d-rt"></div>
+      ${khoBar('don', d)}
       <div id="d-rep-wrap" ${S.repOpen ? '' : 'hidden'}>${reportHtml(dayReport(S.day ? S.day.r : {}, S.day && S.day.tuyen), tot.need, S.day && S.day.tuyen, true)}</div>
     </div>
     <div class="row">
@@ -873,7 +939,7 @@ function viewDay(main) {
   $('#d-today').onclick = () => { shown = PAGE; watchDay(today()); render(); };
   $('#d-date').onchange = e => { if (e.target.value) { shown = PAGE; watchDay(e.target.value); render(); } };
   $('#d-print').onclick = () => setView('in');
-  $('#d-rp').onclick = () => dayPrint(d);
+  $('#d-rp').onclick = () => dayPrint(d); bindKhoBar(d);
   $('#d-rep-t').onclick = () => setRepOpen(!S.repOpen);
   $('#d-max').onclick = () => setMax(!document.body.classList.contains('tbl-max'));
   bindReport();
@@ -1056,7 +1122,7 @@ function patchRow(cid, patch) {
     pendingWrites--; delete rowTimers[cid];
     const rec = S.localRows[cid]; delete S.localRows[cid];
     const d = S.date;
-    mergeInto('ngay/' + d, { r: { [cid]: rec } }, { date: d }).catch(e => toast(e.message, true));
+    mergeInto('ngay/' + d, { r: { [cid]: rec } }, { date: d }).then(() => khoOutLater('don', d)).catch(e => toast(e.message, true));
   }, 700);
 }
 function bindRows(el) {
@@ -1772,6 +1838,7 @@ function viewT123(main) {
         <button class="btn sm" id="t1-copy" title="Lấy số lượng của ngày gần nhất trước đó làm sẵn">Chép số ngày trước</button>
         <button class="btn sm pri" id="t1-send" title="Ghi tổng số tuyến 123 vào dòng BÁNH TUYẾN của Đơn hàng ngày">→ Đưa vào Bánh tuyến</button>
       </div>
+      ${khoBar('t123', d)}
       <div id="t1-sum"></div>
       <div class="row" style="align-items:center">
         <span class="hint">Giá: ${T123_P.map(([k, l, , u]) => `${esc(l)} ${pr[k] ? fmt(pr[k]) + 'đ/' + u : '<b style="color:var(--bad)">chưa có</b>'}`).join(' · ')}</span>
@@ -1791,7 +1858,7 @@ function viewT123(main) {
   $('#t1-price').onclick = t1EditPrice; $('#t1-add').onclick = () => t1EditCust(null); $('#t1-import').onclick = t1Import;
   $('#t1-copy').onclick = () => guard(t1CopyPrev); $('#t1-send').onclick = () => guard(t1Send);
   $('#t1-csv').onclick = () => guard(() => saveFile(`tuyen-123-${d}.csv`, '﻿' + toCsv(t1Rows()), 'text/csv'));
-  $('#t1-print').onclick = t1Print;
+  $('#t1-print').onclick = t1Print; bindKhoBar(d);
   let qt; $('#t1f-q').oninput = e => { clearTimeout(qt); qt = setTimeout(() => { f.q = e.target.value; t1SaveF(); t1Draw(); }, 220); };
   $$('#t1f-g button').forEach(b => b.onclick = () => { f.g = b.dataset.g; t1SaveF(); $$('#t1f-g button').forEach(x => x.classList.toggle('on', x === b)); t1Draw(); });
   t1Draw();
@@ -1894,7 +1961,7 @@ function t1Patch(cid, patch) {
   S.t1.timers[cid] = setTimeout(() => {
     pendingWrites--; delete S.t1.timers[cid];
     const rec = S.t1.local[cid]; delete S.t1.local[cid];
-    mergeInto('t123/' + d, { r: { [cid]: rec } }, { date: d }).catch(e => toast(e.message, true));
+    mergeInto('t123/' + d, { r: { [cid]: rec } }, { date: d }).then(() => khoOutLater('t123', d)).catch(e => toast(e.message, true));
   }, 700);
 }
 function t1Bind() {
@@ -1975,7 +2042,7 @@ async function t1CopyPrev() {
     patch[cid] = { q: Object.fromEntries(T123_P.map(([k]) => [k, t1V(o, k)]).filter(([, v]) => v)), at: nowStr(), by: S.me || '' };
   }
   if (!Object.keys(patch).length) return toast('Không có gì để chép');
-  await mergeInto('t123/' + d, { r: patch }, { date: d });
+  await mergeInto('t123/' + d, { r: patch }, { date: d }); khoOutLater('t123', d);
   toast(`Đã chép ${Object.keys(patch).length} khách từ ngày ${vn(prev.date)}`);
 }
 // ghi tổng tuyến 123 vào dòng BÁNH TUYẾN của Đơn hàng ngày (cây thịt 5 / 12 / 18 kg tính 1 cây)
@@ -2105,7 +2172,7 @@ function t1Import() {
           const auto = Object.keys(x.q).length ? 'HOẠT ĐỘNG' : 'NGHỈ';
           if (Object.keys(x.q).length || (x.st && x.st !== auto)) r[idOf[key(x)]] = Object.assign({ q: x.q, at: nowStr() }, x.st && x.st !== auto ? { st: x.st } : {});
         }
-        await setDoc('t123/' + d, { date: d, r });
+        await setDoc('t123/' + d, { date: d, r }); khoOutLater('t123', d);
       }
       toast(`Đã cập nhật ${parsed.length} khách tuyến 123 (${nNew} khách mới)`); render(); return true;
     },

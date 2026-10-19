@@ -2750,7 +2750,49 @@ async function bootKho() {
   await render();
   if (!S.user && !VIEW && !S.account) askUser();
   checkNotices();
+  pullDhInbox();
 }
+
+/* ============================================================ nhận đơn hàng từ web Đóng hàng An Tâm */
+// Web Đóng hàng chia tuyến sẵn cho đơn hàng ngày và tuyến kebab 123; tác vụ định kỳ chép vào "dhin" của trang này.
+// Web kho tự lập (hoặc cập nhật) bảng Phân tuyến giao hàng của ngày, giữ tuyến kho đã chọn tay, lưu, rồi để sẵn gói
+// chuyển tiếp sang Giao hàng An Tâm – không cần dán sheet.
+const DH_EVERY = 120000;
+let dhTimer = null, dhBusy = false;
+async function pullDhInbox() {
+  if (!ONLINE || VIEW || GIAO_APP || dhBusy) return;
+  if (!dhTimer) dhTimer = setInterval(pullDhInbox, DH_EVERY);
+  dhBusy = true;
+  const got = [];
+  try {
+    const list = await api('GET', '/dh-inbox').catch(() => []);
+    for (const x of list || []) {
+      try {
+        if (S.dirty && x.doc && location.hash.includes(x.doc)) continue; // đang sửa chính bảng này: để lần sau
+        const p = parseOrderSheet(String(x.tsv).split('\n').map(l => l.split('\t')));
+        let docId = x.doc || '';
+        const old = docId ? await api('GET', '/docs/' + encodeURIComponent(docId)).catch(() => null) : null;
+        if (!old) docId = '';
+        if (!p.rows.length && !old) { await api('POST', '/dh-inbox', { id: x.id, stamp: x.stamp, doc: '' }); continue; }
+        const od = (old && old.data) || {};
+        const manual = Object.fromEntries((od.rows || []).filter(r => r.src === 'tay').map(r => [r.cust, r.route]));
+        const cfg = routingCfg();
+        p.rows.forEach(r => { [r.route, r.src] = autoRoute(r, cfg); if (manual[r.cust] !== undefined) { r.route = manual[r.cust]; r.src = 'tay'; } });
+        const body = { kind: 'routing', date: x.date, title: text0(x.title) || 'Web Đóng hàng An Tâm',
+          data: { sheet: text0(x.title) || 'Web Đóng hàng An Tâm', cols: p.cols, rows: p.rows, total: p.total, assign: od.assign || {}, from: 'dong-hang:' + x.id } };
+        const res = docId ? await api('PUT', '/docs/' + encodeURIComponent(docId) + '?wh=TP', body) : await api('POST', '/docs?wh=TP', body);
+        docId = res.id;
+        if (GIAO_LINKED) await api('POST', '/giao-sync/out?id=' + encodeURIComponent(docId)).catch(e => console.warn('giaoout', e));
+        await api('POST', '/dh-inbox', { id: x.id, stamp: x.stamp, doc: docId });
+        got.push(`${vnDate(x.date)} – ${x.kind === 't123' ? 'tuyến kebab 123' : 'đơn hàng ngày'} (${p.rows.length} khách)`);
+      } catch (e) { console.warn('dhin', x.id, e); }
+    }
+  } finally { dhBusy = false; }
+  if (!got.length) return;
+  toast('Đã tự nhận từ web Đóng hàng: ' + got.join('; ') + (GIAO_LINKED ? ' – sẽ tự chuyển sang Giao hàng An Tâm' : ''));
+  if (!S.dirty && location.hash.startsWith('#/phan-tuyen')) render();
+}
+const text0 = v => String(v == null ? '' : v).trim();
 
 /* ============================================================ thông báo cho nhân viên (kết quả duyệt phiếu) */
 const NOTICE_EVERY = 60000;

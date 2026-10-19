@@ -924,6 +924,27 @@ const Backend = (() => {
     }
     return { got };
   }
+  // Nhận đơn hàng từ web Đóng hàng An Tâm: tác vụ định kỳ chép "khoout" của trang đóng hàng vào "dhin" của trang này
+  // ({stamp, date, kind: 'don' | 't123', title, tsv}); web kho (app.js) tự lập bảng Phân tuyến rồi ghi đã nhận vào
+  // "dhdone/index" {mã: {stamp, doc: mã bảng phân tuyến}}
+  async function dhInbox(method, body) {
+    const done = (docData(await dbx().doc('dhdone/index').get()) || {}).s || {};
+    if (method === 'GET') {
+      const snap = await dbx().collection('dhin').limit(60).get();
+      return snap.docs.map(d => Object.assign({}, d.data() || {}, { id: d.id }))
+        .filter(x => x.stamp && typeof x.tsv === 'string' && validDateOk(x.date) && (done[x.id] || {}).stamp !== x.stamp)
+        .map(x => Object.assign(x, { doc: (done[x.id] || {}).doc || '' }))
+        .sort((a, b) => (a.date < b.date ? -1 : 1));
+    }
+    if (method === 'POST') {
+      const id = text(body.id);
+      if (!id) throw new ApiError(400, 'Thiếu mã');
+      await mergeInto(dbx().doc('dhdone/index'), { s: { [id]: { stamp: text(body.stamp), doc: text(body.doc), at: nowStr() } } }, { s: {} });
+      return { ok: true };
+    }
+    throw new ApiError(404, 'Không có chức năng này');
+  }
+  const validDateOk = d => /^\d{4}-\d{2}-\d{2}$/.test(String(d || ''));
   async function giaoSync(method, q, body, arg) {
     if (arg === 'out' && method === 'POST') return giaoOutbox(q);
     if (arg === 'inbox' && method === 'POST') return giaoInbox();
@@ -1102,6 +1123,7 @@ const Backend = (() => {
     const hasStaff = live(settings().staff_accounts).length > 0;
     const me = hasStaff ? (staffMe(opts.token || '') || ['', {}]) : null;
     if (res === 'giao-sync') return giaoSync(method, q, body || {}, arg);
+    if (res === 'dh-inbox') return dhInbox(method, body || {});
     if (res === 'drivers') {
       if (method === 'GET') return Object.entries(drivers()).map(([k, d]) => publicDriver(k, d));
       if (method === 'POST') return saveDriver(body || {});

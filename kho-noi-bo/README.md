@@ -73,6 +73,11 @@ Nếu trước đây đã dùng bản web 1 kho, khi chạy bản mới dữ li�
 
 ## Phân tuyến giao hàng (kho TP)
 
+**Tự động từ web Đóng hàng An Tâm**: đơn hàng ngày (đã chia tuyến) và tuyến kebab 123 nhập ở web Đóng hàng được tác vụ
+tự động mỗi giờ chép vào `dhin/*` của trang kho. Khi có người mở web kho (trang tự kiểm tra 2 phút/lần), kho tự lập hoặc cập
+nhật bảng Phân tuyến của ngày đó (tiêu đề "… (web Đóng hàng)", giữ tuyến đã chọn tay), lưu, ghi đã nhận ở `dhdone/index`,
+rồi để sẵn gói chuyển sang Giao hàng An Tâm như khi bấm Lưu. Không cần dán sheet cho các đơn này nữa.
+
 Mục **Phân tuyến giao hàng** chia khách đặt hàng trong ngày vào các tuyến, theo file Google Sheet
 "BÁO CÁO HẰNG NGÀY TUYẾN LẺ" (mỗi ngày một sheet, vd `14.10`):
 
