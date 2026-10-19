@@ -765,23 +765,23 @@ async function khoOut(kind, d) {
 }
 function khoStatusHtml(id) {
   const e = (S.khoIdx || {})[id], ack = (S.khoAck || {})[id], hm = x => String(x || '').slice(11, 16);
-  if (khoTimers[id]) return '<span class="kho-st wait">⏳ Đang gom thay đổi để gửi sang kho…</span>';
-  if (!e) return '<span class="kho-st">🔗 Chưa gửi sang kho</span>';
-  if (ack && ack === e.stamp) return `<span class="kho-st ok" title="Web kho tự lập bảng Phân tuyến rồi chuyển tiếp sang Giao hàng An Tâm">✓ Đã chuyển sang kho · ${fmt(e.n)} khách (bản ${hm(e.at)})</span>`;
-  return `<span class="kho-st wait" title="Tác vụ tự động chạy mỗi giờ (phút thứ 7) chép sang web kho">📤 Chờ chuyển sang kho · bản ${hm(e.at)}, ${fmt(e.n)} khách – tự chuyển trong ≤ 1 giờ</span>`;
+  if (khoTimers[id]) return '<span class="kho-st wait">⏳ Đang gom thay đổi để gửi sang Giao hàng & Kho…</span>';
+  if (!e) return '<span class="kho-st">🔗 Chưa gửi sang Giao hàng & Kho</span>';
+  if (ack && ack === e.stamp) return `<span class="kho-st ok" title="Trang Giao hàng An Tâm tự lập tuyến cho từng người giao khi có người mở; web Kho nhận bản theo dõi">✓ Đã chuyển sang Giao hàng & Kho · ${fmt(e.n)} khách (bản ${hm(e.at)})</span>`;
+  return `<span class="kho-st wait" title="Tác vụ tự động chạy mỗi giờ (phút thứ 7) chép thẳng sang web Giao hàng An Tâm và web Kho">📤 Chờ chuyển sang Giao hàng & Kho · bản ${hm(e.at)}, ${fmt(e.n)} khách – tự chuyển trong ≤ 1 giờ</span>`;
 }
 function drawKho() {
   $$('[data-kho]').forEach(el => { el.innerHTML = khoStatusHtml(el.dataset.kho); });
 }
 function khoBar(kind, d) {
   return `<span class="kho-bar"><span data-kho="${esc(khoId(kind, d))}">${khoStatusHtml(khoId(kind, d))}</span>
-    <button class="btn sm ghost" data-kho-send="${kind}" title="Để sẵn bản mới nhất cho web kho ngay bây giờ">📤 Gửi kho</button></span>`;
+    <button class="btn sm ghost" data-kho-send="${kind}" title="Để sẵn bản mới nhất (kèm người giao) cho web Giao hàng và Kho ngay bây giờ">📤 Gửi ngay</button></span>`;
 }
 function bindKhoBar(d) {
   $$('[data-kho-send]').forEach(b => b.onclick = () => guard(async () => {
     const kind = b.dataset.khoSend, id = khoId(kind, d);
     clearTimeout(khoTimers[id]); delete khoTimers[id];
-    await khoOut(kind, d); toast('Đã để sẵn cho web kho – tác vụ tự động chép sang trong ≤ 1 giờ');
+    await khoOut(kind, d); toast('Đã để sẵn cho web Giao hàng & Kho – tác vụ tự động chép sang trong ≤ 1 giờ');
   }));
 }
 /* ================================================================ PHÂN TUYẾN GIAO HÀNG */

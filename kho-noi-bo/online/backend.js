@@ -960,32 +960,41 @@ const Backend = (() => {
       const routes = live(st.routes).map(([, r]) => r).sort((a, b) => (a.sort || 0) - (b.sort || 0))
         .map(r => ({ code: text(r.code), name: text(r.name) })).filter(r => r.code);
       return { format: SYNC_FORMAT, version: 1, at: nowStr(), date: doc.date, src: text(q.id),
-        doc: { date: doc.date, title: doc.title || '', data: { cols: doc.data.cols || [], rows: doc.data.rows || [], assign: doc.data.assign || {} } },
+        doc: { date: doc.date, title: doc.title || '', data: Object.assign({ cols: doc.data.cols || [], rows: doc.data.rows || [], assign: doc.data.assign || {} },
+          doc.data.from ? { from: text(doc.data.from), dhStamp: text(doc.data.dhStamp) } : {}) },
         routes, drivers: drivers() };
     }
     if (method === 'POST') {
       if (body.format !== SYNC_FORMAT || !body.doc || !Array.isArray((body.doc.data || {}).rows)) throw new ApiError(400, 'Dữ liệu không đúng. Hãy bấm "📤 Gửi sang Giao hàng An Tâm" ở web kho rồi dán lại.');
       const d = validDate(body.doc.date);
-      // tài khoản người giao: thay bằng danh sách của web kho (tài khoản đã xóa bên kho thì xóa ở đây)
+      // gói không kèm tài khoản / danh mục tuyến (đơn web Đóng hàng chuyển thẳng sang) thì giữ nguyên của trang này
       const patch = {};
-      Object.keys(drivers()).forEach(k => { patch[k] = null; });
-      for (const [k, v] of Object.entries(body.drivers || {})) if (v && typeof v === 'object' && v.nick && v.pin) {
-        patch[k] = { nick: text(v.nick), name: text(v.name), phone: text(v.phone), routes: (v.routes || []).map(text), active: v.active !== false, salt: text(v.salt), pin: text(v.pin) };
+      if (body.drivers) {
+        // tài khoản người giao: thay bằng danh sách của web kho (tài khoản đã xóa bên kho thì xóa ở đây)
+        Object.keys(drivers()).forEach(k => { patch[k] = null; });
+        for (const [k, v] of Object.entries(body.drivers || {})) if (v && typeof v === 'object' && v.nick && v.pin) {
+          patch[k] = { nick: text(v.nick), name: text(v.name), phone: text(v.phone), routes: (v.routes || []).map(text), active: v.active !== false, salt: text(v.salt), pin: text(v.pin) };
+        }
+        await mergeInto(ref.settings(), { s: { drivers: patch } }, { s: {} });
+        st.settings = deepMerge(clone(st.settings || {}), { drivers: patch });
       }
-      await mergeInto(ref.settings(), { s: { drivers: patch } }, { s: {} });
-      st.settings = deepMerge(clone(st.settings || {}), { drivers: patch });
-      const routes = Object.fromEntries((body.routes || []).map((r, i) => ['r' + i, { name: text(r.name), code: text(r.code), note: '', sort: i + 1 }]));
-      await write(() => ref.routes().set({ r: routes }));
-      st.routes = routes;
-      // mỗi bảng phân tuyến của web kho (tuyến lẻ, tuyến 1-2-3…) là 1 bảng ở đây; gửi lại cùng bảng thì thay bản cũ
-      const src = srcOf(body.src);
+      if (body.routes) {
+        const routes = Object.fromEntries((body.routes || []).map((r, i) => ['r' + i, { name: text(r.name), code: text(r.code), note: '', sort: i + 1 }]));
+        await write(() => ref.routes().set({ r: routes }));
+        st.routes = routes;
+      }
+      // mỗi bảng phân tuyến của web kho (tuyến lẻ, tuyến 1-2-3…) là 1 bảng ở đây; gửi lại cùng bảng thì thay bản cũ.
+      // Bảng lập từ đơn web Đóng hàng (data.from): đến thẳng từ Đóng hàng hay qua kho đều vào cùng 1 bảng; bản cũ hơn thì bỏ qua
+      const from = text((body.doc.data || {}).from);
+      const src = from ? srcOf(from) : srcOf(body.src);
       const id = `rt-${d}-${src}`;
       const old = (st.docs.TP || {})[id];
+      if (old && from && text((old.data || {}).dhStamp) > text(body.doc.data.dhStamp)) return { date: d, rows: 0, routes: 0, drivers: 0, skipped: true };
       const rec = { kind: 'routing', date: d, src, title: text(body.doc.title), data: body.doc.data, created_at: old ? old.created_at : nowStr(), updated_at: nowStr() };
       if (JSON.stringify(rec).length > 240000) throw new ApiError(413, 'Bảng phân tuyến quá lớn để lưu');
       await write(() => ref.doc('TP', id).set(rec));
       // bảng cũ của chính bảng này (nhận trước khi có mã nguồn) thì bỏ
-      const stale = ([k, x]) => k !== id && x && x.kind === 'routing' && x.date === d && (!x.src || x.src === src);
+      const stale = ([k, x]) => k !== id && x && x.kind === 'routing' && x.date === d && (!x.src || x.src === src || (from && x.data && x.data.from === from));
       for (const e of Object.entries(st.docs.TP || {})) if (stale(e)) await write(() => ref.doc('TP', e[0]).delete());
       st.docs.TP = Object.fromEntries(Object.entries(Object.assign({}, st.docs.TP, { [id]: rec })).filter(e => !stale(e)));
       const n = body.doc.data.rows.length;

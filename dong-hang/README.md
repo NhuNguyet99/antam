@@ -6,6 +6,10 @@ Web riêng (trang claude.ai, một file `dong-hang-antam.html`) thay cho Google 
   tự tính **định mức đóng hàng** (túi đen / thùng giấy / nhỏ / chung / đại / cây kebab) và **tổng cần chuẩn bị** của ngày.
 - **Định mức đóng hàng**: bản in tổng cần chuẩn bị + chi tiết từng khách; tải file in (HTML), tải Excel (CSV),
   **Sao chép cho Phân tuyến** (dán vào web Kho An Tâm › Phân tuyến giao hàng; có cột TUYẾN nên kho giữ đúng tuyến đã chia).
+- **Chuyển thẳng sang Giao hàng An Tâm**: bản đơn đã chia tuyến kèm người giao (`khoout/*`) được tác vụ tự động chép cùng lúc
+  vào `dhin/*` của web Giao hàng và web Kho. Trang Giao hàng tự lập bảng phân tuyến (mã bảng `rt-<ngày>-dong-hang<mã>`, giữ tài khoản
+  người giao của trang) khi có người mở – mỗi người giao thấy ngay tuyến của mình, không cần chờ web Kho. Kho sửa rồi gửi lại cùng
+  bảng thì thay đúng bảng đó; bản cũ hơn (`dhStamp`) bị bỏ qua.
 - **Tự liên kết Kho → Giao hàng**: sửa đơn hàng ngày / tuyến kebab 123 xong khoảng 30 giây, web để sẵn bản mới ở
   `khoout/<ngày>` và `khoout/<ngày>-t123` (danh mục `khoout/index`). Tác vụ tự động mỗi giờ (phút :07, 6h–23h) chép sang
   `dhin/*` của web Kho và ghi `khoack/index` ở đây; web Kho tự lập bảng **Phân tuyến giao hàng** của ngày (giữ tuyến kho chọn tay)
