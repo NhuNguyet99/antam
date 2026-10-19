@@ -16,6 +16,8 @@ Web riêng (trang claude.ai, một file `dong-hang-antam.html`) thay cho Google 
   (không có mã PIN) do web Kho để ở `nvpub/list`, tác vụ tự động chép sang `giaonv/list`. Phân công đi kèm đơn sang Kho
   (`khoout/<ngày>.assign`) → Giao hàng An Tâm: mỗi người giao chỉ thấy tuyến của mình. Tên người giao hiện ở nút tuyến,
   tiêu đề nhóm của bảng đơn và bản in.
+  Tuyến kebab 123 cũng có nút **👤 Người giao** cho Tuyến 1 / 2 / chiều / 3 (`t123/<ngày>.assign`, mặc định theo tuyến kho
+  kebab đêm / kebab chiều / tuyến 3); gửi kèm `assignG` – Tuyến 1 và Tuyến 2 khác người thì web Kho tách thành tuyến T1, T2 riêng.
 - **Tự động chia tuyến** (Đơn hàng ngày): mỗi đơn tự vào tuyến giao theo Khu vực của khách (không khớp thì theo địa chỉ, ghi chú),
   dùng cùng mã tuyến và quy tắc với web Kho (HM, TBTP, BTBC, TD, BTH, GV, BD, Q12, Q1PN, Qle, AS, BI, Tship, ĐB 1).
   Cột **Tuyến** chọn tay được và web nhớ cho khách; hàng nút "🚚 Chia tuyến" đếm số đơn từng tuyến (bấm để lọc, ⚠ Chưa chia);

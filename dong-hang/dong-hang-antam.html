@@ -692,9 +692,45 @@ function khoOutLater(kind, d) {
   drawKho();
 }
 const tsvOf = rows => rows.map(r => r.map(x => String(x == null ? '' : x).replace(/[\t\r\n]+/g, ' ')).join('\t')).join('\n');
+// NGƯỜI GIAO tuyến kebab 123 (t123/<ngày>.assign {t1|t2|chieu|t3: mã người giao | '' | null}); mặc định: người có tuyến
+// kho tương ứng trong "tuyến thường chạy" (T1, T2 → kebab đêm / tuyến 1+2; chiều → kebab chiều; T3 → tuyến 3), như web Kho
+const T1_LAB = { t1: 'T1', t2: 'T2', chieu: 'chiều', t3: 'T3' };
+const T1_DRV_KEYS = { t1: ['t1', 'kebabdem', 'tuyen1+2'], t2: ['t2', 'kebabdem', 'tuyen1+2'], chieu: ['kebabchieu'], t3: ['t3', 'tuyen3'] };
+function t1DriverFor(g, assign) {
+  const a = assign || {};
+  if (g in a && a[g] !== null && a[g] !== undefined) return [a[g], 'chọn'];
+  const flat = x => noAcc(x).toLowerCase().replace(/\s+/g, ''), keys = T1_DRV_KEYS[g] || [];
+  const hit = (S.drivers || []).find(d => (d.routes || []).some(c => { const f = flat(c); return keys.some(k => (k.length <= 2 ? f === k : f.includes(k))); }));
+  return [hit ? hit.id : '', 'tự'];
+}
+const t1DrvLabel = g => ((S.drivers || []).length ? driverName(t1DriverFor(g, S.t1.day && S.t1.day.assign)[0]) || 'chưa có người giao' : '');
+function t1EditDrivers() {
+  const d = S.t1.date || S.date, a = (S.t1.day && S.t1.day.assign) || {}, drv = S.drivers || [], list = t1List();
+  modal({
+    title: 'Người giao tuyến kebab 123 · ' + vn(d), ok: 'Lưu', wide: true,
+    body: `${drv.length ? '' : `<div class="callout" style="margin:0 0 10px;padding:10px 12px;border-radius:8px;background:var(--warn-soft)">Chưa có danh sách người giao – tạo ở <b>web Kho › Tài khoản giao hàng</b>.</div>`}
+      <p class="hint" style="margin-top:0">Mặc định theo "tuyến thường chạy" của tài khoản người giao bên web Kho. Chọn người khác cho riêng ngày này rồi Lưu – tự chuyển sang Kho → Giao hàng An Tâm.
+        Tuyến 1 và Tuyến 2 giao cho 2 người khác nhau thì bên kho tách thành 2 tuyến riêng.</p>
+      <div class="tw"><table><thead><tr><th>Tuyến</th><th class="n">Khách giao</th><th>Người giao</th></tr></thead><tbody>
+      ${T123_GROUPS.map(([g, name]) => { const auto = t1DriverFor(g, {})[0], cur = g in a && a[g] !== null && a[g] !== undefined ? (a[g] === '' ? '-' : a[g]) : '';
+        return `<tr><td><b>${esc(name)}</b></td><td class="n">${fmt(t1Sum(list.filter(c => c.g === g)).n)}</td><td><select class="in" data-drv="${g}" style="min-width:220px">
+          <option value="">${auto ? 'Tự: ' + esc(driverName(auto)) : '⚠ Chưa có người (tự)'}</option>
+          ${drv.map(x => `<option value="${esc(x.id)}" ${cur === x.id ? 'selected' : ''}>${esc(x.name || x.nick)}${x.nick && x.name ? ' (' + esc(x.nick) + ')' : ''}</option>`).join('')}
+          <option value="-" ${cur === '-' ? 'selected' : ''}>— Không giao ai —</option></select></td></tr>`; }).join('')}
+      </tbody></table></div>`,
+    onOk: async root => {
+      const patch = {};
+      $$('[data-drv]', root).forEach(sel => { const v = sel.value; patch[sel.dataset.drv] = v === '' ? null : v === '-' ? '' : v; });
+      await mergeInto('t123/' + d, { assign: patch }, { date: d });
+      if (S.t1.day && S.t1.date === d) S.t1.day.assign = Object.assign({}, S.t1.day.assign, patch);
+      khoOutLater('t123', d); t1Draw();
+      toast('Đã lưu người giao tuyến 123 – tự chuyển sang Kho và Giao hàng An Tâm'); return true;
+    },
+  });
+}
 // bảng tuyến kebab 123 theo mẫu "2-KHÁCH TUYẾN 123" mà web kho đọc được: cột A = T1 / T2 / chiều / T3
 function t1KhoRows(dayR) {
-  const lab = { t1: 'T1', t2: 'T2', chieu: 'chiều', t3: 'T3' };
+  const lab = T1_LAB;
   const out = [['TUYẾN', 'HỖ TRỢ', 'CRM', 'TÊN KHÁCH HÀNG', 'SĐT', 'TÌNH TRẠNG'].concat(T123_P.map(([, l]) => l)).concat(['GHI CHÚ'])];
   for (const c of t1List()) {
     const o = (dayR || {})[c.id] || {};
@@ -709,8 +745,11 @@ async function khoOut(kind, d) {
   const n = kind === 't123' ? live(r).filter(([, o]) => t1Status(o) === 'HOẠT ĐỘNG').length : rows.length - 1;
   const stamp = nowStr() + ' ' + rid('s'), at = nowStr();
   const title = kind === 't123' ? 'Tuyến kebab 123 (web Đóng hàng)' : 'Đơn hàng ngày (web Đóng hàng)';
-  const assign = {};
-  if (kind !== 't123') {
+  const assign = {}, assignG = {};
+  if (kind === 't123') {
+    const as = (snap.exists ? snap.data() || {} : {}).assign || {};
+    for (const [g] of T123_GROUPS) { const [id2, src] = t1DriverFor(g, as); if (src === 'chọn' || id2) assignG[T1_LAB[g]] = id2; }
+  } else {
     const as = (snap.exists ? snap.data() || {} : {}).assign || {};
     for (const x of dayOrders(r)) {
       const code = routeOf(x.o, S.cust[x.cid] || x.c)[0]; if (!code || code in assign) continue;
@@ -718,7 +757,7 @@ async function khoOut(kind, d) {
       if (src === 'chọn' || id) assign[code] = id;
     }
   }
-  await setDoc('khoout/' + id, { stamp, date: d, kind, title, tsv: tsvOf(rows), n, at, assign });
+  await setDoc('khoout/' + id, { stamp, date: d, kind, title, tsv: tsvOf(rows), n, at, assign, assignG });
   const old = addDays(today(), -10), prev = (S.khoIdx || {}), patch = { [id]: { stamp, date: d, kind, n, at } };
   for (const [k, e] of Object.entries(prev)) if (e && e.date < old) { patch[k] = null; S.db.doc('khoout/' + k).delete().catch(() => {}); }
   await mergeInto('khoout/index', { s: patch }, { s: {} });
@@ -2111,7 +2150,7 @@ function t1Watch(d) {
   S.t1.day = null; S.t1.date = d;
   S.t1.unsub = S.db.doc('t123/' + d).onSnapshot(s => {
     const data = s.exists ? s.data() : { r: {} };
-    S.t1.day = { date: d, r: Object.assign({}, data.r || {}) };
+    S.t1.day = { date: d, r: Object.assign({}, data.r || {}), assign: Object.assign({}, data.assign || {}) };
     for (const [cid, rec] of Object.entries(S.t1.local)) S.t1.day.r[cid] = deepMerge(JSON.parse(JSON.stringify(S.t1.day.r[cid] || {})), rec);
     if (S.view === 't123') { const a = document.activeElement; if (a && a.closest && a.closest('#t1-table')) t1Totals(); else if ($('#t1-table')) t1Draw(); else render(); }
   }, e => toast('Tuyến 123: ' + dbErr(e).message, true));
@@ -2141,6 +2180,7 @@ function viewT123(main) {
         <button class="btn sm" id="t1-today">Hôm nay</button>
         <span class="date-big">Tuyến kebab 123 · ${vn(d)}</span><span class="dow">${dow(d)}</span>
         <span class="grow"></span>
+        <button class="btn sm" id="t1-drv" title="Chọn nhân viên giao cho từng tuyến">👤 Người giao</button>
         <button class="btn sm" id="t1-print" title="In báo cáo tất cả hoặc theo bộ lọc đang chọn">🖨 In báo cáo</button>
         <button class="btn sm" id="t1-copy" title="Lấy số lượng của ngày gần nhất trước đó làm sẵn">Chép số ngày trước</button>
         <button class="btn sm pri" id="t1-send" title="Ghi tổng số tuyến 123 vào dòng BÁNH TUYẾN của Đơn hàng ngày">→ Đưa vào Bánh tuyến</button>
@@ -2166,7 +2206,7 @@ function viewT123(main) {
   $('#t1-price').onclick = t1EditPrice; $('#t1-add').onclick = () => t1EditCust(null); $('#t1-import').onclick = t1Import;
   $('#t1-copy').onclick = () => guard(t1CopyPrev); $('#t1-send').onclick = () => guard(t1Send);
   $('#t1-csv').onclick = () => guard(() => saveFile(`tuyen-123-${d}.csv`, '﻿' + toCsv(t1Rows()), 'text/csv'));
-  $('#t1-print').onclick = t1Print; $('#t1-cols').onclick = t1ColChooser; bindKhoBar(d);
+  $('#t1-print').onclick = t1Print; $('#t1-drv').onclick = t1EditDrivers; $('#t1-cols').onclick = t1ColChooser; bindKhoBar(d);
   let qt; $('#t1f-q').oninput = e => { clearTimeout(qt); qt = setTimeout(() => { f.q = e.target.value; t1SaveF(); t1Draw(); }, 220); };
   $$('#t1f-g button').forEach(b => b.onclick = () => { f.g = b.dataset.g; t1SaveF(); $$('#t1f-g button').forEach(x => x.classList.toggle('on', x === b)); t1Draw(); });
   t1Draw();
@@ -2217,7 +2257,7 @@ function t1Draw() {
   const cell = (v, key, cls = '') => `<td class="n ${cls}" data-tt="${key}">${t1Z(v)}</td>`;
   sumEl.innerHTML = `${nf ? `<div class="t1flt"><span>🔎 Đang lọc <b>${list.length}</b>/${all0.length} khách: ${esc(t1FltText())}</span><button class="btn sm" data-t1clear>✕ Xóa lọc</button></div>` : ''}
     <div class="tw"><table class="orders t1sum">${t1Head('<th rowspan="2">Tuyến</th><th class="n" rowspan="2">Khách giao</th>', '<th class="n" rowspan="2">Doanh thu (đ)</th>')}<tbody>
-      ${sums.filter(x => !nf || list.some(c => c.g === x.g)).concat([Object.assign({ g: 'all', name: nf ? 'TỔNG (theo lọc)' : 'TỔNG', tot: 1 }, all)]).map(s => `<tr${s.tot ? ' class="tot"' : ''}><td><b>${esc(s.name)}</b></td>${cell(s.n, 'n:' + s.g)}${t1P().map(([k]) => cell(s.q[k], k + ':' + s.g, t1Cls(k))).join('')}${t1Bag().map(([k]) => cell(s[k], k + ':' + s.g, t1BagCls(k))).join('')}${cell(s.dt, 'dt:' + s.g)}</tr>`).join('')}
+      ${sums.filter(x => !nf || list.some(c => c.g === x.g)).concat([Object.assign({ g: 'all', name: nf ? 'TỔNG (theo lọc)' : 'TỔNG', tot: 1 }, all)]).map(s => `<tr${s.tot ? ' class="tot"' : ''}><td><b>${esc(s.name)}</b>${!s.tot && t1DrvLabel(s.g) ? `<div class="small muted">👤 ${esc(t1DrvLabel(s.g))}</div>` : ''}</td>${cell(s.n, 'n:' + s.g)}${t1P().map(([k]) => cell(s.q[k], k + ':' + s.g, t1Cls(k))).join('')}${t1Bag().map(([k]) => cell(s[k], k + ':' + s.g, t1BagCls(k))).join('')}${cell(s.dt, 'dt:' + s.g)}</tr>`).join('')}
     </tbody></table></div>`;
   el.innerHTML = all0.length ? t1TableHtml(list, sums, all0.length) : `<div class="card empty"><div class="big">Chưa có khách tuyến 123</div><p class="hint">Bấm "Cập nhật từ sheet" và dán sheet 2-KHÁCH TUYẾN 123, hoặc "+ Khách tuyến".</p></div>`;
   $$('[data-t1clear]').forEach(b => b.onclick = t1ClearF);
@@ -2236,7 +2276,7 @@ function t1TableHtml(list, sums, total) {
   for (const s of sums) {
     const rows = list.filter(c => c.g === s.g);
     if (!rows.length) continue;
-    html += `<tr class="grp"><td colspan="${T1_COLS}"><span class="grp-l">${esc(s.name)} · ${rows.length} khách</span></td></tr>
+    html += `<tr class="grp"><td colspan="${T1_COLS}"><span class="grp-l">${esc(s.name)} · ${rows.length} khách${t1DrvLabel(s.g) ? ' · 👤 ' + esc(t1DrvLabel(s.g)) : ''}</span></td></tr>
       <tr class="t1tot">${t1On('crm') ? '<td class="stick s-crm"></td>' : ''}<td class="cust stick"><b>TỔNG BÁNH ${esc(s.name.toUpperCase())}</b><div class="sub">Doanh thu <b data-tt="dt:${s.g}">${fmt(s.dt)}</b>đ${nInfo ? '' : ` · <span data-tt="n:${s.g}">${fmt(s.n)}</span> khách giao`}</div></td>
         ${nInfo ? `<td colspan="${nInfo}" class="small"><span data-tt="n:${s.g}">${fmt(s.n)}</span> khách giao</td>` : ''}${t1P().map(([k]) => `<td class="${t1Cls(k)}" data-tt="${k}:${s.g}">${t1Z(s.q[k])}</td>`).join('')}
         ${t1Bag().map(([k]) => (k === 'full' ? `<td class="${t1BagCls(k)}" data-tt="full:${s.g}">${t1Z(s.full)}</td>` : `<td class="${t1BagCls(k)}">lẻ <span data-tt="le:${s.g}">${t1Z(s.le)}</span></td>`)).join('')}<td colspan="${t1On('note') ? 2 : 1}"></td></tr>`;
@@ -2315,7 +2355,7 @@ function t1PrintDoc(d, list, o) {
   if (sec.det) for (const x of groups) {
     const rows = o.act ? x.rows.filter(c => t1Status(t1Order(c.id)) === 'HOẠT ĐỘNG') : x.rows, s = t1Sum(rows);
     if (!rows.length) continue;
-    det += `<section${o.brk && (gi++ || sec.sum) ? ' style="break-before:page"' : ''}><h4 class="pgh">${esc(x.name)} · ${rows.length} khách</h4><table class="t1p"><thead><tr><th class="n">STT</th>${on('ht') ? '<th>Hỗ trợ</th>' : ''}${on('crm') ? '<th>CRM</th>' : ''}<th>Khách hàng</th>${on('phone') ? '<th>SĐT</th>' : ''}${on('st') ? '<th>Tình trạng</th>' : ''}${P.map(([k]) => `<th class="n">${lab(k)}</th>`).join('')}${bagTh('')}${on('note') ? '<th>Ghi chú</th>' : ''}</tr></thead><tbody>
+    det += `<section${o.brk && (gi++ || sec.sum) ? ' style="break-before:page"' : ''}><h4 class="pgh">${esc(x.name)} · ${rows.length} khách${(S.drivers || []).length && driverName(t1DriverFor(x.g, S.t1.day && S.t1.day.assign)[0]) ? ' · Người giao: ' + esc(driverName(t1DriverFor(x.g, S.t1.day && S.t1.day.assign)[0])) : ''}</h4><table class="t1p"><thead><tr><th class="n">STT</th>${on('ht') ? '<th>Hỗ trợ</th>' : ''}${on('crm') ? '<th>CRM</th>' : ''}<th>Khách hàng</th>${on('phone') ? '<th>SĐT</th>' : ''}${on('st') ? '<th>Tình trạng</th>' : ''}${P.map(([k]) => `<th class="n">${lab(k)}</th>`).join('')}${bagTh('')}${on('note') ? '<th>Ghi chú</th>' : ''}</tr></thead><tbody>
       ${rows.map((c, i) => { const od = t1Order(c.id), b = t1Bags(od); return `<tr><td class="n">${i + 1}</td>${on('ht') ? `<td>${c.ht ? 'HỖ TRỢ' : ''}</td>` : ''}${on('crm') ? `<td>${esc(c.crm || '')}</td>` : ''}<td>${esc(c.name)}</td>${on('phone') ? `<td class="nowrap">${esc(c.phone || '')}</td>` : ''}${on('st') ? `<td>${t1Status(od)}</td>` : ''}${P.map(([k]) => `<td class="n">${t1V(od, k) ? fmt(t1V(od, k)) : ''}</td>`).join('')}${on('full') ? `<td class="n">${b.full || ''}</td>` : ''}${on('le') ? `<td>${b.le ? '1 túi ' + b.le : ''}</td>` : ''}${on('note') ? `<td>${esc([c.note, od.gc].filter(Boolean).join(' · '))}</td>` : ''}</tr>`; }).join('')}
       <tr class="tot"><td colspan="${2 + ['ht', 'crm', 'phone', 'st'].filter(on).length}"><b>TỔNG ${esc(x.name.toUpperCase())}</b> · ${s.n} khách giao · doanh thu ${fmt(s.dt)}đ</td>${P.map(([k]) => `<td class="n">${s.q[k] ? fmt(s.q[k]) : ''}</td>`).join('')}${on('full') ? `<td class="n">${fmt(s.full)}</td>` : ''}${on('le') ? `<td>${s.le ? s.le + ' túi lẻ' : ''}</td>` : ''}${on('note') ? '<td></td>' : ''}</tr></tbody></table>${o.brk && o.sign ? signHtml() : ''}</section>`;
   }

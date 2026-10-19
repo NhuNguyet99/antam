@@ -2778,8 +2778,19 @@ async function pullDhInbox() {
         const manual = Object.fromEntries((od.rows || []).filter(r => r.src === 'tay').map(r => [r.cust, r.route]));
         const cfg = routingCfg();
         p.rows.forEach(r => { [r.route, r.src] = autoRoute(r, cfg); if (manual[r.cust] !== undefined) { r.route = manual[r.cust]; r.src = 'tay'; } });
+        const assign = Object.assign({}, od.assign || {}, dhAssign(x.assign));
+        // tuyến kebab 123: người giao chọn theo nhóm T1 / T2 / chiều / T3; 2 nhóm cùng 1 tuyến kho (T1, T2 → kebab đêm) mà khác người thì tách riêng
+        const ag = dhAssign(x.assignG);
+        if (Object.keys(ag).length) {
+          const codeOf = {}, byCode = {};
+          p.rows.forEach(r => { if (r.grp && r.src !== 'tay' && !(r.grp in codeOf)) codeOf[r.grp] = r.route; });
+          for (const [lb, code] of Object.entries(codeOf)) if (lb in ag) (byCode[code] = byCode[code] || new Set()).add(ag[lb]);
+          const split = lb => byCode[codeOf[lb]] && byCode[codeOf[lb]].size > 1;
+          p.rows.forEach(r => { if (r.grp && r.src !== 'tay' && r.grp in ag && split(r.grp)) { r.route = r.grp; r.src = 'web đóng hàng'; } });
+          for (const [lb, id] of Object.entries(ag)) if (codeOf[lb]) assign[split(lb) ? lb : codeOf[lb]] = id;
+        }
         const body = { kind: 'routing', date: x.date, title: text0(x.title) || 'Web Đóng hàng An Tâm',
-          data: { sheet: text0(x.title) || 'Web Đóng hàng An Tâm', cols: p.cols, rows: p.rows, total: p.total, assign: Object.assign({}, od.assign || {}, dhAssign(x.assign)), from: 'dong-hang:' + x.id } };
+          data: { sheet: text0(x.title) || 'Web Đóng hàng An Tâm', cols: p.cols, rows: p.rows, total: p.total, assign, from: 'dong-hang:' + x.id } };
         const res = docId ? await api('PUT', '/docs/' + encodeURIComponent(docId) + '?wh=TP', body) : await api('POST', '/docs?wh=TP', body);
         docId = res.id;
         if (GIAO_LINKED) await api('POST', '/giao-sync/out?id=' + encodeURIComponent(docId)).catch(e => console.warn('giaoout', e));
