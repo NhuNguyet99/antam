@@ -1451,9 +1451,8 @@ function rtSummaryHtml(r) {
 function groupSumHtml(label, rows) {
   const sub = Object.fromEntries(rows.map(x => [x.cid, x.o])), t = dayTotals(sub), rp = dayReport(sub, null), ps = usedProducts(sub);
   const needs = NEED.filter(([k]) => t.need[k] > 0).map(([k, n]) => `${n} <b>${fmt(t.need[k])}</b>`).join(' · ');
-  return `<table class="t1p gsum"><thead><tr><th>TỔNG ${esc(label.toUpperCase())}</th>${ps.map(pTh).join('')}<th class="n">TACOS</th><th class="n">KEBAB</th></tr></thead><tbody>
-    <tr><td>Số túi / số lượng</td>${ps.map(p => `<td class="n"><b>${fmt(t.prod[p.id])}</b></td>`).join('')}<td></td><td></td></tr>
-    <tr><td>Số cái</td>${ps.map(p => `<td class="n">${fmt(t.prod[p.id] * perOf(p))}</td>`).join('')}<td class="n"><b>${fmt(rp.tacos)}</b></td><td class="n"><b>${fmt(rp.kebab)}</b></td></tr>
+  return `<table class="t1p gsum"><thead><tr><th>TỔNG ${esc(label.toUpperCase())}</th>${ps.map(pTh).join('')}<th class="n">TACOS<br><span class="u">cái</span></th><th class="n">KEBAB<br><span class="u">cái</span></th></tr></thead><tbody>
+    <tr><td>Số lượng</td>${ps.map(p => `<td class="n"><b>${fmt(t.prod[p.id])}</b></td>`).join('')}<td class="n"><b>${fmt(rp.tacos)}</b></td><td class="n"><b>${fmt(rp.kebab)}</b></td></tr>
     ${needs ? `<tr><td>Bao bì</td><td colspan="${ps.length + 2}">${needs}</td></tr>` : ''}</tbody></table>`;
 }
 // cột bảng chi tiết của bản in đơn hàng (STT, Khách hàng luôn có)
