@@ -26,6 +26,8 @@ Web riêng (trang claude.ai, một file `dong-hang-antam.html`) thay cho Google 
 - **Ẩn / hiện từng cột** (Đơn hàng ngày và Tuyến kebab 123): nút **👁 Ẩn / hiện cột** mở hộp tích chọn từng cột (thông tin,
   từng sản phẩm, túi 50 / túi lẻ, ghi chú…), có "Hiện tất cả" và tùy chọn tự ẩn cột sản phẩm chưa có đơn. Chỉ lưu trên máy đang
   dùng (localStorage `dh_hideDon`, `dh_hideT1`), không đổi dữ liệu; cột "Khách hàng" luôn hiện.
+  Bảng **Báo cáo** (Bánh tuyến / Tổng túi / Tổng cái), bản in báo cáo và trang Định mức đóng hàng cũng bỏ các cột đang ẩn;
+  số tổng TACOS, KEBAB, doanh thu vẫn tính đủ, bản in ghi "Đang ẩn cột: …".
 - **Lọc theo yêu cầu + In báo cáo** (cả Đơn hàng ngày và Tuyến kebab 123): lọc bằng ô tìm, chọn khu vực / tuyến và dòng
   "▼ Lọc theo cột" dưới tiêu đề bảng (CRM, hỗ trợ, tình trạng, từng sản phẩm có/trống, túi 50, túi lẻ, ghi chú…).
   Ở Tuyến 123, bảng tổng tính theo các khách đang lọc. Nút **🖨 In báo cáo** cho chọn in *theo bộ lọc* hoặc *tất cả*,
