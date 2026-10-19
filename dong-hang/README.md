@@ -31,7 +31,8 @@ Web riêng (trang claude.ai, một file `dong-hang-antam.html`) thay cho Google 
 - **Lọc theo yêu cầu + In báo cáo** (cả Đơn hàng ngày và Tuyến kebab 123): lọc bằng ô tìm, chọn khu vực / tuyến và dòng
   "▼ Lọc theo cột" dưới tiêu đề bảng (CRM, hỗ trợ, tình trạng, từng sản phẩm có/trống, túi 50, túi lẻ, ghi chú…).
   Ở Tuyến 123, bảng tổng tính theo các khách đang lọc. Nút **🖨 In báo cáo** cho chọn in *theo bộ lọc* hoặc *tất cả*,
-  kèm/không kèm chi tiết từng khách → tải file HTML, mở bằng trình duyệt rồi Ctrl+P (A4 ngang).
+  kèm/không kèm chi tiết từng khách. Bấm **🖨 In** là mở thẳng hộp thoại in của trình duyệt (A4 ngang, nền trắng);
+  nếu khung trang chặn hộp thoại in, web tự tải file in và mở file là hộp thoại in tự hiện. "⬇ Tải file in" để lưu / gửi bản in.
 - **Khách hàng**: danh mục khách (khu vực, CRM, địa chỉ, SĐT, ghi chú/chành xe, đóng gói mặc định).
 - **Thống kê**: theo khoảng ngày – số đơn, bánh, kebab, bao bì, theo khu vực / người tạo đơn / tài xế / thanh toán,
   khách đặt nhiều, khách ngưng đặt; so với cùng số ngày trước đó.

@@ -157,6 +157,25 @@ tbody tr.grp:hover td { background: var(--accent-soft); }
 .colpick legend { font-size: 12px; font-weight: 700; color: var(--ink-2); padding: 0 4px; }
 .colpick label { display: flex; gap: 6px; align-items: center; font-size: 13px; cursor: pointer; }
 .prs { display: grid; gap: 10px; }
+/* in trực tiếp: chỉ in vùng #print-area, nền trắng, khổ A4 ngang */
+#print-area { display: none; }
+@media print {
+  body.printing > *:not(#print-area) { display: none !important; }
+  body.printing::before { display: none; }
+  body.printing { background: #fff; color: #111; padding: 0; }
+  body.printing #print-area { display: block; }
+  #print-area .tw { overflow: visible; border: 0; max-height: none; }
+  #print-area th { position: static !important; }
+  #print-area tr.grp td { background: #eef4f1; color: #0f6e5a; }
+  #print-area table { font-size: 12px; }
+  #print-area * { -webkit-print-color-adjust: exact; print-color-adjust: exact; }
+  #print-area h3 { break-after: avoid; } #print-area tr { break-inside: avoid; }
+  #print-area .rep { grid-template-columns: minmax(0, 1fr); } #print-area .rept { table-layout: fixed; font-size: 10px; }
+  #print-area .rept th, #print-area .rept td { padding: 3px 2px; }
+  #print-area .rept th.p { min-width: 0; max-width: none; font-size: 9.5px; }
+  #print-area .rept th.rl, #print-area .rept td.rl { width: 84px; min-width: 84px; white-space: normal; }
+  @page { size: A4 landscape; margin: 10mm; }
+}
 .prs label { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
 .prs label input { margin-top: 3px; }
 .prs .hint { display: block; margin-top: 2px; }
@@ -326,6 +345,7 @@ tr.hit > td:first-child { box-shadow: inset 4px 0 0 var(--hit-bar); }
 </div></div>
 <main class="wrap" id="main"><div class="card empty"><div class="big">Đang kết nối dữ liệu…</div></div></main>
 <div id="toasts" aria-live="polite"></div>
+<div id="print-area"></div>
 
 <script>
 'use strict';
@@ -1396,12 +1416,13 @@ function viewPrint(main) {
       <span class="grow"></span>
       <button class="btn" id="p-copy" title="Dán vào web Kho An Tâm › Phân tuyến giao hàng">Sao chép cho Phân tuyến (web kho)</button>
       <button class="btn" id="p-csv">Tải Excel (CSV)</button>
-      <button class="btn pri" id="p-html">Tải bản in</button></div>
+      <button class="btn" id="p-html">⬇ Tải file in</button><button class="btn pri" id="p-print">🖨 In</button></div>
     <div class="card" id="p-doc">${printDoc(d, r, S.day && S.day.tuyen)}</div>
-    <p class="hint">Trang không mở được hộp thoại in. Bấm <b>Tải bản in</b> rồi mở file vừa tải bằng trình duyệt và bấm Ctrl+P để in.</p>`;
+    <p class="hint">Bấm <b>🖨 In</b> để mở hộp thoại in (khổ A4 ngang). Nếu trình duyệt không cho in ngay trong trang, web tự tải file in – mở file là hộp thoại in hiện ra.</p>`;
   const go = nd => { watchDay(nd); render(); };
   $('#p-prev').onclick = () => go(addDays(d, -1)); $('#p-next').onclick = () => go(addDays(d, 1));
   $('#p-date').onchange = e => e.target.value && go(e.target.value);
+  $('#p-print').onclick = () => guard(() => directPrint(`Định mức đóng hàng ${vn(d)}`, printDoc(d, r, S.day && S.day.tuyen), `dinh-muc-dong-hang-${d}.html`));
   $('#p-html').onclick = () => guard(() => saveFile(`dinh-muc-dong-hang-${d}.html`, printablePage(`Định mức đóng hàng ${vn(d)}`, printDoc(d, r, S.day && S.day.tuyen)), 'text/html'));
   $('#p-csv').onclick = () => guard(() => saveFile(`don-hang-${d}.csv`, '﻿' + toCsv(sheetRows(d, r)), 'text/csv'));
   $('#p-copy').onclick = async () => {
@@ -1426,33 +1447,52 @@ function colChooser({ title, groups, key, onChange, extra = '', bindExtra }) {
   cnt();
 }
 // hộp in báo cáo: tất cả hoặc theo bộ lọc đang chọn → tải file HTML rồi mở bằng trình duyệt, Ctrl+P
+// In trực tiếp: dựng bản in ngay trong trang rồi mở hộp thoại in của trình duyệt. Khung trang chặn in (không có sự kiện
+// beforeprint) thì tải file in về – mở file là hộp thoại in tự hiện.
+async function directPrint(title, body, file) {
+  const area = $('#print-area'), root = document.documentElement, old = { theme: root.dataset.theme, title: document.title };
+  let before = false, after = false;
+  const onBefore = () => { before = true; }, onAfter = () => { after = true; };
+  addEventListener('beforeprint', onBefore); addEventListener('afterprint', onAfter);
+  area.innerHTML = body; document.body.classList.add('printing'); root.dataset.theme = 'light'; document.title = title;
+  try { window.print(); } catch (e) { console.warn('print', e); }
+  await sleep(250);
+  if (before && !after) await new Promise(res => { const t = setInterval(() => { if (after) { clearInterval(t); res(); } }, 300); setTimeout(() => { clearInterval(t); res(); }, 180000); });
+  removeEventListener('beforeprint', onBefore); removeEventListener('afterprint', onAfter);
+  area.innerHTML = ''; document.body.classList.remove('printing'); document.title = old.title;
+  if (old.theme === undefined) delete root.dataset.theme; else root.dataset.theme = old.theme;
+  if (before) return true;
+  toast('Trang này không mở được hộp thoại in – đang tải file in, mở file là hộp thoại in tự hiện');
+  await saveFile(file, printablePage(title, body, true), 'text/html');
+  return false;
+}
 function printModal({ title, note, nAll, nFlt, unit, actOpt, build }) {
-  modal({
-    title, ok: 'Tải bản in',
+  const m = modal({
+    title, ok: '🖨 In',
     body: `<div class="prs">
       ${note ? `<label><input type="radio" name="pr-s" value="flt" checked><span><b>Theo bộ lọc đang chọn</b> – ${fmt(nFlt)} ${unit}<span class="hint">${esc(note)}</span></span></label>
         <label><input type="radio" name="pr-s" value="all"><span><b>Tất cả</b> – ${fmt(nAll)} ${unit}</span></label>`
         : `<p class="hint" style="margin:0">Đang in <b>tất cả</b> (${fmt(nAll)} ${unit}). Muốn in theo yêu cầu: đóng hộp này, chọn lọc ở ô tìm / dòng "▼ Lọc theo cột" dưới tiêu đề bảng rồi bấm In báo cáo.</p>`}
       ${actOpt ? '<label><input type="checkbox" id="pr-act" checked><span>Chi tiết chỉ in khách có hàng (HOẠT ĐỘNG)</span></label>' : ''}
       <label><input type="checkbox" id="pr-det" checked><span>Kèm bảng chi tiết từng khách</span></label>
-      <p class="hint" style="margin:4px 0 0">Mở file vừa tải bằng trình duyệt rồi bấm <b>Ctrl+P</b> để in (khổ A4 ngang).</p></div>`,
-    onOk: async root => {
-      const sc = $('input[name=pr-s]:checked', root);
-      const o = { flt: !!note && (!sc || sc.value === 'flt'), det: $('#pr-det', root).checked, act: actOpt ? $('#pr-act', root).checked : false };
-      const r = build(o);
-      await saveFile(r.name, printablePage(r.title, r.body), 'text/html');
-      return true;
-    },
+      <div class="row" style="align-items:center;margin-top:4px"><span class="hint grow">Bấm <b>🖨 In</b> để mở hộp thoại in (khổ A4 ngang). Cần lưu lại hoặc gửi đi thì bấm Tải file in.</span>
+        <button class="btn sm" id="pr-file">⬇ Tải file in</button></div></div>`,
+    onOk: async root => { const r = build(opts(root)); await directPrint(r.title, r.body, r.name); return true; },
   });
+  const opts = root => {
+    const sc = $('input[name=pr-s]:checked', root);
+    return { flt: !!note && (!sc || sc.value === 'flt'), det: $('#pr-det', root).checked, act: actOpt ? $('#pr-act', root).checked : false };
+  };
+  $('#pr-file', m.root).onclick = () => guard(async () => { const r = build(opts(m.root)); await saveFile(r.name, printablePage(r.title, r.body), 'text/html'); m.close(); });
 }
-function printablePage(title, body) {
+function printablePage(title, body, autoPrint) {
   const css = $('#app-css').textContent;
   return `<!doctype html><html lang="vi" data-theme="light"><head><meta charset="utf-8"><title>${esc(title)}</title><style>${css}
     body{background:#fff;color:#111;padding:16px} .tw{overflow:visible;border:0} th{position:static} tr.grp td{background:#eef4f1;color:#0f6e5a}
     @page{size:A4 landscape;margin:10mm} table{font-size:12px} *{-webkit-print-color-adjust:exact;print-color-adjust:exact}
     h3{break-after:avoid} tr{break-inside:avoid}
     .rep{grid-template-columns:minmax(0,1fr)} .rept{table-layout:fixed;font-size:10px} .rept th,.rept td{padding:3px 2px}
-    .rept th.p{min-width:0;max-width:none;font-size:9.5px} .rept th.rl,.rept td.rl{width:84px;min-width:84px;white-space:normal}</style></head><body>${body}</body></html>`;
+    .rept th.p{min-width:0;max-width:none;font-size:9.5px} .rept th.rl,.rept td.rl{width:84px;min-width:84px;white-space:normal}</style></head><body>${body}${autoPrint ? '<script>addEventListener("load",function(){setTimeout(function(){print()},400)})<\/script>' : ''}</body></html>`;
 }
 async function saveFile(filename, data, type) {
   const dl = await window.claude.use('downloads');
