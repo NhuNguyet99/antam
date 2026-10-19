@@ -870,14 +870,22 @@ function setMax(v) {
   const t = $('#orders'); if (t) fixStickyTops(t);
 }
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.body.classList.contains('tbl-max') && !$('.modal-back')) setMax(false); });
-// sản phẩm hiện trên bảng báo cáo: theo các cột người xem đã ẩn ở "Ẩn / hiện cột" (tổng TACOS / KEBAB vẫn tính đủ)
-const repProducts = () => { const H = hideSet('hideDon'); return S.cfg.products.filter(p => p.show !== false && !H.has('p:' + p.id)); };
+// sản phẩm hiện trên bảng báo cáo: đúng các cột của bảng đơn bên dưới (cột ẩn tay + tự ẩn cột chưa có đơn),
+// thêm sản phẩm đã nhập BÁNH TUYẾN (trừ cột ẩn tay); tổng TACOS / KEBAB vẫn tính đủ mọi sản phẩm
+function repProducts(tuyen) {
+  const H = hideSet('hideDon'), vis = new Set(visibleProducts().map(p => p.id));
+  return S.cfg.products.filter(p => p.show !== false && !H.has('p:' + p.id) && (vis.has(p.id) || num((tuyen || {})[p.id]) > 0));
+}
+function refreshRep() {
+  const w = $('#d-rep-wrap'), r = S.day ? S.day.r : {};
+  if (w) { w.innerHTML = reportHtml(dayReport(r, S.day && S.day.tuyen), dayTotals(r).need, S.day && S.day.tuyen, true); bindReport(); }
+}
 // tên các cột đang ẩn (ghi chú trên bản in)
 function hiddenDonText() {
   return [...hideSet('hideDon')].map(k => { if (!k.startsWith('p:')) return (DON_COLS.find(c => c[0] === k) || [, k])[1]; const p = S.cfg.products.find(x => x.id === k.slice(2)); return p ? prodLabel(p) : ''; }).filter(Boolean).join(', ');
 }
 function reportHtml(rep, need, tuyen, editable) {
-  const runs = groupRuns(repProducts());
+  const runs = groupRuns(repProducts(tuyen));
   const cells = (fn) => runs.map(r => r.list.map((p, i) => `<td class="pc g-${r.g}${i ? '' : ' gstart'}">${fn(p)}</td>`).join('')).join('');
   const nz = (v, key) => `<span data-r="${key}" class="${v ? '' : 'zero'}">${fmt(v)}</span>`;
   return `<div class="rep" id="d-report">
@@ -1049,11 +1057,9 @@ function donColChooser() {
     title: 'Ẩn / hiện cột – Đơn hàng ngày', key: 'hideDon',
     groups: [{ name: 'Thông tin', items: DON_COLS }].concat(groupRuns(ps).map(r => ({ name: GROUPS[r.g].name, items: r.list.map(p => ['p:' + p.id, prodShort(p)]) }))),
     extra: `<label class="field" style="flex-direction:row;display:flex;align-items:center;gap:6px;margin-top:10px"><input type="checkbox" id="cc-auto" ${S.filter.allCols ? '' : 'checked'}> Tự ẩn cột sản phẩm chưa có đơn nào trong ngày</label>`,
-    bindExtra: root => { $('#cc-auto', root).onchange = e => { S.filter.allCols = !e.target.checked; store('filter', S.filter); drawTable(); }; },
+    bindExtra: root => { $('#cc-auto', root).onchange = e => { S.filter.allCols = !e.target.checked; store('filter', S.filter); drawTable(); refreshRep(); }; },
     onChange: () => {
-      drawTable();
-      const w = $('#d-rep-wrap'), r = S.day ? S.day.r : {};
-      if (w) { w.innerHTML = reportHtml(dayReport(r, S.day && S.day.tuyen), dayTotals(r).need, S.day && S.day.tuyen, true); bindReport(); }
+      drawTable(); refreshRep();
       const b = $('#f-cols'); if (b) b.textContent = '👁 Ẩn / hiện cột' + (hideSet('hideDon').size ? ` (ẩn ${hideSet('hideDon').size})` : ''); },
   });
 }
