@@ -930,6 +930,12 @@ const Backend = (() => {
   async function dhInbox(method, body) {
     const done = (docData(await dbx().doc('dhdone/index').get()) || {}).s || {};
     if (method === 'GET') {
+      // danh sách người giao (không có mã PIN) để web Đóng hàng chọn người giao cho từng tuyến; tác vụ định kỳ chép sang
+      try {
+        const pub = Object.entries(drivers()).filter(([, d]) => d).map(([id, d]) => { const x = publicDriver(id, d); delete x.has_pin; return x; });
+        const cur = docData(await dbx().doc('nvpub/list').get());
+        if (!cur || JSON.stringify(cur.list) !== JSON.stringify(pub)) await write(() => dbx().doc('nvpub/list').set({ list: pub, at: nowStr() }));
+      } catch (e) { console.warn('nvpub', e); }
       const snap = await dbx().collection('dhin').limit(60).get();
       return snap.docs.map(d => Object.assign({}, d.data() || {}, { id: d.id }))
         .filter(x => x.stamp && typeof x.tsv === 'string' && validDateOk(x.date) && (done[x.id] || {}).stamp !== x.stamp)

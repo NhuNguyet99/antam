@@ -574,6 +574,7 @@ async function boot() {
   $('#me-name').textContent = S.me || 'Đặt tên';
   // cài đặt: dùng mặc định ngay, có bản đã lưu thì thay
   S.loaded.cfg = true;
+  db.doc('giaonv/list').onSnapshot(s => { S.drivers = (((s.exists && s.data()) || {}).list || []).filter(d => d && d.id && d.active !== false); drawRtChips(); }, () => {});
   db.doc('khoout/index').onSnapshot(s => { S.khoIdx = (s.exists && (s.data() || {}).s) || {}; drawKho(); }, () => {});
   db.doc('khoack/index').onSnapshot(s => { S.khoAck = (s.exists && (s.data() || {}).s) || {}; drawKho(); }, () => {});
   db.doc('cfg/main').onSnapshot(s => {
@@ -603,7 +604,7 @@ function watchDay(d) {
     const data = s.exists ? s.data() : { date: d, r: {} };
     // giữ các ô đang gõ dở trên máy này
     const mine = S.day && S.day.date === d ? S.localRows || {} : {};
-    S.day = { date: d, r: Object.assign({}, data.r || {}), tuyen: Object.assign({}, data.tuyen || {}, S.localTuyen || {}) };
+    S.day = { date: d, r: Object.assign({}, data.r || {}), tuyen: Object.assign({}, data.tuyen || {}, S.localTuyen || {}), assign: Object.assign({}, data.assign || {}) };
     for (const [cid, rec] of Object.entries(mine)) S.day.r[cid] = deepMerge(JSON.parse(JSON.stringify(S.day.r[cid] || {})), rec);
     refresh(true);
   }, e => toast('Đơn ngày ' + vn(d) + ': ' + dbErr(e).message, true));
@@ -708,7 +709,16 @@ async function khoOut(kind, d) {
   const n = kind === 't123' ? live(r).filter(([, o]) => t1Status(o) === 'HOẠT ĐỘNG').length : rows.length - 1;
   const stamp = nowStr() + ' ' + rid('s'), at = nowStr();
   const title = kind === 't123' ? 'Tuyến kebab 123 (web Đóng hàng)' : 'Đơn hàng ngày (web Đóng hàng)';
-  await setDoc('khoout/' + id, { stamp, date: d, kind, title, tsv: tsvOf(rows), n, at });
+  const assign = {};
+  if (kind !== 't123') {
+    const as = (snap.exists ? snap.data() || {} : {}).assign || {};
+    for (const x of dayOrders(r)) {
+      const code = routeOf(x.o, S.cust[x.cid] || x.c)[0]; if (!code || code in assign) continue;
+      const [id, src] = driverFor(code, as);
+      if (src === 'chọn' || id) assign[code] = id;
+    }
+  }
+  await setDoc('khoout/' + id, { stamp, date: d, kind, title, tsv: tsvOf(rows), n, at, assign });
   const old = addDays(today(), -10), prev = (S.khoIdx || {}), patch = { [id]: { stamp, date: d, kind, n, at } };
   for (const [k, e] of Object.entries(prev)) if (e && e.date < old) { patch[k] = null; S.db.doc('khoout/' + k).delete().catch(() => {}); }
   await mergeInto('khoout/index', { s: patch }, { s: {} });
@@ -790,20 +800,61 @@ function rtSelect(o, c) {
   return `<select class="in rt-sel${code ? '' : ' rt-none'}" data-k="rt" aria-label="Tuyến giao" title="${code ? esc(routeLabel(code)) + ' – ' + src : 'Chưa khớp tuyến nào – chọn tuyến'}">
     <option value="">${auto ? esc(auto) + ' (tự)' : '⚠ chưa chia'}</option>${routes().map(r => `<option value="${esc(r.code)}" ${r.code === cur ? 'selected' : ''}>${esc(r.code)} – ${esc(r.name)}</option>`).join('')}${extra}</select>`;
 }
+// NGƯỜI GIAO từng tuyến: danh sách tài khoản người giao lấy từ web Kho (giaonv/list); mặc định người có tuyến đó trong
+// "tuyến thường chạy" (giống web Kho), chọn tay lưu ở ngay/<ngày>.assign {mã tuyến: mã người giao | '' (không ai) | null (tự)}
+const driverName = id => { const d = (S.drivers || []).find(x => x.id === id); return d ? d.name || d.nick : ''; };
+function driverFor(code, assign) {
+  const a = assign || {};
+  if (code in a && a[code] !== null && a[code] !== undefined) return [a[code], 'chọn'];
+  const d = (S.drivers || []).find(x => (x.routes || []).some(c => String(c).toLowerCase() === String(code).toLowerCase()));
+  return [d ? d.id : '', 'tự'];
+}
+function editDrivers() {
+  const d = S.date, a = (S.day && S.day.assign) || {}, cnt = {};
+  for (const { o, c, cid } of dayOrders(S.day ? S.day.r : {})) { const k = routeOf(o, S.cust[cid] || c)[0]; if (k) cnt[k] = (cnt[k] || 0) + 1; }
+  const codes = Object.keys(cnt).sort((x, y) => routeIdx(x) - routeIdx(y));
+  const drv = S.drivers || [];
+  const m = modal({
+    title: 'Người giao từng tuyến · ' + vn(d), ok: 'Lưu', wide: true,
+    body: `${drv.length ? '' : `<div class="callout" style="margin:0 0 10px;padding:10px 12px;border-radius:8px;background:var(--warn-soft)">Chưa có danh sách người giao. Tài khoản người giao tạo ở <b>web Kho › Tài khoản giao hàng</b>
+        (ghi tuyến thường chạy); danh sách tự chuyển sang đây trong khoảng 1 giờ khi có người mở web Kho.</div>`}
+      <p class="hint" style="margin-top:0">Mặc định: người có tuyến đó trong "tuyến thường chạy" bên web Kho. Chọn người khác cho riêng ngày này thì lưu lại;
+        đơn tự chuyển sang Kho → Giao hàng An Tâm, mỗi người giao chỉ thấy tuyến của mình.</p>
+      ${codes.length ? `<div class="tw"><table><thead><tr><th>Tuyến</th><th class="n">Đơn</th><th>Người giao</th></tr></thead><tbody>
+        ${codes.map(code => { const auto = driverFor(code, {})[0], cur = code in a && a[code] !== null && a[code] !== undefined ? (a[code] === '' ? '-' : a[code]) : '';
+          return `<tr><td><b>${esc(routeLabel(code))}</b></td><td class="n">${fmt(cnt[code])}</td><td><select class="in" data-drv="${esc(code)}" style="min-width:220px">
+            <option value="">${auto ? 'Tự: ' + esc(driverName(auto)) : '⚠ Chưa có người (tự)'}</option>
+            ${drv.map(x => `<option value="${esc(x.id)}" ${cur === x.id ? 'selected' : ''}>${esc(x.name || x.nick)}${x.nick && x.name ? ' (' + esc(x.nick) + ')' : ''}</option>`).join('')}
+            <option value="-" ${cur === '-' ? 'selected' : ''}>— Không giao ai —</option></select></td></tr>`; }).join('')}
+      </tbody></table></div>` : '<p class="muted">Ngày này chưa có đơn.</p>'}`,
+    onOk: async root => {
+      const patch = {};
+      $$('[data-drv]', root).forEach(sel => { const v = sel.value; patch[sel.dataset.drv] = v === '' ? null : v === '-' ? '' : v; });
+      if (!Object.keys(patch).length) return true;
+      await mergeInto('ngay/' + d, { assign: patch }, { date: d });
+      if (S.day && S.day.date === d) S.day.assign = Object.assign({}, S.day.assign, patch);
+      khoOutLater('don', d); drawRtChips(); drawTable();
+      toast('Đã lưu người giao – tự chuyển sang Kho và Giao hàng An Tâm'); return true;
+    },
+  });
+  return m;
+}
 // số đơn từng tuyến trong ngày (nút bấm để lọc)
 function rtChipsHtml() {
   const cnt = {}, cur = colF().rt || '';
   for (const { o, c, cid } of dayOrders(S.day ? S.day.r : {})) { const k = routeOf(o, S.cust[cid] || c)[0] || '-'; cnt[k] = (cnt[k] || 0) + 1; }
   const chip = (k, label, n, title) => `<button class="rtchip${k === '-' ? ' none' : ''}${cur === k ? ' on' : ''}" data-rt="${esc(k)}" title="${esc(title)}">${esc(label)} <b>${n}</b></button>`;
   const keys = Object.keys(cnt).filter(k => k !== '-').sort((a, b) => routeIdx(a) - routeIdx(b) || a.localeCompare(b));
-  return `<span class="small muted">🚚 Chia tuyến:</span>${cnt['-'] ? chip('-', '⚠ Chưa chia', cnt['-'], 'Đơn chưa khớp tuyến nào – chọn ở cột Tuyến') : ''}${keys.map(k => chip(k, k, cnt[k], routeLabel(k))).join('')}
-    ${keys.length || cnt['-'] ? '' : '<span class="small muted">chưa có đơn</span>'}<button class="btn sm ghost" id="rt-cfg" title="Sửa danh sách tuyến và quy tắc chia tự động">⚙ Quy tắc chia tuyến</button>`;
+  const as = (S.day && S.day.assign) || {}, hasDrv = (S.drivers || []).length;
+  const lab = k => { const n = driverName(driverFor(k, as)[0]); return hasDrv ? `${k} · ${n || '⚠ chưa có người'}` : k; };
+  return `<span class="small muted">🚚 Chia tuyến:</span>${cnt['-'] ? chip('-', '⚠ Chưa chia', cnt['-'], 'Đơn chưa khớp tuyến nào – chọn ở cột Tuyến') : ''}${keys.map(k => chip(k, lab(k), cnt[k], routeLabel(k))).join('')}
+    ${keys.length || cnt['-'] ? '' : '<span class="small muted">chưa có đơn</span>'}<button class="btn sm" id="rt-drv" title="Chọn nhân viên giao cho từng tuyến">👤 Người giao</button><button class="btn sm ghost" id="rt-cfg" title="Sửa danh sách tuyến và quy tắc chia tự động">⚙ Quy tắc chia tuyến</button>`;
 }
 function drawRtChips() {
   const el = $('#d-rt'); if (!el) return;
   el.innerHTML = rtChipsHtml();
   $$('[data-rt]', el).forEach(b => b.onclick = () => { const f = colF(); f.rt = f.rt === b.dataset.rt ? '' : b.dataset.rt; store('filter', S.filter); shown = PAGE; drawTable(); });
-  $('#rt-cfg', el).onclick = editRoutes;
+  $('#rt-cfg', el).onclick = editRoutes; $('#rt-drv', el).onclick = editDrivers;
 }
 function editRoutes() {
   let list = routes().map(r => Object.assign({}, r));
@@ -1199,7 +1250,8 @@ function drawTable() {
   rows.slice(0, shown).forEach(c => {
     if (gk(c) !== lastArea) {
       lastArea = gk(c);
-      const n = gcnt[lastArea] || 0, lb = byRt ? (lastArea ? '🚚 ' + routeLabel(lastArea) : '⚠ Chưa chia tuyến – chọn tuyến ở cột Tuyến') : (lastArea || 'Chưa có khu vực');
+      const dn = byRt && lastArea && (S.drivers || []).length ? driverName(driverFor(lastArea, S.day && S.day.assign)[0]) : '';
+      const n = gcnt[lastArea] || 0, lb = byRt ? (lastArea ? '🚚 ' + routeLabel(lastArea) + ((S.drivers || []).length ? ' · 👤 ' + (dn || 'chưa có người giao') : '') : '⚠ Chưa chia tuyến – chọn tuyến ở cột Tuyến') : (lastArea || 'Chưa có khu vực');
       html += `<tr class="grp${byRt && !lastArea ? ' rt-none' : ''}"><td colspan="${cols}"><span class="grp-l">${esc(lb)}${n ? ` · ${n} đơn` : ''}</span></td></tr>`;
     }
     html += rowHtml(c, ps, pay, H);
@@ -1473,7 +1525,7 @@ function printDoc(d, r, tuyen, opt = {}) {
   const gOf = x => (by === 'tuyen' ? x.rt : by === 'pay' ? payKey(x.o.tt) || 'none' : x.c.q || '');
   const ar = by === 'area' ? areas() : [];
   const gIdx = g => (by === 'tuyen' ? routeIdx(g) : by === 'pay' ? (g === 'none' ? 99 : PAYS.findIndex(p => p[0] === g)) : ar.indexOf(g));
-  const gLabel = g => (by === 'tuyen' ? (g ? routeLabel(g) : 'Chưa chia tuyến') : by === 'pay' ? payLabel(g) : g || 'Chưa có khu vực');
+  const gLabel = g => (by === 'tuyen' ? (g ? routeLabel(g) + ((S.drivers || []).length && driverName(driverFor(g, S.day && S.day.assign)[0]) ? ' · Người giao: ' + driverName(driverFor(g, S.day && S.day.assign)[0]) : '') : 'Chưa chia tuyến') : by === 'pay' ? payLabel(g) : g || 'Chưa có khu vực');
   const t = dayTotals(r), list = dayOrders(r).map(x => Object.assign(x, { rt: rk(x) })).map(x => Object.assign(x, { g: gOf(x) }))
     .sort((a, b) => gIdx(a.g) - gIdx(b.g) || (a.c.s || 0) - (b.c.s || 0));
   const dc = [[true, 'STT', x => `<td class="n">${x.i}</td>`], [C.has('g'), by === 'tuyen' ? 'Khu vực' : 'Tuyến', x => `<td>${esc(by === 'tuyen' ? x.c.q || '' : x.rt)}</td>`],

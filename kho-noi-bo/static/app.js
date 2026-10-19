@@ -2779,7 +2779,7 @@ async function pullDhInbox() {
         const cfg = routingCfg();
         p.rows.forEach(r => { [r.route, r.src] = autoRoute(r, cfg); if (manual[r.cust] !== undefined) { r.route = manual[r.cust]; r.src = 'tay'; } });
         const body = { kind: 'routing', date: x.date, title: text0(x.title) || 'Web Đóng hàng An Tâm',
-          data: { sheet: text0(x.title) || 'Web Đóng hàng An Tâm', cols: p.cols, rows: p.rows, total: p.total, assign: od.assign || {}, from: 'dong-hang:' + x.id } };
+          data: { sheet: text0(x.title) || 'Web Đóng hàng An Tâm', cols: p.cols, rows: p.rows, total: p.total, assign: Object.assign({}, od.assign || {}, dhAssign(x.assign)), from: 'dong-hang:' + x.id } };
         const res = docId ? await api('PUT', '/docs/' + encodeURIComponent(docId) + '?wh=TP', body) : await api('POST', '/docs?wh=TP', body);
         docId = res.id;
         if (GIAO_LINKED) await api('POST', '/giao-sync/out?id=' + encodeURIComponent(docId)).catch(e => console.warn('giaoout', e));
@@ -2793,6 +2793,8 @@ async function pullDhInbox() {
   if (!S.dirty && location.hash.startsWith('#/phan-tuyen')) render();
 }
 const text0 = v => String(v == null ? '' : v).trim();
+// người giao từng tuyến do web Đóng hàng chọn: {mã tuyến: mã người giao ('' = không ai)}; ưu tiên hơn bảng cũ của kho
+const dhAssign = a => Object.fromEntries(Object.entries(a && typeof a === 'object' ? a : {}).filter(([k, v]) => k && typeof v === 'string').map(([k, v]) => [k, v]));
 
 /* ============================================================ thông báo cho nhân viên (kết quả duyệt phiếu) */
 const NOTICE_EVERY = 60000;
