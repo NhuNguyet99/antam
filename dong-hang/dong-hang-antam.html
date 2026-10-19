@@ -1450,18 +1450,28 @@ function colChooser({ title, groups, key, onChange, extra = '', bindExtra }) {
 // In trực tiếp: dựng bản in ngay trong trang rồi mở hộp thoại in của trình duyệt. Khung trang chặn in (không có sự kiện
 // beforeprint – như khi mở trên claude.ai) thì mở bản in ở tab mới, tab đó tự mở hộp thoại in; trình duyệt chặn cả tab mới
 // thì mới tải file in về.
-let printBlocked = false;
+// Thứ tự: mở tab in (gọi ngay trong lúc bấm, trước mọi lệnh chờ, để trình duyệt không chặn) → in ngay trong trang →
+// tải file in (claude.ai chặn cả hộp thoại in lẫn tab mới của trang: chỉ còn cách này).
 async function directPrint(title, body, file) {
-  if (!printBlocked && await printInPage(title, body)) return true;
-  printBlocked = true;
-  const url = URL.createObjectURL(new Blob([printablePage(title, body, true)], { type: 'text/html;charset=utf-8' }));
-  let w = null;
-  try { w = window.open(url, '_blank'); } catch (e) { w = null; }
-  setTimeout(() => URL.revokeObjectURL(url), 120000);
-  if (w) { toast('Đã mở bản in ở tab mới – hộp thoại in tự hiện (nếu không, bấm Ctrl+P ở tab đó)'); return true; }
-  toast('Trình duyệt chặn mở tab mới – đang tải file in, mở file là hộp thoại in tự hiện');
+  if (openPrintTab(title, body)) { toast('Đã mở bản in ở tab mới – hộp thoại in tự hiện (nếu không, bấm Ctrl+P ở tab đó)'); return true; }
+  if (await printInPage(title, body)) return true;
+  if (store('printTip') !== 1) {
+    store('printTip', 1);
+    const go = await new Promise(res => modal({ title: 'In báo cáo trên claude.ai', ok: 'Tải bản in', onOk: () => true, onClose: res,
+      body: `<p style="margin-top:0">claude.ai không cho trang web tự mở hộp thoại in hay mở tab mới, nên web sẽ tải <b>bản in</b> về máy.</p>
+        <ol style="margin:0;padding-left:20px;line-height:1.7"><li>Bấm <b>Save file</b> ở hộp hỏi của claude.ai.</li><li>Mở file vừa tải (thanh tải xuống của trình duyệt) – <b>hộp thoại in tự bật</b>, chọn máy in và bấm In.</li></ol>
+        <p class="hint">Thông báo này chỉ hiện lần đầu.</p>` }));
+    if (!go) return false;
+  }
   await saveFile(file, printablePage(title, body, true), 'text/html');
   return false;
+}
+function openPrintTab(title, body) {
+  let w = null;
+  const url = URL.createObjectURL(new Blob([printablePage(title, body, true)], { type: 'text/html;charset=utf-8' }));
+  try { w = window.open(url, '_blank'); } catch (e) { w = null; }
+  setTimeout(() => URL.revokeObjectURL(url), 120000);
+  return !!w;
 }
 async function printInPage(title, body) {
   const area = $('#print-area'), root = document.documentElement, old = { theme: root.dataset.theme, title: document.title };
