@@ -152,6 +152,10 @@ tbody tr.grp:hover td { background: var(--accent-soft); }
 .orders select.rt-sel { width: 92px; }
 .orders select.rt-none { border-color: var(--bad); color: var(--bad); background: var(--bad-soft); }
 .orders tr.grp.rt-none td { background: var(--bad-soft); color: var(--bad); }
+.colpick { display: grid; grid-template-columns: repeat(auto-fit, minmax(170px, 1fr)); gap: 10px; }
+.colpick fieldset { border: 1px solid var(--line); border-radius: 8px; padding: 6px 10px 8px; margin: 0; display: grid; gap: 4px; }
+.colpick legend { font-size: 12px; font-weight: 700; color: var(--ink-2); padding: 0 4px; }
+.colpick label { display: flex; gap: 6px; align-items: center; font-size: 13px; cursor: pointer; }
 .prs { display: grid; gap: 10px; }
 .prs label { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
 .prs label input { margin-top: 3px; }
@@ -183,6 +187,7 @@ body.tbl-max #d-table > .hint { display: none; }
 .orders .stick { position: sticky; left: 0; background: var(--panel); z-index: 1; box-shadow: 1px 0 0 var(--line-2); }
 .orders .s-crm { width: 76px; min-width: 76px; max-width: 76px; font-family: var(--f-num); font-weight: 600; font-size: 12.5px; color: var(--ink-2); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .orders .cust.stick, .orders th.s-cust { left: 76px; }
+.orders.no-crm .cust.stick, .orders.no-crm th.s-cust { left: 0; }
 .orders tr.has-order td.s-crm { color: var(--accent); }
 .orders .grp-l { position: sticky; left: 8px; }
 /* dòng lọc theo cột */
@@ -897,6 +902,10 @@ function needHtml(t) {
 }
 function visibleProducts() {
   const ps = S.cfg.products.filter(p => p.show !== false);
+  const H = hideSet('hideDon'), out = visibleAuto(ps);
+  return out.filter(p => !H.has('p:' + p.id));
+}
+function visibleAuto(ps) {
   if (S.filter.allCols) return ps;
   const used = new Set(); for (const [, o] of live(S.day && S.day.r)) for (const [pid, n] of Object.entries(o.q || {})) if (num(n) > 0) used.add(pid);
   const base = ps.filter(p => used.has(p.id) || ['22cm', '25cm', '28cm', '31cm', 'banhmikebab'].includes(p.id));
@@ -930,7 +939,7 @@ function viewDay(main) {
       <label class="field">Khu vực<select id="f-area"><option value="">Tất cả khu vực</option>${areas().map(a => `<option ${a === f.area ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select></label>
       <div class="field">Xếp theo<div class="seg" id="f-by"><button data-b="tuyen" class="${(f.by || 'tuyen') === 'tuyen' ? 'on' : ''}">Tuyến</button><button data-b="area" class="${f.by === 'area' ? 'on' : ''}">Khu vực</button></div></div>
       <div class="field">Hiện<div class="seg" id="f-mode"><button data-m="co" class="${f.mode === 'co' ? 'on' : ''}">Khách có đơn</button><button data-m="all" class="${f.mode === 'all' ? 'on' : ''}">Tất cả khách</button></div></div>
-      <label class="field" style="flex-direction:row;display:flex;align-items:center;gap:6px;padding-bottom:8px"><input type="checkbox" id="f-cols" ${f.allCols ? 'checked' : ''} title="Hiện mọi cột sản phẩm"> Hiện mọi cột sản phẩm</label>
+      <button class="btn" id="f-cols" title="Chọn cột muốn hiện / ẩn trên bảng">👁 Ẩn / hiện cột${hideSet('hideDon').size ? ` (ẩn ${hideSet('hideDon').size})` : ''}</button>
       <button class="btn" id="d-add">+ Khách mới</button>
     </div>
     <div id="d-table"></div>`;
@@ -949,7 +958,7 @@ function viewDay(main) {
   $('#f-area').onchange = e => { S.filter.area = e.target.value; saveF(); shown = PAGE; drawTable(); };
   $$('#f-by button').forEach(b => b.onclick = () => { S.filter.by = b.dataset.b; saveF(); $$('#f-by button').forEach(x => x.classList.toggle('on', x === b)); drawTable(); });
   $$('#f-mode button').forEach(b => b.onclick = () => { S.filter.mode = b.dataset.m; saveF(); shown = PAGE; render(); });
-  $('#f-cols').onchange = e => { S.filter.allCols = e.target.checked; saveF(); drawTable(); };
+  $('#f-cols').onclick = donColChooser;
   drawTable();
 }
 // tô phần chữ khớp từ khóa (gõ không dấu vẫn khớp chữ có dấu)
@@ -1026,17 +1035,29 @@ function filteredRows() {
   return colFCount() ? list.filter(passCols) : list;
 }
 const fSel = (key, opts, cur, label) => `<select class="flt-sel${cur ? ' on' : ''}" data-f="${esc(key)}" aria-label="Lọc ${esc(label)}"><option value="">Tất cả</option>${opts.map(([v, n]) => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>`;
-function filterRow(ps) {
-  const f = colF(), n = colFCount();
+// cột thông tin của bảng đơn (ẩn được); "Khách hàng" và nút ⋯ luôn hiện
+const DON_COLS = [['crm', 'CRM'], ['st', 'Tình trạng'], ['tt', 'Thanh toán'], ['rt', 'Tuyến'], ['pk', 'Đóng gói'], ['pack', 'Định mức']];
+function donColChooser() {
+  const ps = S.cfg.products.filter(p => p.show !== false);
+  colChooser({
+    title: 'Ẩn / hiện cột – Đơn hàng ngày', key: 'hideDon',
+    groups: [{ name: 'Thông tin', items: DON_COLS }].concat(groupRuns(ps).map(r => ({ name: GROUPS[r.g].name, items: r.list.map(p => ['p:' + p.id, prodShort(p)]) }))),
+    extra: `<label class="field" style="flex-direction:row;display:flex;align-items:center;gap:6px;margin-top:10px"><input type="checkbox" id="cc-auto" ${S.filter.allCols ? '' : 'checked'}> Tự ẩn cột sản phẩm chưa có đơn nào trong ngày</label>`,
+    bindExtra: root => { $('#cc-auto', root).onchange = e => { S.filter.allCols = !e.target.checked; store('filter', S.filter); drawTable(); }; },
+    onChange: () => { drawTable(); const b = $('#f-cols'); if (b) b.textContent = '👁 Ẩn / hiện cột' + (hideSet('hideDon').size ? ` (ẩn ${hideSet('hideDon').size})` : ''); },
+  });
+}
+function filterRow(ps, H) {
+  const f = colF(), n = colFCount(), on = k => !H.has(k);
   return `<tr class="flt">
-    <th class="stick s-crm">${fSel('crm', [['co', 'Có mã'], ['khong', 'Chưa có']], f.crm, 'CRM')}</th>
+    ${on('crm') ? `<th class="stick s-crm">${fSel('crm', [['co', 'Có mã'], ['khong', 'Chưa có']], f.crm, 'CRM')}</th>` : ''}
     <th class="stick s-cust">${n ? `<button class="btn sm" id="flt-clear">✕ Xóa lọc (${n})</button>` : '<span class="muted small">▼ Lọc theo cột</span>'}</th>
-    <th>${fSel('st', [['HOẠT ĐỘNG', 'HOẠT ĐỘNG'], ['NGHỈ', 'NGHỈ']], f.st, 'tình trạng')}</th>
-    <th>${fSel('pay', PAYS.map(([k, l]) => [k, l]).concat([['none', 'Chưa chọn']]), f.pay, 'thanh toán')}</th>
-    <th>${fSel('rt', [['-', '⚠ Chưa chia']].concat(routes().map(r => [r.code, r.code + ' – ' + r.name])), f.rt || '', 'tuyến')}</th>
+    ${on('st') ? `<th>${fSel('st', [['HOẠT ĐỘNG', 'HOẠT ĐỘNG'], ['NGHỈ', 'NGHỈ']], f.st, 'tình trạng')}</th>` : ''}
+    ${on('tt') ? `<th>${fSel('pay', PAYS.map(([k, l]) => [k, l]).concat([['none', 'Chưa chọn']]), f.pay, 'thanh toán')}</th>` : ''}
+    ${on('rt') ? `<th>${fSel('rt', [['-', '⚠ Chưa chia']].concat(routes().map(r => [r.code, r.code + ' – ' + r.name])), f.rt || '', 'tuyến')}</th>` : ''}
     ${ps.map((p, i) => `<th class="pf g-${groupOf(p)}${!i || groupOf(ps[i - 1]) !== groupOf(p) ? ' gstart' : ''}">${fSel('p:' + p.id, [['co', 'Có'], ['trong', 'Trống']], (f.p || {})[p.id] || '', prodLabel(p))}</th>`).join('')}
-    <th>${fSel('pk', [['TÚI ĐEN', 'TÚI ĐEN'], ['THÙNG', 'THÙNG']], f.pk, 'đóng gói')}</th>
-    <th>${fSel('pack', [['tui', 'Có túi đen'], ['thung', 'Có thùng'], ['cay', 'Có cây kebab'], ['none', 'Trống']], f.pack, 'định mức')}</th>
+    ${on('pk') ? `<th>${fSel('pk', [['TÚI ĐEN', 'TÚI ĐEN'], ['THÙNG', 'THÙNG']], f.pk, 'đóng gói')}</th>` : ''}
+    ${on('pack') ? `<th>${fSel('pack', [['tui', 'Có túi đen'], ['thung', 'Có thùng'], ['cay', 'Có cây kebab'], ['none', 'Trống']], f.pack, 'định mức')}</th>` : ''}
     <th></th></tr>`;
 }
 function bindFilters(el) {
@@ -1070,7 +1091,7 @@ function drawTable() {
     return;
   }
   let lastArea = null, html = '';
-  const cols = 8 + ps.length, gk = c => (byRt ? rk(c) : c.q), gcnt = {};
+  const H = hideSet('hideDon'), cols = 2 + DON_COLS.filter(([k]) => !H.has(k)).length + ps.length, gk = c => (byRt ? rk(c) : c.q), gcnt = {};
   for (const c of rows) if (hasOrder(orderOf(c.id))) gcnt[gk(c)] = (gcnt[gk(c)] || 0) + 1;
   if (!rows.length) html = `<tr><td colspan="${cols}" class="muted" style="padding:18px 12px"><span class="grp-l">Không có dòng nào khớp bộ lọc cột.${S.filter.mode === 'co' ? ' Đang xem "Khách có đơn" – muốn lọc khách NGHỈ hãy chọn "Tất cả khách".' : ''}</span></td></tr>`;
   rows.slice(0, shown).forEach(c => {
@@ -1079,32 +1100,33 @@ function drawTable() {
       const n = gcnt[lastArea] || 0, lb = byRt ? (lastArea ? '🚚 ' + routeLabel(lastArea) : '⚠ Chưa chia tuyến – chọn tuyến ở cột Tuyến') : (lastArea || 'Chưa có khu vực');
       html += `<tr class="grp${byRt && !lastArea ? ' rt-none' : ''}"><td colspan="${cols}"><span class="grp-l">${esc(lb)}${n ? ` · ${n} đơn` : ''}</span></td></tr>`;
     }
-    html += rowHtml(c, ps, pay);
+    html += rowHtml(c, ps, pay, H);
   });
   const runs = groupRuns(ps);
-  el.innerHTML = `<div class="tw otw"><table class="orders" id="orders"><thead><tr>
-      <th class="stick s-crm" rowspan="2">CRM</th><th class="stick s-cust" rowspan="2">Khách hàng</th><th rowspan="2">Tình trạng</th><th rowspan="2">Thanh toán</th><th rowspan="2" title="Tuyến giao hàng (tự chia theo khu vực, chọn tay được)">Tuyến</th>${runs.map(r => `<th class="gh g-${r.g} gstart" colspan="${r.list.length}">${esc(GROUPS[r.g].name)}</th>`).join('')}
-      <th rowspan="2">Đóng gói</th><th rowspan="2">Định mức</th><th rowspan="2"></th></tr>
+  const th = (k, html) => (H.has(k) ? '' : html);
+  el.innerHTML = `<div class="tw otw"><table class="orders${H.has('crm') ? ' no-crm' : ''}" id="orders"><thead><tr>
+      ${th('crm', '<th class="stick s-crm" rowspan="2">CRM</th>')}<th class="stick s-cust" rowspan="2">Khách hàng</th>${th('st', '<th rowspan="2">Tình trạng</th>')}${th('tt', '<th rowspan="2">Thanh toán</th>')}${th('rt', '<th rowspan="2" title="Tuyến giao hàng (tự chia theo khu vực, chọn tay được)">Tuyến</th>')}${runs.map(r => `<th class="gh g-${r.g} gstart" colspan="${r.list.length}">${esc(GROUPS[r.g].name)}</th>`).join('')}
+      ${th('pk', '<th rowspan="2">Đóng gói</th>')}${th('pack', '<th rowspan="2">Định mức</th>')}<th rowspan="2"></th></tr>
       <tr>${runs.map(r => r.list.map((p, i) => `<th class="p g-${r.g}${i ? '' : ' gstart'}" title="${esc(p.name)}">${esc(prodShort(p))}</th>`).join('')).join('')}</tr>
-      ${filterRow(ps)}</thead><tbody>${html}</tbody></table></div>
+      ${filterRow(ps, H)}</thead><tbody>${html}</tbody></table></div>
     ${rows.length > shown ? `<div class="more"><button class="btn" id="d-more">Xem thêm ${Math.min(PAGE, rows.length - shown)} khách (còn ${rows.length - shown})</button></div>` : ''}
     <p class="hint" style="margin-top:8px">${rows.length} khách${colFCount() ? ` (đang lọc ${colFCount()} cột)` : ''}. Gõ số lượng là tự lưu và tự tính định mức. Bấm ⋯ để nhập người bàn giao, người giao, tài xế, công nợ, ngày thanh toán, người check, ghi chú.</p>`;
   if ($('#d-more')) $('#d-more').onclick = () => { shown += PAGE; drawTable(); };
   bindRows(el); bindFilters(el); fixStickyTops($('#orders'));
 }
-function rowHtml(c, ps, pay) {
+function rowHtml(c, ps, pay, H = new Set()) {
   const o = orderOf(c.id) || {}, st = statusOf(o), pk = packOf(o, c);
   const p = packing(o.q, pk);
-  const q = S.filter.q;
+  const q = S.filter.q, on = k => !H.has(k);
   return `<tr data-cid="${esc(c.id)}" class="${hasOrder(o) ? 'has-order' : ''}${q ? ' hit' : ''}">
-    <td class="stick s-crm" title="${esc(c.crm || '')}">${c.crm ? hl(c.crm, q) : '–'}</td>
+    ${on('crm') ? `<td class="stick s-crm" title="${esc(c.crm || '')}">${c.crm ? hl(c.crm, q) : '–'}</td>` : ''}
     <td class="cust stick"><b>${hl(c.name, q)}</b><div class="sub">${hl(c.phone || '', q)}${c.note ? ' · ' + hl(c.note, q) : ''}${q && c.q && matchCust({ q: c.q }, norm(q)) ? ' · ' + hl(c.q, q) : ''}</div></td>
-    <td><select class="in st-sel${st === 'HOẠT ĐỘNG' ? ' st-on' : ''}" data-k="hd"><option value="">${st === 'HOẠT ĐỘNG' ? 'HOẠT ĐỘNG' : 'NGHỈ'} (tự)</option><option ${o.hd === 'HOẠT ĐỘNG' ? 'selected' : ''}>HOẠT ĐỘNG</option><option ${o.hd === 'NGHỈ' ? 'selected' : ''}>NGHỈ</option></select></td>
-    <td>${paySelect(o.tt)}</td>
-    <td>${rtSelect(o, c)}</td>
+    ${on('st') ? `<td><select class="in st-sel${st === 'HOẠT ĐỘNG' ? ' st-on' : ''}" data-k="hd"><option value="">${st === 'HOẠT ĐỘNG' ? 'HOẠT ĐỘNG' : 'NGHỈ'} (tự)</option><option ${o.hd === 'HOẠT ĐỘNG' ? 'selected' : ''}>HOẠT ĐỘNG</option><option ${o.hd === 'NGHỈ' ? 'selected' : ''}>NGHỈ</option></select></td>` : ''}
+    ${on('tt') ? `<td>${paySelect(o.tt)}</td>` : ''}
+    ${on('rt') ? `<td>${rtSelect(o, c)}</td>` : ''}
     ${ps.map((pr, i) => { const v = (o.q || {})[pr.id], g = groupOf(pr), st = !i || groupOf(ps[i - 1]) !== g; return `<td class="pc g-${g}${st ? ' gstart' : ''}"><input class="q ${num(v) > 0 ? 'has' : ''}" data-p="${esc(pr.id)}" inputmode="decimal" value="${v ? esc(v) : ''}" aria-label="${esc(prodLabel(pr))}" title="${esc(prodLabel(pr))}"></td>`; }).join('')}
-    <td><select class="in" data-k="pk">${['TÚI ĐEN', 'THÙNG'].map(x => `<option ${norm(x) === norm(pk) ? 'selected' : ''}>${x}</option>`).join('')}</select></td>
-    <td class="pack" data-out="pack">${esc(packLabel(p))}</td>
+    ${on('pk') ? `<td><select class="in" data-k="pk">${['TÚI ĐEN', 'THÙNG'].map(x => `<option ${norm(x) === norm(pk) ? 'selected' : ''}>${x}</option>`).join('')}</select></td>` : ''}
+    ${on('pack') ? `<td class="pack" data-out="pack">${esc(packLabel(p))}</td>` : ''}
     <td><button class="btn sm ghost" data-more title="Chi tiết đơn">⋯</button></td></tr>`;
 }
 // ghi 1 dòng (gộp các lần gõ liên tiếp)
@@ -1159,7 +1181,7 @@ function bindRows(el) {
 }
 function updateRow(tr, cid) {
   const o = orderOf(cid) || {}, c = S.cust[cid];
-  $('[data-out=pack]', tr).textContent = packLabel(packing(o.q, packOf(o, c)));
+  const po = $('[data-out=pack]', tr); if (po) po.textContent = packLabel(packing(o.q, packOf(o, c)));
   tr.classList.toggle('has-order', hasOrder(o));
   const sel = $('select[data-k=hd]', tr);
   if (sel) { sel.options[0].textContent = (qtyTotal(o.q) > 0 ? 'HOẠT ĐỘNG' : 'NGHỈ') + ' (tự)'; sel.classList.toggle('st-on', statusOf(o) === 'HOẠT ĐỘNG'); }
@@ -1364,6 +1386,21 @@ function viewPrint(main) {
     try { await navigator.clipboard.writeText(txt); toast('Đã sao chép ' + dayOrders(r).length + ' đơn – sang web kho › Phân tuyến giao hàng › Phân tuyến ngày mới, bấm Ctrl+V'); }
     catch (e) { modal({ title: 'Sao chép cho Phân tuyến', body: `<p class="hint">Bấm vào ô, Ctrl+A rồi Ctrl+C:</p><textarea style="width:100%" rows="8" readonly>${esc(txt)}</textarea>` }); }
   };
+}
+// Ẩn / hiện từng cột (lưu trên máy này): nhóm [{name, items: [[mã, tên]]}], extra = html thêm ở cuối
+const hideSet = k => new Set(store(k) || []);
+function colChooser({ title, groups, key, onChange, extra = '', bindExtra }) {
+  const H = hideSet(key);
+  const m = modal({
+    title, body: `<p class="hint" style="margin-top:0">Bỏ tích để ẩn cột. Chỉ đổi cách xem trên máy này, không ảnh hưởng dữ liệu và người khác.</p>
+      <div class="colpick">${groups.map(g => `<fieldset><legend>${esc(g.name)}</legend>${g.items.map(([k, l]) => `<label><input type="checkbox" data-col="${esc(k)}" ${H.has(k) ? '' : 'checked'}> ${esc(l)}</label>`).join('')}</fieldset>`).join('')}</div>
+      ${extra}<div class="row" style="margin-top:10px"><button class="btn sm" data-all>Hiện tất cả</button><span class="grow"></span><span class="hint" data-cnt></span></div>`,
+  });
+  const cnt = () => { const n = hideSet(key).size; $('[data-cnt]', m.root).textContent = n ? `Đang ẩn ${n} cột` : 'Đang hiện tất cả cột'; };
+  $$('[data-col]', m.root).forEach(c => c.onchange = () => { const h = hideSet(key); c.checked ? h.delete(c.dataset.col) : h.add(c.dataset.col); store(key, [...h]); cnt(); onChange(); });
+  $('[data-all]', m.root).onclick = () => { store(key, []); $$('[data-col]', m.root).forEach(c => { c.checked = true; }); cnt(); onChange(); };
+  if (bindExtra) bindExtra(m.root);
+  cnt();
 }
 // hộp in báo cáo: tất cả hoặc theo bộ lọc đang chọn → tải file HTML rồi mở bằng trình duyệt, Ctrl+P
 function printModal({ title, note, nAll, nFlt, unit, actOpt, build }) {
@@ -1785,9 +1822,24 @@ const T123_P = [['p22', '22CM', '22cm', 'túi'], ['p25', '25 CM', '25cm', 'túi'
 const T1_CG = [['thuong', 'Bánh mì · túi', ['p22', 'p25', 'p28', 'p31']], ['kebab', 'Kebab · cái', ['vang', 'den']], ['thit', 'Cây thịt', ['thit']]];
 const T1_SH = { p22: '22 cm', p25: '25 cm', p28: '28 cm', p31: '31 cm', vang: 'Vàng', den: 'Đen', thit: 'kg' };
 const t1Z = v => (v ? fmt(v) : '<span class="zero">0</span>');
-const t1Cls = k => { const i = T1_CG.findIndex(g => g[2].includes(k)); return `pc g-${T1_CG[i][0]}${T1_CG[i][2][0] === k ? ' gstart' : ''}`; };
-const t1Head = (lead, tail, extra = '') => `<thead><tr>${lead}${T1_CG.map(([g, n, ks]) => `<th class="gh g-${g} gstart" colspan="${ks.length}">${esc(n)}</th>`).join('')}<th class="gh g-khac gstart" colspan="2">Đóng túi vàng</th>${tail}</tr>
-  <tr>${T1_CG.map(([g, , ks]) => ks.map((k, i) => `<th class="p g-${g}${i ? '' : ' gstart'}">${T1_SH[k]}</th>`).join('')).join('')}<th class="p g-khac gstart" title="Kebab vàng: số túi 50 cái">Túi 50</th><th class="p g-khac">Túi lẻ</th></tr>${extra}</thead>`;
+// ẩn / hiện cột (lưu trên máy): crm, ht, st, các cột số lượng, full, le, note
+const t1On = k => !hideSet('hideT1').has(k);
+const t1P = () => T123_P.filter(([k]) => t1On(k));
+const t1CG = () => T1_CG.map(([g, n, ks]) => [g, n, ks.filter(t1On)]).filter(x => x[2].length);
+const t1Bag = () => [['full', 'Túi 50', 'Kebab vàng: số túi 50 cái'], ['le', 'Túi lẻ', '']].filter(([k]) => t1On(k));
+const t1Cls = k => { const cg = t1CG(), i = cg.findIndex(g => g[2].includes(k)); return i < 0 ? 'pc' : `pc g-${cg[i][0]}${cg[i][2][0] === k ? ' gstart' : ''}`; };
+const t1BagCls = k => `pc g-khac${t1Bag()[0] && t1Bag()[0][0] === k ? ' gstart' : ''}`;
+const t1Head = (lead, tail, extra = '') => `<thead><tr>${lead}${t1CG().map(([g, n, ks]) => `<th class="gh g-${g} gstart" colspan="${ks.length}">${esc(n)}</th>`).join('')}${t1Bag().length ? `<th class="gh g-khac gstart" colspan="${t1Bag().length}">Đóng túi vàng</th>` : ''}${tail}</tr>
+  <tr>${t1CG().map(([g, , ks]) => ks.map((k, i) => `<th class="p g-${g}${i ? '' : ' gstart'}">${T1_SH[k]}</th>`).join('')).join('')}${t1Bag().map(([k, l, t]) => `<th class="p ${t1BagCls(k).slice(3)}" title="${esc(t)}">${l}</th>`).join('')}</tr>${extra}</thead>`;
+function t1ColChooser() {
+  colChooser({
+    title: 'Ẩn / hiện cột – Tuyến kebab 123', key: 'hideT1',
+    groups: [{ name: 'Thông tin', items: [['crm', 'CRM'], ['ht', 'Hỗ trợ'], ['st', 'Tình trạng'], ['note', 'Ghi chú']] }]
+      .concat(T1_CG.map(([, n, ks]) => ({ name: n, items: ks.map(k => [k, k === 'thit' ? 'Cây thịt (kg)' : T1_SH[k]]) })))
+      .concat([{ name: 'Đóng túi vàng', items: [['full', 'Túi 50'], ['le', 'Túi lẻ']] }]),
+    onChange: () => { t1Draw(); const b = $('#t1-cols'); if (b) b.textContent = '👁 Ẩn / hiện cột' + (hideSet('hideT1').size ? ` (ẩn ${hideSet('hideT1').size})` : ''); },
+  });
+}
 S.t1 = { cust: {}, day: null, unsub: null, loaded: false, local: {}, timers: {} };
 const t1Price = () => Object.assign({ p22: 37500, p25: 45000, p28: 0, p31: 0, vang: 2640, den: 0, thit: 125000 }, (S.cfg.t123 || {}).price || {});
 const t1List = () => Object.entries(S.t1.cust).filter(([, c]) => c).map(([id, c]) => Object.assign({ id }, c, { g: t1G(c) }))
@@ -1850,6 +1902,7 @@ function viewT123(main) {
     <div class="row">
       <label class="field grow" style="min-width:200px">Tìm khách (tên, CRM, SĐT, ghi chú)<input id="t1f-q" value="${esc(f.q)}" placeholder="VD: K025 hoặc Tô Ký"></label>
       <div class="field">Tuyến<div class="seg" id="t1f-g">${[['', 'Tất cả']].concat(T123_GROUPS).map(([g, n]) => `<button data-g="${g}" class="${f.g === g ? 'on' : ''}">${esc(n)}</button>`).join('')}</div></div>
+      <button class="btn" id="t1-cols" title="Chọn cột muốn hiện / ẩn trên bảng">👁 Ẩn / hiện cột${hideSet('hideT1').size ? ` (ẩn ${hideSet('hideT1').size})` : ''}</button>
     </div>
     <div id="t1-table"></div>`;
   const go = nd => { watchDay(nd); t1Watch(nd); render(); };
@@ -1858,7 +1911,7 @@ function viewT123(main) {
   $('#t1-price').onclick = t1EditPrice; $('#t1-add').onclick = () => t1EditCust(null); $('#t1-import').onclick = t1Import;
   $('#t1-copy').onclick = () => guard(t1CopyPrev); $('#t1-send').onclick = () => guard(t1Send);
   $('#t1-csv').onclick = () => guard(() => saveFile(`tuyen-123-${d}.csv`, '﻿' + toCsv(t1Rows()), 'text/csv'));
-  $('#t1-print').onclick = t1Print; bindKhoBar(d);
+  $('#t1-print').onclick = t1Print; $('#t1-cols').onclick = t1ColChooser; bindKhoBar(d);
   let qt; $('#t1f-q').oninput = e => { clearTimeout(qt); qt = setTimeout(() => { f.q = e.target.value; t1SaveF(); t1Draw(); }, 220); };
   $$('#t1f-g button').forEach(b => b.onclick = () => { f.g = b.dataset.g; t1SaveF(); $$('#t1f-g button').forEach(x => x.classList.toggle('on', x === b)); t1Draw(); });
   t1Draw();
@@ -1892,13 +1945,13 @@ function t1FltText() {
 }
 function t1FRow() {
   const x = t1F().c, n = t1FCount(), yn = [['co', 'Có'], ['trong', 'Trống']];
-  return `<tr class="flt"><th class="stick s-crm">${fSel('crm', [['co', 'Có mã'], ['khong', 'Chưa có']], x.crm || '', 'CRM')}</th>
+  return `<tr class="flt">${t1On('crm') ? `<th class="stick s-crm">${fSel('crm', [['co', 'Có mã'], ['khong', 'Chưa có']], x.crm || '', 'CRM')}</th>` : ''}
     <th class="stick s-cust">${n ? `<button class="btn sm" data-t1clear>✕ Xóa lọc (${n})</button>` : '<span class="muted small">▼ Lọc theo cột</span>'}</th>
-    <th>${fSel('ht', [['co', 'Hỗ trợ'], ['khong', 'Không']], x.ht || '', 'hỗ trợ')}</th>
-    <th>${fSel('st', [['HOẠT ĐỘNG', 'HOẠT ĐỘNG'], ['NGHỈ', 'NGHỈ']], x.st || '', 'tình trạng')}</th>
-    ${T123_P.map(([k]) => `<th class="pf ${t1Cls(k).slice(3)}">${fSel('p:' + k, yn, x.p[k] || '', T1_SH[k])}</th>`).join('')}
-    <th class="pf g-khac gstart">${fSel('full', yn, x.full || '', 'túi 50')}</th><th class="pf g-khac">${fSel('le', yn, x.le || '', 'túi lẻ')}</th>
-    <th>${fSel('gc', [['co', 'Có ghi chú'], ['ngay', 'Có ghi chú ngày']], x.gc || '', 'ghi chú')}</th><th></th></tr>`;
+    ${t1On('ht') ? `<th>${fSel('ht', [['co', 'Hỗ trợ'], ['khong', 'Không']], x.ht || '', 'hỗ trợ')}</th>` : ''}
+    ${t1On('st') ? `<th>${fSel('st', [['HOẠT ĐỘNG', 'HOẠT ĐỘNG'], ['NGHỈ', 'NGHỈ']], x.st || '', 'tình trạng')}</th>` : ''}
+    ${t1P().map(([k]) => `<th class="pf ${t1Cls(k).slice(3)}">${fSel('p:' + k, yn, x.p[k] || '', T1_SH[k])}</th>`).join('')}
+    ${t1Bag().map(([k, l]) => `<th class="pf ${t1BagCls(k).slice(3)}">${fSel(k, yn, x[k] || '', l.toLowerCase())}</th>`).join('')}
+    ${t1On('note') ? `<th>${fSel('gc', [['co', 'Có ghi chú'], ['ngay', 'Có ghi chú ngày']], x.gc || '', 'ghi chú')}</th>` : ''}<th></th></tr>`;
 }
 function t1ClearF() { const f = t1F(); f.q = ''; f.g = ''; f.c = { p: {} }; t1SaveF(); const q = $('#t1f-q'); if (q) q.value = ''; $$('#t1f-g button').forEach(b => b.classList.toggle('on', !b.dataset.g)); t1Draw(); }
 // vẽ bảng tóm tắt + bảng nhập theo bộ lọc (không đụng ô tìm để gõ không bị mất chữ)
@@ -1909,7 +1962,7 @@ function t1Draw() {
   const cell = (v, key, cls = '') => `<td class="n ${cls}" data-tt="${key}">${t1Z(v)}</td>`;
   sumEl.innerHTML = `${nf ? `<div class="t1flt"><span>🔎 Đang lọc <b>${list.length}</b>/${all0.length} khách: ${esc(t1FltText())}</span><button class="btn sm" data-t1clear>✕ Xóa lọc</button></div>` : ''}
     <div class="tw"><table class="orders t1sum">${t1Head('<th rowspan="2">Tuyến</th><th class="n" rowspan="2">Khách giao</th>', '<th class="n" rowspan="2">Doanh thu (đ)</th>')}<tbody>
-      ${sums.filter(x => !nf || list.some(c => c.g === x.g)).concat([Object.assign({ g: 'all', name: nf ? 'TỔNG (theo lọc)' : 'TỔNG', tot: 1 }, all)]).map(s => `<tr${s.tot ? ' class="tot"' : ''}><td><b>${esc(s.name)}</b></td>${cell(s.n, 'n:' + s.g)}${T123_P.map(([k]) => cell(s.q[k], k + ':' + s.g, t1Cls(k))).join('')}${cell(s.full, 'full:' + s.g, 'pc g-khac gstart')}${cell(s.le, 'le:' + s.g, 'pc g-khac')}${cell(s.dt, 'dt:' + s.g)}</tr>`).join('')}
+      ${sums.filter(x => !nf || list.some(c => c.g === x.g)).concat([Object.assign({ g: 'all', name: nf ? 'TỔNG (theo lọc)' : 'TỔNG', tot: 1 }, all)]).map(s => `<tr${s.tot ? ' class="tot"' : ''}><td><b>${esc(s.name)}</b></td>${cell(s.n, 'n:' + s.g)}${t1P().map(([k]) => cell(s.q[k], k + ':' + s.g, t1Cls(k))).join('')}${t1Bag().map(([k]) => cell(s[k], k + ':' + s.g, t1BagCls(k))).join('')}${cell(s.dt, 'dt:' + s.g)}</tr>`).join('')}
     </tbody></table></div>`;
   el.innerHTML = all0.length ? t1TableHtml(list, sums, all0.length) : `<div class="card empty"><div class="big">Chưa có khách tuyến 123</div><p class="hint">Bấm "Cập nhật từ sheet" và dán sheet 2-KHÁCH TUYẾN 123, hoặc "+ Khách tuyến".</p></div>`;
   $$('[data-t1clear]').forEach(b => b.onclick = t1ClearF);
@@ -1921,35 +1974,36 @@ function t1Draw() {
   t1Bind();
   const tb = $('.t1t', el); if (tb) fixStickyTops(tb);
 }
-const T1_COLS = 8 + T123_P.length;
+const t1Cols = () => 2 + ['crm', 'ht', 'st', 'note'].filter(t1On).length + t1P().length + t1Bag().length;
 function t1TableHtml(list, sums, total) {
+  const T1_COLS = t1Cols(), nInfo = ['ht', 'st'].filter(t1On).length;
   let html = list.length ? '' : `<tr><td colspan="${T1_COLS}" class="muted" style="padding:18px 12px"><span class="grp-l">Không có khách nào khớp bộ lọc.</span></td></tr>`;
   for (const s of sums) {
     const rows = list.filter(c => c.g === s.g);
     if (!rows.length) continue;
     html += `<tr class="grp"><td colspan="${T1_COLS}"><span class="grp-l">${esc(s.name)} · ${rows.length} khách</span></td></tr>
-      <tr class="t1tot"><td class="stick s-crm"></td><td class="cust stick"><b>TỔNG BÁNH ${esc(s.name.toUpperCase())}</b><div class="sub">Doanh thu <b data-tt="dt:${s.g}">${fmt(s.dt)}</b>đ</div></td>
-        <td colspan="2" class="small"><span data-tt="n:${s.g}">${fmt(s.n)}</span> khách giao</td>${T123_P.map(([k]) => `<td class="${t1Cls(k)}" data-tt="${k}:${s.g}">${t1Z(s.q[k])}</td>`).join('')}
-        <td class="pc g-khac gstart" data-tt="full:${s.g}">${t1Z(s.full)}</td><td class="pc g-khac">lẻ <span data-tt="le:${s.g}">${t1Z(s.le)}</span></td><td colspan="2"></td></tr>`;
+      <tr class="t1tot">${t1On('crm') ? '<td class="stick s-crm"></td>' : ''}<td class="cust stick"><b>TỔNG BÁNH ${esc(s.name.toUpperCase())}</b><div class="sub">Doanh thu <b data-tt="dt:${s.g}">${fmt(s.dt)}</b>đ${nInfo ? '' : ` · <span data-tt="n:${s.g}">${fmt(s.n)}</span> khách giao`}</div></td>
+        ${nInfo ? `<td colspan="${nInfo}" class="small"><span data-tt="n:${s.g}">${fmt(s.n)}</span> khách giao</td>` : ''}${t1P().map(([k]) => `<td class="${t1Cls(k)}" data-tt="${k}:${s.g}">${t1Z(s.q[k])}</td>`).join('')}
+        ${t1Bag().map(([k]) => (k === 'full' ? `<td class="${t1BagCls(k)}" data-tt="full:${s.g}">${t1Z(s.full)}</td>` : `<td class="${t1BagCls(k)}">lẻ <span data-tt="le:${s.g}">${t1Z(s.le)}</span></td>`)).join('')}<td colspan="${t1On('note') ? 2 : 1}"></td></tr>`;
     let sub = null;
     for (const c of rows) {
       if ((c.sub || '') !== sub) { sub = c.sub || ''; if (sub) html += `<tr class="t1sub"><td colspan="${T1_COLS}"><span class="grp-l">↳ ${esc(sub)}</span></td></tr>`; }
       html += t1RowHtml(c);
     }
   }
-  return `<div class="tw otw"><table class="orders t1t">${t1Head('<th class="stick s-crm" rowspan="2">CRM</th><th class="stick s-cust" rowspan="2">Khách hàng · SĐT</th><th rowspan="2" title="Khách hỗ trợ">Hỗ trợ</th><th rowspan="2">Tình trạng</th>', '<th rowspan="2">Ghi chú</th><th rowspan="2"></th>', t1FRow())}<tbody>${html}</tbody></table></div>
+  return `<div class="tw otw"><table class="orders t1t${t1On('crm') ? '' : ' no-crm'}">${t1Head(`${t1On('crm') ? '<th class="stick s-crm" rowspan="2">CRM</th>' : ''}<th class="stick s-cust" rowspan="2">Khách hàng · SĐT</th>${t1On('ht') ? '<th rowspan="2" title="Khách hỗ trợ">Hỗ trợ</th>' : ''}${t1On('st') ? '<th rowspan="2">Tình trạng</th>' : ''}`, `${t1On('note') ? '<th rowspan="2">Ghi chú</th>' : ''}<th rowspan="2"></th>`, t1FRow())}<tbody>${html}</tbody></table></div>
     <p class="hint" style="margin-top:8px">${list.length < total ? `Đang hiện ${list.length}/${total}` : list.length} khách. Bánh mì 22–31 cm nhập theo túi, kebab VÀNG / ĐEN theo cái, cây thịt theo kg. Gõ là tự lưu; có số lượng thì tự HOẠT ĐỘNG. Túi 50 / túi lẻ tự tính từ số VÀNG.</p>`;
 }
 function t1RowHtml(c) {
   const o = t1Order(c.id), st = t1Status(o), b = t1Bags(o);
   return `<tr data-t1="${esc(c.id)}" class="${st === 'HOẠT ĐỘNG' ? 'has-order' : ''}">
-    <td class="stick s-crm" title="${esc(c.crm || '')}">${esc(c.crm || '–')}</td>
+    ${t1On('crm') ? `<td class="stick s-crm" title="${esc(c.crm || '')}">${esc(c.crm || '–')}</td>` : ''}
     <td class="cust stick"><b>${esc(c.name)}</b>${c.phone ? `<div class="sub mono">${esc(c.phone)}</div>` : ''}</td>
-    <td class="t1ht"><label class="htlab${c.ht ? ' on' : ''}"><input type="checkbox" data-ht ${c.ht ? 'checked' : ''} aria-label="Hỗ trợ">${c.ht ? 'HỖ TRỢ' : ''}</label></td>
-    <td><select class="in st-sel${st === 'HOẠT ĐỘNG' ? ' st-on' : ''}" data-k="st"><option value="">${st === 'HOẠT ĐỘNG' && !o.st ? 'HOẠT ĐỘNG' : 'NGHỈ'} (tự)</option><option ${o.st === 'HOẠT ĐỘNG' ? 'selected' : ''}>HOẠT ĐỘNG</option><option ${o.st === 'NGHỈ' ? 'selected' : ''}>NGHỈ</option></select></td>
-    ${T123_P.map(([k, l]) => { const v = t1V(o, k); return `<td class="${t1Cls(k)}"><input class="q ${v > 0 ? 'has' : ''}" data-q="${k}" inputmode="decimal" value="${v ? esc(v) : ''}" aria-label="${esc(l)}" title="${esc(l)}"></td>`; }).join('')}
-    <td class="pc g-khac gstart" data-out="full">${b.full || ''}</td><td class="pc g-khac" data-out="le">${b.le ? '1 túi ' + b.le : ''}</td>
-    <td class="t1note">${c.note ? `<div class="sub">${esc(c.note)}</div>` : ''}<input class="in t1gc" data-k="gc" value="${esc(o.gc || '')}" placeholder="ghi chú ngày" aria-label="Ghi chú ngày"></td>
+    ${t1On('ht') ? `<td class="t1ht"><label class="htlab${c.ht ? ' on' : ''}"><input type="checkbox" data-ht ${c.ht ? 'checked' : ''} aria-label="Hỗ trợ">${c.ht ? 'HỖ TRỢ' : ''}</label></td>` : ''}
+    ${t1On('st') ? `<td><select class="in st-sel${st === 'HOẠT ĐỘNG' ? ' st-on' : ''}" data-k="st"><option value="">${st === 'HOẠT ĐỘNG' && !o.st ? 'HOẠT ĐỘNG' : 'NGHỈ'} (tự)</option><option ${o.st === 'HOẠT ĐỘNG' ? 'selected' : ''}>HOẠT ĐỘNG</option><option ${o.st === 'NGHỈ' ? 'selected' : ''}>NGHỈ</option></select></td>` : ''}
+    ${t1P().map(([k, l]) => { const v = t1V(o, k); return `<td class="${t1Cls(k)}"><input class="q ${v > 0 ? 'has' : ''}" data-q="${k}" inputmode="decimal" value="${v ? esc(v) : ''}" aria-label="${esc(l)}" title="${esc(l)}"></td>`; }).join('')}
+    ${t1On('full') ? `<td class="${t1BagCls('full')}" data-out="full">${b.full || ''}</td>` : ''}${t1On('le') ? `<td class="${t1BagCls('le')}" data-out="le">${b.le ? '1 túi ' + b.le : ''}</td>` : ''}
+    ${t1On('note') ? `<td class="t1note">${c.note ? `<div class="sub">${esc(c.note)}</div>` : ''}<input class="in t1gc" data-k="gc" value="${esc(o.gc || '')}" placeholder="ghi chú ngày" aria-label="Ghi chú ngày"></td>` : ''}
     <td><button class="btn sm ghost" data-edit title="Sửa khách">⋯</button></td></tr>`;
 }
 function t1Patch(cid, patch) {
@@ -1970,9 +2024,9 @@ function t1Bind() {
     const after = () => {
       const o = t1Order(cid), st = t1Status(o), sel = $('select[data-k=st]', tr), b = t1Bags(o);
       tr.classList.toggle('has-order', st === 'HOẠT ĐỘNG');
-      sel.classList.toggle('st-on', st === 'HOẠT ĐỘNG');
-      sel.options[0].textContent = (t1Qty(o) > 0 ? 'HOẠT ĐỘNG' : 'NGHỈ') + ' (tự)';
-      $('[data-out=full]', tr).textContent = b.full || ''; $('[data-out=le]', tr).textContent = b.le ? '1 túi ' + b.le : '';
+      if (sel) { sel.classList.toggle('st-on', st === 'HOẠT ĐỘNG'); sel.options[0].textContent = (t1Qty(o) > 0 ? 'HOẠT ĐỘNG' : 'NGHỈ') + ' (tự)'; }
+      const fo = $('[data-out=full]', tr), lo = $('[data-out=le]', tr);
+      if (fo) fo.textContent = b.full || ''; if (lo) lo.textContent = b.le ? '1 túi ' + b.le : '';
       t1Totals();
     };
     $$('input[data-q]', tr).forEach(inp => {
@@ -1986,8 +2040,8 @@ function t1Bind() {
       });
     });
     $$('input[data-k]', tr).forEach(inp => inp.addEventListener('input', () => t1Patch(cid, { [inp.dataset.k]: inp.value.trim() })));
-    $('select[data-k=st]', tr).onchange = e => { t1Patch(cid, { st: e.target.value }); after(); };
-    $('input[data-ht]', tr).onchange = e => guard(async () => {
+    const ss = $('select[data-k=st]', tr); if (ss) ss.onchange = e => { t1Patch(cid, { st: e.target.value }); after(); };
+    const hb = $('input[data-ht]', tr); if (hb) hb.onchange = e => guard(async () => {
       const on = e.target.checked, lab = e.target.parentElement;
       lab.classList.toggle('on', on); lab.lastChild.nodeType === 3 ? (lab.lastChild.textContent = on ? 'HỖ TRỢ' : '') : lab.append(on ? 'HỖ TRỢ' : '');
       S.t1.cust[cid] = Object.assign({}, S.t1.cust[cid], { ht: on }); await t1SaveCust(cid, { ht: on });
