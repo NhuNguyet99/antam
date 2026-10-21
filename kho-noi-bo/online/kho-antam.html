@@ -5298,6 +5298,9 @@ let dhTimer = null, dhBusy = false;
 // kèm người giao từng tuyến, không cần chờ web kho mở – mỗi người giao thấy ngay tuyến của mình.
 const dhSrc = id => ('dong-hang:' + id).replace(/[^A-Za-z0-9_-]/g, '').slice(0, 40) || 'x';
 async function pullDhInbox() {
+  try { await pullDhInbox1(); } catch (e) { console.warn('dhin', e); dhBusy = false; }
+}
+async function pullDhInbox1() {
   if (!ONLINE || VIEW || dhBusy) return;
   if (!dhTimer) dhTimer = setInterval(pullDhInbox, DH_EVERY);
   dhBusy = true;
@@ -5347,9 +5350,11 @@ async function pullDhInbox() {
   } finally { dhBusy = false; }
   if (!got.length) return;
   if (GIAO_APP) {
-    if (store('mode') === 'giao' && window.GiaoHang) return GiaoHang.onRemoteChange();
-    toast('Đã tự nhận đơn đã chia tuyến từ web Đóng hàng: ' + got.join('; '));
-    if (S.meta && $('#main')) { await loadMeta().catch(() => {}); render(); }
+    // trang giao hàng: chỉ báo cho màn hình đang mở cập nhật, không vẽ lại trang kho (đang ẩn ở màn hình đăng nhập / người giao)
+    try {
+      if (store('mode') === 'giao' && window.GiaoHang) GiaoHang.onRemoteChange();
+      else if (!document.body.classList.contains('gh-mode')) { toast('Đã tự nhận đơn đã chia tuyến từ web Đóng hàng: ' + got.join('; ')); await loadMeta(); render(); }
+    } catch (e) { console.warn('dhin render', e); }
     return;
   }
   toast('Đã tự nhận từ web Đóng hàng: ' + got.join('; ') + (GIAO_LINKED ? ' – sẽ tự chuyển sang Giao hàng An Tâm' : ''));
