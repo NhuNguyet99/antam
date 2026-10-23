@@ -348,6 +348,13 @@ tr.hit > td:first-child { box-shadow: inset 4px 0 0 var(--hit-bar); }
 /* nhập */
 .paste { border: 2px dashed var(--line); border-radius: var(--r); padding: 22px; text-align: center; color: var(--ink-2); background: var(--panel); }
 .paste.on { border-color: var(--accent); background: var(--accent-soft); }
+.ms-map { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 12px; }
+.ms-map select { width: 100%; }
+.chk { display: inline-flex; align-items: center; gap: 5px; font-size: 13.5px; }
+.ms-tab tr.off td { opacity: .5; }
+.ms-ch { line-height: 1.5; }
+.ms-old { color: var(--bad); text-decoration: line-through; }
+.ms-new { color: var(--good); font-weight: 600; }
 .paste textarea { width: 100%; margin-top: 10px; border: 1px solid var(--line); border-radius: 6px; background: var(--input); padding: 8px; }
 .steps { margin: 0; padding-left: 20px; display: grid; gap: 4px; }
 .empty { text-align: center; padding: 40px 16px; display: grid; gap: 10px; justify-items: center; }
@@ -1504,6 +1511,7 @@ function viewCust(main) {
       <label class="field grow" style="min-width:200px">Tìm<input id="cf-q" value="${esc(f.q)}" placeholder="Tên, CRM, SĐT, địa chỉ, ghi chú"></label>
       <label class="field">Khu vực<select id="cf-area"><option value="">Tất cả</option>${areas().map(a => `<option ${a === f.area ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select></label>
       <label class="field">Giao dịch<select id="cf-off"><option value="">Đang giao dịch</option><option value="1" ${f.off === '1' ? 'selected' : ''}>Đã ngừng</option><option value="all" ${f.off === 'all' ? 'selected' : ''}>Tất cả</option></select></label>
+      <button class="btn" id="cf-misa" title="Dán danh sách khách hàng xuất từ MISA – sửa tên, địa chỉ, SĐT theo mã CRM">⇅ Cập nhật từ MISA</button>
       <button class="btn pri" id="cf-add">+ Thêm khách</button></div>
     <div id="cf-list"></div>`;
   const draw = () => {
@@ -1522,7 +1530,156 @@ function viewCust(main) {
   $('#cf-area').onchange = e => { f.area = e.target.value; save(); draw(); };
   $('#cf-off').onchange = e => { f.off = e.target.value; save(); draw(); };
   $('#cf-add').onclick = () => editCustomer(null);
+  $('#cf-misa').onclick = () => misaUpdate();
   draw();
+}
+
+/* ---------------- cập nhật thông tin khách theo danh sách khách hàng MISA (khớp theo mã CRM) */
+// tiêu đề cột của file MISA (Danh mục › Khách hàng › Xuất khẩu), không dấu, bỏ ký tự (*)
+const MH = s => norm(s).replace(/[^a-z0-9 /]/g, ' ').replace(/\s+/g, ' ').trim();
+const MISA_COLS = {
+  code: h => (/^ma\b/.test(h) && !/thue|so thue|ngan hang|nhom|buu|vung|tinh|quan|huyen|xa|nhan vien/.test(h)) || h.includes('crm'),
+  name: h => /^(ten( khach hang| doi tuong| kh| khach)?|khach hang|ho (va )?ten)$/.test(h),
+  addr: h => h.startsWith('dia chi') && !/email|thu dien tu|hoa don/.test(h),
+  phone: h => /(dien thoai|di dong|^sdt|^so dt|^dt\b)/.test(h) && !/fax|ban|nguoi lien he/.test(h),
+  area: h => /^(quan ?\/ ?huyen|quan huyen|quan|khu vuc|vung)$/.test(h),
+};
+const MISA_LAB = { code: 'Mã CRM', name: 'Tên khách hàng', addr: 'Địa chỉ', phone: 'Điện thoại', area: 'Khu vực / quận' };
+// mã CRM của khách trên web: ô CRM, chưa có thì mã đứng đầu tên ("K1972 - Thanh Nhàn - …")
+const leadCode = name => { const m = String(name || '').match(/^\s*([A-Za-z]{1,4}\d{2,})\s*(?:[-–:.,]|\s)/); return m ? m[1] : ''; };
+function misaParse(table) {
+  const hi = table.findIndex((r, i) => i < 30 && r.some(c => MISA_COLS.code(MH(c))) && r.some(c => MISA_COLS.name(MH(c))));
+  if (hi < 0) throw new Error('Không thấy dòng tiêu đề – cần có cột mã khách hàng (Mã khách hàng / Mã CRM) và cột Tên khách hàng. Hãy chọn cả bảng: Ctrl+A rồi Ctrl+C.');
+  const head = table[hi].map(c => String(c || '').replace(/\s+/g, ' ').trim()), h = head.map(MH);
+  const cand = k => h.map((x, i) => (x && MISA_COLS[k](x) ? i : -1)).filter(i => i >= 0);
+  const rows = table.slice(hi + 1).filter(r => r.some(c => String(c || '').trim()));
+  // cột mã: cột trùng nhiều mã CRM của web nhất (MISA có thể có cả Mã khách hàng lẫn Mã CRM riêng)
+  const webCodes = new Set(misaWebList().flatMap(x => x.codes.map(keyOf)));
+  const hits = i => rows.reduce((n, r) => n + (webCodes.has(keyOf(r[i])) ? 1 : 0), 0);
+  const codes = cand('code').sort((a, b) => hits(b) - hits(a) || a - b);
+  const col = { code: codes[0], name: cand('name')[0], addr: cand('addr')[0], area: cand('area')[0] };
+  const ph = cand('phone').sort((a, b) => (/di dong/.test(h[b]) ? 1 : 0) - (/di dong/.test(h[a]) ? 1 : 0));
+  col.phone = ph[0];
+  return { head, rows, col, phones: ph };
+}
+// tất cả khách trên web có thể khớp: Đơn hàng ngày + Tuyến kebab 123 (mã = ô CRM và mã đứng đầu tên)
+function misaWebList() {
+  const out = [], add = (kind, id, c) => { const codes = [c.crm, leadCode(c.name)].filter(Boolean); if (codes.length) out.push({ kind, id, c, codes }); };
+  for (const c of Object.values(S.cust)) add('d', c.id, c);
+  for (const [id, c] of Object.entries(S.t1.cust || {})) if (c) add('t', id, c);
+  return out;
+}
+// tên mới từ MISA, giữ mã đứng đầu tên cũ (VD "KH00152 - ") và ghi chú trong ngoặc của tên cũ (VD "(CN NGHỈ)")
+function misaName(old, ten, keep) {
+  if (!keep) return ten;
+  const lead = leadCode(old), n = norm(ten);
+  const notes = (String(old || '').match(/\([^()]{2,}\)/g) || []).filter(x => !n.includes(norm(x)));
+  return [lead && !n.startsWith(norm(lead)) ? lead + ' - ' : '', ten, notes.length ? ' ' + notes.join(' ') : ''].join('');
+}
+function misaUpdate() {
+  const st = { p: null, opt: Object.assign({ name: true, phone: true, area: false, nameMode: 'ten-dc', keep: true, d: true, t: true }, store('misaOpt') || {}), off: new Set() };
+  const m = modal({
+    title: 'Cập nhật khách hàng từ danh sách MISA', wide: true, ok: 'Cập nhật',
+    body: `<ol class="steps" style="margin-top:0"><li>Trong MISA: <b>Danh mục › Khách hàng</b> → <b>Xuất khẩu</b> ra Excel (hoặc mở danh sách khách hàng).</li>
+        <li>Mở file, bấm vào bảng, nhấn <b>Ctrl+A</b> rồi <b>Ctrl+C</b>.</li><li>Quay lại đây nhấn <b>Ctrl+V</b> – web khớp theo <b>mã CRM</b> và cho xem trước từng thay đổi.</li></ol>
+      <div class="paste" id="ms-drop"><b>Nhấn Ctrl+V để dán danh sách MISA</b><textarea id="ms-text" rows="2" placeholder="…hoặc bấm vào đây rồi dán"></textarea>
+        <div class="small muted" style="margin-top:6px">hoặc chọn file .csv / .txt <input type="file" id="ms-file" accept=".csv,.txt,.tsv"></div></div>
+      <div id="ms-res"></div>`,
+    onOk: () => misaApply(st),
+    onClose: () => document.removeEventListener('paste', onPaste),
+  });
+  const root = m.root;
+  const load = t => guard(() => { st.p = misaParse(t); st.off = new Set(); $('#ms-text', root).value = `(Đã dán ${t.length} dòng)`; $('#ms-drop', root).classList.add('on'); draw(); });
+  const onPaste = e => {
+    const cd = e.clipboardData; if (!cd) return;
+    const html = cd.getData('text/html'), txt = cd.getData('text/plain');
+    const t = (html && tableFromHtml(html)) || (txt ? tableFromText(txt) : null);
+    if (!t || t.length < 2) return;
+    e.preventDefault(); load(t);
+  };
+  document.addEventListener('paste', onPaste);
+  $('#ms-file', root).onchange = async e => { const f = e.target.files[0]; if (f) load(tableFromText(await f.text())); };
+  $('[data-ok]', root).disabled = true;
+  function draw() {
+    const box = $('#ms-res', root), p = st.p, o = st.opt;
+    const r = misaDiff(p, o);
+    st.list = r.list;
+    const sel = k => `<select data-col="${k}"><option value="">— không dùng —</option>${p.head.map((x, i) => `<option value="${i}" ${p.col[k] === i ? 'selected' : ''}>${esc(x || 'Cột ' + (i + 1))}</option>`).join('')}</select>`;
+    const chk = (k, l, dis) => `<label class="chk"><input type="checkbox" data-opt="${k}" ${o[k] && !dis ? 'checked' : ''} ${dis ? 'disabled' : ''}> ${l}</label>`;
+    const on = r.list.filter(x => !st.off.has(x.key));
+    const val = (v, cls) => (v ? `<span class="${cls}">${esc(v)}</span>` : '<span class="muted">(trống)</span>');
+    box.innerHTML = `<div class="ms-map">${['code', 'name', 'addr', 'phone', 'area'].map(k => `<label class="field">${MISA_LAB[k]}${sel(k)}</label>`).join('')}</div>
+      <div class="row" style="gap:6px 16px;margin:8px 0">
+        <span class="small"><b>Sửa:</b></span>${chk('name', 'Tên – địa chỉ', p.col.name == null)}${chk('phone', 'SĐT', p.col.phone == null)}${chk('area', 'Khu vực / quận', p.col.area == null)}
+        <label class="chk">Ghép tên <select data-opt="nameMode"><option value="ten-dc" ${o.nameMode === 'ten-dc' ? 'selected' : ''}>Tên - Địa chỉ</option><option value="ten" ${o.nameMode === 'ten' ? 'selected' : ''}>Chỉ tên khách</option></select></label>
+        ${chk('keep', 'Giữ mã đầu tên & ghi chú (…) của tên cũ', !o.name)}
+        <span class="small"><b>Áp dụng cho:</b></span>${chk('d', 'Khách Đơn hàng ngày')}${chk('t', 'Khách Tuyến kebab 123')}</div>
+      <p class="hint" style="margin:0 0 8px">Danh sách MISA <b>${r.misa}</b> mã · khớp <b>${r.match}</b> khách trên web · <b>${r.list.length}</b> khách có thay đổi (đang chọn ${on.length})${r.same ? ` · ${r.same} khách đã đúng` : ''}
+        ${r.miss.length ? ` · <span title="${esc(r.miss.slice(0, 60).join(', '))}">${r.miss.length} mã MISA chưa có trên web</span>` : ''}${r.noMisa ? ` · ${r.noMisa} khách web có mã nhưng MISA không có` : ''}${r.dup ? ` · ${r.dup} mã trùng trong MISA (lấy dòng đầu)` : ''}.
+        Ô trống trong MISA thì giữ nguyên thông tin cũ.</p>
+      ${r.list.length ? `<div class="tw" style="max-height:52vh"><table class="ms-tab"><thead><tr><th><input type="checkbox" id="ms-all" ${on.length === r.list.length ? 'checked' : ''} title="Chọn tất cả"></th><th>CRM</th><th>Danh sách</th><th>Thay đổi (cũ → mới)</th></tr></thead><tbody>
+        ${r.list.slice(0, 400).map(x => `<tr class="${st.off.has(x.key) ? 'off' : ''}"><td><input type="checkbox" data-k="${esc(x.key)}" ${st.off.has(x.key) ? '' : 'checked'}></td><td class="mono">${esc(x.code)}</td>
+          <td class="small">${x.kind === 'd' ? 'Đơn hàng ngày' : 'Tuyến 123'}</td>
+          <td>${x.ch.map(([f, a, b]) => `<div class="ms-ch"><span class="small muted">${esc(f)}:</span> ${val(a, 'ms-old')} → ${val(b, 'ms-new')}</div>`).join('')}</td></tr>`).join('')}</tbody></table></div>
+        ${r.list.length > 400 ? `<p class="hint">Hiện 400 khách đầu – bấm Cập nhật áp dụng cho cả ${on.length} khách đang chọn.</p>` : ''}`
+      : '<p class="muted">Không có thay đổi nào cần cập nhật.</p>'}`;
+    $$('[data-col]', box).forEach(x => x.onchange = () => { p.col[x.dataset.col] = x.value === '' ? undefined : +x.value; draw(); });
+    $$('[data-opt]', box).forEach(x => x.onchange = () => { o[x.dataset.opt] = x.type === 'checkbox' ? x.checked : x.value; store('misaOpt', o); draw(); });
+    $$('[data-k]', box).forEach(x => x.onchange = () => { if (x.checked) st.off.delete(x.dataset.k); else st.off.add(x.dataset.k); draw(); });
+    const all = $('#ms-all', box);
+    if (all) all.onchange = () => { st.off = all.checked ? new Set() : new Set(r.list.map(x => x.key)); draw(); };
+    const ok = $('[data-ok]', root);
+    ok.disabled = !on.length; ok.textContent = on.length ? `Cập nhật ${on.length} khách` : 'Cập nhật';
+  }
+}
+// so danh sách MISA với khách trên web: [{key, kind, id, code, rec (bản ghi mới), ch: [[trường, cũ, mới]]}]
+function misaDiff(p, o) {
+  const g = (r, i) => (i == null || r[i] == null ? '' : String(r[i]).replace(/\s+/g, ' ').trim());
+  const by = {}; let dup = 0;
+  for (const r of p.rows) {
+    const k = keyOf(g(r, p.col.code));
+    if (!k) continue;
+    if (by[k]) { dup++; continue; }
+    const ten = g(r, p.col.name), dc = g(r, p.col.addr);
+    const phone = g(r, p.col.phone) || p.phones.map(i => g(r, i)).find(Boolean) || '';
+    by[k] = { code: g(r, p.col.code), ten, dc, phone, area: g(r, p.col.area).toUpperCase() };
+  }
+  const web = misaWebList().filter(x => o[x.kind]);
+  const seen = new Set(), list = [];
+  let same = 0, noMisa = 0;
+  for (const x of web) {
+    const hit = x.codes.find(k => by[keyOf(k)]), mr = hit && by[keyOf(hit)];
+    if (!mr) { noMisa++; continue; }
+    seen.add(keyOf(hit));
+    const c = x.c, rec = {}, ch = [];
+    const put = (f, lab, v, same) => { const a = String(c[f] || '').replace(/\s+/g, ' ').trim(); if (v && a !== v && !(same && same(a, v))) { rec[f] = v; ch.push([lab, c[f] || '', v]); } };
+    if (!c.crm) put('crm', 'Mã CRM', mr.code);
+    const ten = o.nameMode === 'ten-dc' && mr.dc && !norm(mr.ten).includes(norm(mr.dc)) ? `${mr.ten} - ${mr.dc}` : mr.ten;
+    if (o.name && mr.ten) put('name', x.kind === 'd' ? 'Khách hàng – địa chỉ' : 'Tên khách hàng', misaName(c.name, ten, o.keep));
+    if (o.phone) put('phone', 'SĐT', mr.phone, (a, b) => a.replace(/\D/g, '') === b.replace(/\D/g, '')); // chỉ khác dấu cách / chấm
+    if (o.area && x.kind === 'd') put('q', 'Khu vực', mr.area);
+    if (ch.length) list.push({ key: x.kind + ':' + x.id, kind: x.kind, id: x.id, code: mr.code, rec, ch }); else same++;
+  }
+  list.sort((a, b) => a.code.localeCompare(b.code, 'vi', { numeric: true }));
+  return { list, same, noMisa, dup, misa: Object.keys(by).length, match: list.length + same, miss: Object.values(by).filter(v => !seen.has(keyOf(v.code))).map(v => v.code) };
+}
+async function misaApply(st) {
+  const sel = (st.list || []).filter(x => !st.off.has(x.key));
+  if (!sel.length) throw new Error('Chưa chọn khách nào để cập nhật');
+  const shards = {}, t1 = {};
+  for (const x of sel) {
+    if (x.kind === 'd') {
+      const c = Object.assign({}, S.cust[x.id], x.rec); S.cust[x.id] = c;
+      const { id, ...rest } = c; (shards[shardOf(x.id)] = shards[shardOf(x.id)] || {})[x.id] = rest;
+    } else {
+      const c = Object.assign({}, S.t1.cust[x.id], x.rec); S.t1.cust[x.id] = c; t1[x.id] = c;
+    }
+  }
+  await Promise.all(Object.entries(shards).map(([k, c]) => mergeInto('khach/' + k, { c }, { c: {} }))
+    .concat(Object.keys(t1).length ? [mergeInto('tuyen123/khach', { c: t1 }, { c: {} })] : []));
+  toast(`Đã cập nhật ${sel.length} khách theo MISA`);
+  render();
+  return true;
 }
 
 /* ================================================================ BẢN IN ĐỊNH MỨC */

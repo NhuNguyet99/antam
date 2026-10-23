@@ -52,6 +52,13 @@ Web riêng (trang claude.ai, một file `dong-hang-antam.html`) thay cho Google 
   trên claude.ai trang không tự mở được hộp thoại in nên web giữ sẵn bản in trong trang và hiện xem trước: bấm **Ctrl+P**
   (⌘+P) là in đúng bản đó (giống web Kho), không cần tải file. "⬇ Tải file in" để lưu / gửi bản in.
 - **Khách hàng**: danh mục khách (khu vực, CRM, địa chỉ, SĐT, ghi chú/chành xe, đóng gói mặc định).
+  **⇅ Cập nhật từ MISA**: trong MISA xuất danh sách khách hàng ra Excel → mở file, Ctrl+A, Ctrl+C → dán vào ô (hoặc chọn file
+  .csv/.txt). Web tự tìm dòng tiêu đề và các cột (mã khách hàng / mã CRM, tên, địa chỉ, điện thoại – ưu tiên ĐT di động, quận/huyện;
+  chọn lại được), lấy cột mã trùng nhiều mã CRM của web nhất, khớp theo **ô CRM** hoặc **mã đứng đầu tên** (VD "KH00152 - …"),
+  áp dụng cho khách Đơn hàng ngày và khách Tuyến kebab 123. Xem trước từng thay đổi (cũ → mới), bỏ chọn khách không muốn sửa rồi
+  bấm Cập nhật. Chọn sửa Tên – địa chỉ (ghép "Tên - Địa chỉ" hoặc chỉ tên), SĐT, Khu vực; mặc định giữ mã đầu tên và ghi chú trong
+  ngoặc của tên cũ; ô trống trong MISA thì giữ nguyên; SĐT chỉ khác dấu cách/chấm không tính là thay đổi; khách chưa có CRM được
+  điền mã đã khớp. Đơn đã nhập các ngày trước giữ nguyên tên lúc nhập.
 - **Thống kê**: theo khoảng ngày – số đơn, bánh, kebab, bao bì, theo khu vực / người tạo đơn / tài xế / thanh toán,
   khách đặt nhiều, khách ngưng đặt; so với cùng số ngày trước đó.
 - **Nhập từ sheet** (không bắt buộc): danh sách khách đã đưa sẵn lên web; mục này chỉ dùng khi muốn nạp lại từ sheet
