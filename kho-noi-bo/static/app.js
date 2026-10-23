@@ -1890,6 +1890,97 @@ function locLink(g, label) {
   return href ? `<div><a class="small" href="${esc(href)}" target="_blank" rel="noopener">${label}${g.acc ? ' ±' + Math.round(g.acc) + 'm' : ''}</a></div>` : '';
 }
 
+/* ---------- Hành trình giao hàng: điểm GPS người giao chia sẻ (web giao hàng › Chia sẻ hành trình) + các khách đã giao */
+// tr: {pts: [[giây từ 0h, lat, lng, acc]], live, on}; stops: [[mã khách, kết quả giao]] của 1 người; locs: vị trí khách đã lưu
+function geoMeters(a, b) {
+  const R = 6371000, r = x => x * Math.PI / 180;
+  const h = Math.sin(r(b.lat - a.lat) / 2) ** 2 + Math.cos(r(a.lat)) * Math.cos(r(b.lat)) * Math.sin(r(b.lng - a.lng) / 2) ** 2;
+  return 2 * R * Math.asin(Math.sqrt(h));
+}
+const secHm = sec => `${String(Math.floor(sec / 3600) % 24).padStart(2, '0')}:${String(Math.floor(sec / 60) % 60).padStart(2, '0')}`;
+const atSec = at => { const m = /(\d\d):(\d\d)(?::(\d\d))?$/.exec(String(at || '')); return m ? +m[1] * 3600 + +m[2] * 60 + +(m[3] || 0) : null; };
+function journeyOf(tr, stops, locs) {
+  const pts = ((tr && tr.pts) || []).map(p => ({ t: p[0], lat: p[1], lng: p[2], acc: p[3] }));
+  const st = stops.map(([k, x]) => {
+    const g = x.gps && x.gps.lat != null ? x.gps : locs[k] && locs[k].lat != null ? locs[k] : null;
+    return { k, x, t: atSec(x.at), g, saved: !(x.gps && x.gps.lat != null) && !!g };
+  }).sort((a, b) => (a.t || 0) - (b.t || 0));
+  let km = 0, est = false;
+  if (pts.length > 1) {
+    for (let i = 1; i < pts.length; i++) { const m = geoMeters(pts[i - 1], pts[i]); if (m < 20000) km += m; } // bỏ cú nhảy GPS bất thường
+  } else {
+    const g = st.filter(s => s.g).map(s => s.g);
+    for (let i = 1; i < g.length; i++) km += geoMeters(g[i - 1], g[i]);
+    est = g.length > 1;
+  }
+  // chỗ dừng lâu: các điểm liên tiếp trong vòng 80 m suốt ≥ 10 phút
+  const pauses = [];
+  for (let i = 0; i < pts.length;) {
+    let j = i;
+    while (j + 1 < pts.length && geoMeters(pts[i], pts[j + 1]) <= 80) j++;
+    if (pts[j].t - pts[i].t >= 600) pauses.push({ t: pts[i].t, end: pts[j].t, g: pts[i] });
+    i = j + 1;
+  }
+  const times = pts.map(p => p.t).concat(st.map(s => s.t).filter(t => t != null));
+  return { pts, st, km: km / 1000, est, pauses, from: times.length ? Math.min(...times) : null, to: times.length ? Math.max(...times) : null };
+}
+// sơ đồ đường đi (không cần bản đồ nền): đường GPS + các khách đánh số theo thứ tự giao
+function journeySvg(J) {
+  const all = J.pts.concat(J.st.filter(s => s.g).map(s => s.g));
+  if (!all.length) return '';
+  const lat0 = all.reduce((a, p) => a + p.lat, 0) / all.length, kx = Math.cos(lat0 * Math.PI / 180);
+  const xs = all.map(p => p.lng * kx), ys = all.map(p => -p.lat);
+  const minX = Math.min(...xs), minY = Math.min(...ys), w = Math.max(Math.max(...xs) - minX, 1e-4), h = Math.max(Math.max(...ys) - minY, 1e-4);
+  const W = 640, H = 300, pad = 18, k = Math.min((W - 2 * pad) / w, (H - 2 * pad) / h);
+  const ox = (W - w * k) / 2, oy = (H - h * k) / 2;
+  const P = p => [(p.lng * kx - minX) * k + ox, (-p.lat - minY) * k + oy].map(v => Math.round(v * 10) / 10);
+  const line = J.pts.length > 1 ? `<polyline points="${J.pts.map(p => P(p).join(',')).join(' ')}" fill="none" stroke="var(--brand)" stroke-width="3" stroke-linejoin="round" stroke-linecap="round" opacity=".75"/>` : '';
+  const ends = J.pts.length ? [[J.pts[0], 'Bắt đầu ' + secHm(J.pts[0].t), '#667085'], [J.pts[J.pts.length - 1], 'Vị trí cuối ' + secHm(J.pts[J.pts.length - 1].t), '#2459a8']]
+    .map(([p, t, c]) => { const [x, y] = P(p); return `<circle cx="${x}" cy="${y}" r="7" fill="${c}" stroke="#fff" stroke-width="2"><title>${esc(t)}</title></circle>`; }).join('') : '';
+  let n = 0;
+  const dots = J.st.map(s => {
+    n++;
+    if (!s.g) return '';
+    const [x, y] = P(s.g), c = s.x.status === 'ok' ? '#13804b' : '#c4320a';
+    return `<g><circle cx="${x}" cy="${y}" r="9" fill="${c}" stroke="#fff" stroke-width="2"/><text x="${x}" y="${y + 3.5}" text-anchor="middle" font-size="10" font-weight="700" fill="#fff">${n}</text>
+      <title>${esc(`${n}. ${s.k} ${s.x.name || ''} – ${(s.x.at || '').slice(11, 16)}`)}</title></g>`;
+  }).join('');
+  return `<svg class="jr-map" viewBox="0 0 ${W} ${H}" role="img" aria-label="Sơ đồ đường đi">${line}${ends}${dots}</svg>`;
+}
+function journeyRouteUrl(J) {
+  let g = J.st.filter(s => s.g).map(s => s.g);
+  if (J.pts.length > 1) g = [J.pts[0]].concat(g, [J.pts[J.pts.length - 1]]);
+  if (g.length < 2) return '';
+  if (g.length > 10) g = Array.from({ length: 10 }, (_, i) => g[Math.round(i * (g.length - 1) / 9)]); // Google Maps nhận tối đa ~10 điểm
+  return 'https://www.google.com/maps/dir/' + g.map(p => `${p.lat},${p.lng}`).join('/');
+}
+function journeyCard(name, tr, stops, locs, date) {
+  const J = journeyOf(tr, stops, locs);
+  const last = J.pts[J.pts.length - 1];
+  const nowSec = (() => { const d = new Date(); return d.getHours() * 3600 + d.getMinutes() * 60 + d.getSeconds(); })();
+  const liveNow = tr && tr.on && last && date === isoDate() && nowSec - last.t < 600 && nowSec - last.t > -300;
+  const ok = J.st.filter(s => s.x.status === 'ok').length;
+  const url = journeyRouteUrl(J);
+  const ev = J.st.map((s, i) => ({ t: s.t, html: `<td><b>${i + 1}</b></td><td>${delivBadge(s.x, false)} <b>${esc(s.k)}</b> ${esc(s.x.name || '')}
+      ${s.x.status !== 'ok' && s.x.note ? '' : s.x.note ? `<div class="small muted">${esc(s.x.note)}</div>` : ''}</td>
+      <td>${s.g ? `<a class="small" href="https://www.google.com/maps/search/?api=1&query=${s.g.lat},${s.g.lng}" target="_blank" rel="noopener">📍 ${s.saved ? 'vị trí khách' : 'lúc giao'}</a>` : '<span class="small muted">—</span>'}</td>` }))
+    .concat(J.pauses.map(p => ({ t: p.t, html: `<td>⏸</td><td class="muted">Dừng ${Math.round((p.end - p.t) / 60)} phút (${secHm(p.t)}–${secHm(p.end)})</td>
+      <td><a class="small" href="https://www.google.com/maps/search/?api=1&query=${p.g.lat},${p.g.lng}" target="_blank" rel="noopener">📍 xem</a></td>` })))
+    .sort((a, b) => (a.t || 0) - (b.t || 0));
+  return `<div class="jr-card">
+    <div class="jr-head"><b>🚚 ${esc(name)}</b>
+      ${liveNow ? '<span class="badge ok">● Đang chia sẻ</span>' : tr && tr.on ? '<span class="badge warn">Đang bật – chưa có vị trí mới</span>' : J.pts.length ? '<span class="badge">Đã tắt chia sẻ</span>' : ''}
+      <span class="small muted">${J.from != null ? `${secHm(J.from)} → ${secHm(J.to)} · ` : ''}${ok}/${J.st.length} khách đã giao${J.km ? ` · ${J.est ? '≈ ' : ''}${fmt(Math.round(J.km * 10) / 10)} km${J.est ? ' (đường chim bay giữa các khách)' : ''}` : ''}${J.pts.length ? ` · ${J.pts.length} điểm GPS` : ''}</span></div>
+    <div class="toolbar" style="margin:6px 0">
+      ${last ? `<a class="btn sm" href="https://www.google.com/maps/search/?api=1&query=${last.lat},${last.lng}" target="_blank" rel="noopener">📍 Vị trí mới nhất ${secHm(last.t)}</a>` : ''}
+      ${tr && tr.live ? `<a class="btn sm primary" href="${esc(tr.live)}" target="_blank" rel="noopener">🔗 Vị trí trực tiếp (Google Maps)</a>` : ''}
+      ${url ? `<a class="btn sm" href="${esc(url)}" target="_blank" rel="noopener">🗺 Xem đường đi trên Google Maps</a>` : ''}</div>
+    ${journeySvg(J)}
+    ${ev.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Giờ</th><th>#</th><th>Sự kiện</th><th>Vị trí</th></tr></thead><tbody>
+      ${ev.map(e => `<tr><td class="nowrap">${e.t != null ? secHm(e.t) : ''}</td>${e.html}</tr>`).join('')}</tbody></table></div>` : ''}
+  </div>`;
+}
+
 /* ============================================================ Tài khoản giao hàng (web giao hàng) */
 function giaoHangLinks() {
   if (ONLINE) return [];
@@ -1905,14 +1996,26 @@ async function viewDrivers(main) {
   setTitle('Tài khoản giao hàng');
   const routes = routeList();
   const rName = c => { const r = routes.find(x => x.code.toLowerCase() === String(c).toLowerCase()); return r ? r.name : ''; };
-  const res = { date: isoDate(), who: '', list: {} };
+  const res = { date: isoDate(), who: '', list: {}, tracks: [], locs: {} };
   const dName = id => { const x = (S.meta.drivers || []).find(v => v.id === id); return x ? x.name || x.nick : '(đã xóa)'; };
-  async function loadRes() {
+  async function loadRes(quiet) {
     const want = res.date;
-    const list = await guard(() => api('GET', '/deliveries?date=' + want));
+    const g = quiet ? (fn => fn().catch(() => null)) : guard;
+    const [list, tracks, locs] = await Promise.all([g(() => api('GET', '/deliveries?date=' + want)), g(() => api('GET', '/tracks?date=' + want)), g(() => api('GET', '/locations'))]);
     if (want !== res.date || !$('#g-res')) return;
-    res.list = list || {};
-    drawRes();
+    if (quiet && !list) return;
+    res.list = list || {}; res.tracks = tracks || []; res.locs = locs || {};
+    drawRes(); drawJourney();
+  }
+  function drawJourney() {
+    const box = $('#g-jr');
+    if (!box) return;
+    const ids = new Set(res.tracks.map(t => t.driver));
+    Object.values(res.list).forEach(x => { if (x.driver) ids.add(x.driver); });
+    const list = Array.from(ids).filter(id => !res.who || id === res.who).sort((a, b) => dName(a).localeCompare(dName(b)));
+    box.innerHTML = list.length ? list.map(id => journeyCard(dName(id), res.tracks.find(t => t.driver === id),
+      Object.entries(res.list).filter(([, x]) => x.driver === id), res.locs, res.date)).join('')
+      : '<p class="muted">Ngày này chưa có hành trình nào (người giao chưa bật chia sẻ và chưa giao khách nào).</p>';
   }
   function drawRes() {
     const rows = Object.entries(res.list).filter(([, x]) => !res.who || x.driver === res.who)
@@ -1957,12 +2060,19 @@ async function viewDrivers(main) {
         <label class="field">Người giao<select id="g-who">${options([['', 'Tất cả']].concat((S.meta.drivers || []).map(x => [x.id, x.name || x.nick])), res.who)}</select></label>
         <button class="btn" id="g-reload">↻ Tải lại</button></div>
         <div id="g-res"><p class="muted">Đang tải…</p></div>
-        <p class="hint">Ảnh do người giao chụp lúc giao (có ghi giờ, mã khách trên ảnh); "vị trí lúc giao" là định vị điện thoại khi bấm Đã giao. Bấm ảnh để xem lớn.</p></div>`}`;
+        <p class="hint">Ảnh do người giao chụp lúc giao (có ghi giờ, mã khách trên ảnh); "vị trí lúc giao" là định vị điện thoại khi bấm Đã giao. Bấm ảnh để xem lớn.</p></div>
+        <div class="card" style="margin-top:16px"><h3>🛰 Hành trình giao hàng</h3>
+        <div id="g-jr"><p class="muted">Đang tải…</p></div>
+        <p class="hint">Người giao bấm <b>🛰 Bật chia sẻ hành trình</b> trên web giao hàng (giữ web mở trong lúc đi giao) – đường đi GPS hiện ở đây, tự cập nhật mỗi phút.
+        Điện thoại không cho trang đọc định vị thì người giao gửi <b>link Chia sẻ vị trí của Google Maps</b> (nút 🔗 Vị trí trực tiếp), và đường đi được vẽ theo thứ tự các khách đã giao
+        (vị trí lúc giao, hoặc vị trí khách đã lưu). Số trong vòng tròn = thứ tự giao: xanh đã giao, đỏ không giao được.</p></div>`}`;
     if (!GIAO_LINKED) {
       $('#g-date').onchange = () => { res.date = $('#g-date').value; loadRes(); };
-      $('#g-who').onchange = () => { res.who = $('#g-who').value; drawRes(); };
+      $('#g-who').onchange = () => { res.who = $('#g-who').value; drawRes(); drawJourney(); };
       $('#g-reload').onclick = () => loadRes();
       loadRes();
+      clearInterval(viewDrivers.timer);
+      viewDrivers.timer = setInterval(() => { if (!$('#g-jr')) return clearInterval(viewDrivers.timer); if (!document.hidden && !$('.modal')) loadRes(true); }, 60000);
     }
     if (!GIAO_APP) $('#g-add').onclick = () => edit(null);
     $('#g-open').onclick = () => openGiaoHang();

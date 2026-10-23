@@ -175,3 +175,12 @@ body.gh-mode #app { display: none !important; }
 .gh-coordbox ol { margin: 6px 0 0; padding-left: 18px; display: grid; gap: 4px; }
 .gh-steps { margin: 0; padding-left: 20px; font-size: 14px; display: grid; gap: 2px; color: var(--gh-ink); }
 .gh-coordbox .gh-btn.primary { color: #fff; }
+
+/* chia sẻ hành trình */
+.gh-trk { display: grid; gap: 8px; }
+.gh-trk.on { border-color: var(--gh-ok); box-shadow: inset 4px 0 0 var(--gh-ok); }
+.gh-trk-head { display: flex; align-items: baseline; justify-content: space-between; gap: 8px; flex-wrap: wrap; }
+.gh-trk-head h3 { margin: 0; }
+.gh-trk-st { font-size: 13px; color: var(--gh-muted); }
+.gh-trk.on .gh-trk-st { color: var(--gh-ok); font-weight: 600; }
+.gh-trk p { margin: 0; }

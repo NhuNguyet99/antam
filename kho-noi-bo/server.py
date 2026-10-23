@@ -177,6 +177,9 @@ CREATE TABLE IF NOT EXISTS deliveries (
 CREATE TABLE IF NOT EXISTS cust_locations (
   cust_key TEXT PRIMARY KEY, lat REAL, lng REAL, acc REAL, name TEXT DEFAULT '', driver TEXT DEFAULT '', at TEXT, url TEXT DEFAULT ''
 );
+CREATE TABLE IF NOT EXISTS tracks (
+  date TEXT NOT NULL, driver TEXT NOT NULL, data TEXT DEFAULT '{}', PRIMARY KEY (date, driver)
+);
 CREATE TABLE IF NOT EXISTS notices (
   id INTEGER PRIMARY KEY AUTOINCREMENT, to_id TEXT NOT NULL, at TEXT, text TEXT DEFAULT '', link TEXT DEFAULT '', wh TEXT DEFAULT '',
   ok INTEGER DEFAULT 1, read INTEGER DEFAULT 0
@@ -1097,6 +1100,67 @@ def set_location(con, key, gps, name="", driver="", at=""):
                 (key, g["lat"], g["lng"], g["acc"], name, driver, at or now_str(), "" if g["lat"] is not None else url))
 
 
+# Hành trình giao hàng: điện thoại người giao gửi từng đợt điểm GPS [giây tính từ 0h, lat, lng, độ chính xác m]
+TRACK_MAX = 4000
+
+
+def clean_pts(a):
+    out = []
+    for p in (a if isinstance(a, list) else [])[:600]:
+        if not isinstance(p, list) or len(p) < 3:
+            continue
+        try:
+            t = int(round(float(p[0])))
+            acc = float(p[3]) if len(p) > 3 else 0.0
+        except (TypeError, ValueError):
+            continue
+        g = clean_gps({"lat": p[1], "lng": p[2]})
+        if g and 0 <= t < 172800:
+            out.append([t, round(g["lat"], 5), round(g["lng"], 5), int(min(9999, max(0, round(acc))))])
+    return out
+
+
+def get_track(con, d, did):
+    r = con.execute("SELECT data FROM tracks WHERE date=? AND driver=?", (d, did)).fetchone()
+    try:
+        return json.loads(r["data"]) if r else {}
+    except ValueError:
+        return {}
+
+
+def save_track(con, d, did, me, body):
+    old = get_track(con, d, did)
+    m = {p[0]: p for p in old.get("pts") or []}
+    for p in clean_pts(body.get("pts")):
+        m[p[0]] = p
+    pts = [m[k] for k in sorted(m)]
+    while len(pts) > TRACK_MAX:  # quá dài: bỏ bớt 1/2 điểm
+        pts = [p for i, p in enumerate(pts) if i % 2 == 0 or i == len(pts) - 1]
+    rec = {"date": d, "driver": did, "name": me.get("name") or me.get("nick") or "", "pts": pts, "live": old.get("live") or "",
+           "liveAt": old.get("liveAt") or "", "on": bool(old.get("on")), "at": now_str()}
+    if "live" in body:
+        url = text(body.get("live"))
+        if url and not (MAPS_URL_RE.match(url) and len(url) < 500):
+            raise ApiError(400, "Link không phải link chia sẻ vị trí của Google Maps")
+        rec["live"], rec["liveAt"] = url, now_str() if url else ""
+    if "on" in body:
+        rec["on"] = bool(body.get("on"))
+    con.execute("INSERT OR REPLACE INTO tracks(date, driver, data) VALUES (?,?,?)", (d, did, json.dumps(rec, ensure_ascii=False)))
+    return old, rec
+
+
+def tracks_of(con, d):
+    out = []
+    for r in con.execute("SELECT data FROM tracks WHERE date=?", (d,)):
+        try:
+            x = json.loads(r["data"])
+        except ValueError:
+            continue
+        if x.get("pts") or x.get("live"):
+            out.append(x)
+    return out
+
+
 PHOTO_RE = re.compile(r"^[A-Za-z0-9_.-]{1,120}\.jpg$")
 
 
@@ -1190,6 +1254,19 @@ def gh_api(con, method, action, q, body, token):
         write_log(con, "🚚 " + me.get("name", ""), {"ok": "Đã giao", "fail": "Không giao được", "": "Bỏ đánh dấu giao"}[status],
                   "%s %s" % (key, d), text(body.get("note")), "TP")
         return {"ok": True}
+    if action == "track":
+        d = valid_date(q.get("date") or date.today().isoformat() if method == "GET" else body.get("date"))
+        if method == "GET":
+            t = get_track(con, d, did)
+            pts = t.get("pts") or []
+            return {"n": len(pts), "last": pts[-1] if pts else None, "live": t.get("live") or "", "on": bool(t.get("on"))}
+        if method == "POST":
+            old, rec = save_track(con, d, did, me, body)
+            if "live" in body or ("on" in body and rec["on"] != bool(old.get("on"))):
+                act = ("Gửi link vị trí trực tiếp" if rec["live"] else "Bỏ link vị trí trực tiếp") if "live" in body else \
+                    ("Bật chia sẻ hành trình" if rec["on"] else "Tắt chia sẻ hành trình")
+                write_log(con, "🚚 " + me.get("name", ""), act, d, rec["live"], "TP")
+            return {"ok": True, "n": len(rec["pts"]), "live": rec["live"], "on": rec["on"]}
     raise ApiError(404, "Không có API này")
 
 
@@ -1596,6 +1673,8 @@ class Handler(BaseHTTPRequestHandler):
             return deliveries_of(con, valid_date(q.get("date")))
         if res == "locations" and method == "GET":
             return locations_all(con)
+        if res == "tracks" and method == "GET":
+            return tracks_of(con, valid_date(q.get("date")))
 
         # ---- phiếu
         if res == "next-number" and method == "GET":

@@ -135,6 +135,17 @@ Người giao hàng xem **tuyến đã được sắp của từng ngày** (lấ
   theo người giao) và ở bảng Phân tuyến (ảnh nhỏ, 📍 vị trí lúc giao, 📌 vị trí khách đã lưu cạnh địa chỉ).
 - Lưu ý định vị: trang trên claude.ai (bản online) không được đọc định vị điện thoại; bản chạy trên máy chỉ đọc được khi mở bằng
   **https** (`http://192.168…` thì không). Không đọc được thì lưu vị trí khách bằng link Google Maps như trên.
+- **🛰 Chia sẻ hành trình** (thẻ trên màn hình hôm nay của người giao): bấm **▶ Bật chia sẻ hành trình** lúc bắt đầu đi giao →
+  cho phép **Vị trí** → giữ web mở (nên để màn hình sáng; web xin giữ màn hình sáng nếu trình duyệt cho). Điện thoại ghi 1 điểm
+  khi đi được ≥ 25 m hoặc đứng yên mỗi 5 phút, gửi về mỗi phút (mất mạng thì giữ lại gửi sau); tải lại trang thì tự bật lại; bấm
+  **■ Dừng chia sẻ** / đăng xuất là tắt. Đang chia sẻ thì bấm **Đã giao** lấy luôn vị trí mới nhất.
+  Khi trang không đọc được định vị (bản trên claude.ai), người giao bấm **🔗 Gửi link vị trí trực tiếp Google Maps**: trong app
+  Google Maps → ảnh đại diện → **Chia sẻ vị trí** → *Cho đến khi bạn tắt* → **Sao chép** → dán vào ô – kho bấm link là thấy xe đang ở đâu.
+- Kho xem ở **Tài khoản giao hàng › 🛰 Hành trình giao hàng** (chọn ngày, người giao; tự cập nhật mỗi phút): mỗi người có
+  sơ đồ đường đi GPS + các khách đánh số theo thứ tự giao (xanh đã giao, đỏ không giao được), giờ bắt đầu → kết thúc, số km,
+  các chỗ dừng ≥ 10 phút, nút **📍 Vị trí mới nhất**, **🔗 Vị trí trực tiếp**, **🗺 Xem đường đi trên Google Maps**. Không có
+  điểm GPS thì đường đi vẽ theo thứ tự khách đã giao (vị trí lúc giao, không có thì vị trí khách đã lưu; km là đường chim bay).
+  Dữ liệu: bản online `kho/TP/hanhtrinh/<ngày>-<id người giao>`, bản chạy máy bảng `tracks`.
 - Ảnh ở bản chạy trên máy nằm trong thư mục `data/anh-giao/` (sao lưu cùng file `data/kho.db`; file .json không chứa ảnh).
   Ở bản online ảnh nằm trong kho ảnh của trang, nếu kho ảnh không dùng được cho người giao
   thì ảnh được lưu vào dữ liệu chung.

@@ -102,11 +102,12 @@ const GiaoHang = (() => {
     if (st.onExit) $('#gh-exit').onclick = () => exit();
   }
   function logout(msg) {
+    trkStop();
     st.token = ''; st.driver = null; st.data = null;
     store('token', null); store('driver', null);
     drawLogin(msg);
   }
-  function exit() { stopTimer(); if (st.onExit) st.onExit(); }
+  function exit() { stopTimer(); trkStop(); if (st.onExit) st.onExit(); }
 
   /* ---------------------------------------------------------- màn hình chính */
   async function showMain() {
@@ -133,6 +134,8 @@ const GiaoHang = (() => {
     $('#gh-date').onchange = () => { if ($('#gh-date').value) setDate($('#gh-date').value); };
     await setDate(st.date || isoDate());
     startTimer();
+    const was = store('trk');
+    if (was && was.date === isoDate() && !trk.on && !st.gpsBlocked) trkStart(true); // tải lại trang lúc đang chia sẻ: tiếp tục
   }
   async function setDate(d) {
     st.date = d; st.panel = null;
@@ -143,9 +146,11 @@ const GiaoHang = (() => {
   async function loadDay(silent) {
     const d = st.date;
     if (!silent) $('#gh-main').innerHTML = '<p class="gh-muted">Đang tải tuyến…</p>';
-    const [data, days] = await Promise.all([guard(() => call('GET', 'day?date=' + d)), guard(() => call('GET', 'days'))]);
+    const [data, days, info] = await Promise.all([guard(() => call('GET', 'day?date=' + d)), guard(() => call('GET', 'days')),
+      d === isoDate() ? call('GET', 'track?date=' + d).catch(() => null) : null]);
     if (d !== st.date || !st.token) return;
     if (days) st.days = days;
+    if (info) trk.info = info;
     if (!data) { if (!silent) $('#gh-main').innerHTML = '<p class="gh-muted">Không tải được dữ liệu. Bấm ↻ để thử lại.</p>'; return; }
     st.data = data;
     if (data.driver) { st.driver = data.driver; store('driver', st.driver); $('#gh-name').textContent = st.driver.name || st.driver.nick; }
@@ -195,22 +200,22 @@ const GiaoHang = (() => {
     if (!D.routes.length) {
       main.innerHTML = `<section class="gh-empty"><div class="gh-empty-ico">${D.planned ? '🛵' : '🗓'}</div>
         <p><b>${D.planned ? 'Ngày này bạn chưa được sắp tuyến nào.' : 'Kho chưa phân tuyến cho ngày này.'}</b></p>
-        <p class="gh-muted">${D.planned ? 'Nếu cần, nhắn kho chọn bạn ở cột <b>Người giao</b> trong Phân tuyến giao hàng.' : 'Khi kho lưu Phân tuyến giao hàng của ngày này, tuyến của bạn sẽ hiện ở đây.'}</p></section>${otherDays}`;
-      bindDays();
+        <p class="gh-muted">${D.planned ? 'Nếu cần, nhắn kho chọn bạn ở cột <b>Người giao</b> trong Phân tuyến giao hàng.' : 'Khi kho lưu Phân tuyến giao hàng của ngày này, tuyến của bạn sẽ hiện ở đây.'}</p></section>${trkCard()}${otherDays}`;
+      bindDays(); bindTrk();
       return;
     }
     const tabs = [['all', `Tất cả ${all.length}`], ['todo', `Chưa giao ${all.length - done - fail}`], ['ok', `Đã giao ${done}`], ['fail', `Không giao được ${fail}`]];
     main.innerHTML = `<section class="gh-summary">
         <div class="gh-progress"><div style="width:${all.length ? Math.round(done * 100 / all.length) : 0}%"></div></div>
         <div class="gh-sum-line"><b>${done}/${all.length}</b> khách đã giao${fail ? ` · <span class="gh-red">${fail} không giao được</span>` : ''} · ${D.routes.length} tuyến</div>
-      </section>
+      </section>${trkCard()}
       <div class="gh-tabs">${tabs.map(([k, l]) => `<button class="gh-tab ${st.filter === k ? 'on' : ''}" data-f="${k}">${esc(l)}</button>`).join('')}</div>
       <input class="gh-search" id="gh-search" placeholder="Tìm khách, mã CRM, địa chỉ, SĐT…" value="${esc(st.search)}">
       <div id="gh-routes"></div>${otherDays}`;
     $$('.gh-tab').forEach(b => b.onclick = () => { st.filter = b.dataset.f; draw(); });
     let t;
     $('#gh-search').oninput = () => { clearTimeout(t); t = setTimeout(() => { st.search = $('#gh-search').value; drawRoutes(); }, 200); };
-    bindDays();
+    bindDays(); bindTrk();
     drawRoutes();
   }
   function bindDays() { $$('.gh-day').forEach(b => b.onclick = () => { setDate(b.dataset.date); window.scrollTo(0, 0); }); }
@@ -344,7 +349,9 @@ const GiaoHang = (() => {
     const p = st.panel && st.panel.key === key ? st.panel : null;
     if (action === 'ok' || action === 'fail') {
       st.panel = { key, mode: action, photos: [], note: '', gps: null, gpsState: '', gpsErr: '', saveLoc: true };
-      redraw(); if (!st.gpsBlocked) fetchGps(st.panel); // định vị lúc giao: chỉ lấy khi điện thoại cho phép, không bắt buộc
+      const fix = trk.on && trk.fix && Date.now() - trk.fix.ts < 120000 ? trk.fix : null; // đang chia sẻ hành trình: dùng vị trí vừa nhận
+      if (fix) st.panel.gps = { lat: fix.lat, lng: fix.lng, acc: fix.acc };
+      redraw(); if (!fix && !st.gpsBlocked) fetchGps(st.panel); // định vị lúc giao: chỉ lấy khi điện thoại cho phép, không bắt buộc
       return;
     }
     if (action === 'loc') {
@@ -442,11 +449,12 @@ const GiaoHang = (() => {
     });
   }
   // vị trí dán vào: tọa độ (kể cả trong link dài) hoặc link chia sẻ Google Maps (maps.app.goo.gl, goo.gl/maps, google.com/maps)
+  const mapsLink = s => (String(s || '').match(/https?:\/\/(?:maps\.app\.goo\.gl|goo\.gl\/maps|(?:www\.)?google\.[a-z.]+\/maps|maps\.google\.[a-z.]+)[^\s"'<>]*/i) || [''])[0];
   function parseLoc(s) {
     const g = parseCoords(s);
     if (g) return g;
-    const m = String(s || '').match(/https?:\/\/(?:maps\.app\.goo\.gl|goo\.gl\/maps|(?:www\.)?google\.[a-z.]+\/maps|maps\.google\.[a-z.]+)[^\s"'<>]*/i);
-    return m ? { url: m[0] } : null;
+    const url = mapsLink(s);
+    return url ? { url } : null;
   }
   // "10.88, 106.59", link Google Maps (…!3d10.88!4d106.59…, …@10.88,106.59…, …?q=10.88,106.59)
   function parseCoords(s) {
@@ -457,6 +465,163 @@ const GiaoHang = (() => {
       if (m) { const lat = +m[1], lng = +m[2]; if (Math.abs(lat) <= 90 && Math.abs(lng) <= 180) return { lat, lng, acc: null }; }
     }
     return null;
+  }
+
+  /* ---------------------------------------------------------- chia sẻ hành trình */
+  // Bật chia sẻ: trong lúc web mở, điện thoại gửi vị trí theo thời gian thực (watchPosition) – kho xem đường đi ở mục Hành trình.
+  // Ghi 1 điểm khi đi được ≥ 25 m (cách điểm trước ≥ 20 giây) hoặc đứng yên mỗi 5 phút; gửi về mỗi phút.
+  // Trang trên claude.ai không đọc được định vị: gửi link "Chia sẻ vị trí" của Google Maps – kho bấm là thấy xe đang ở đâu.
+  const trk = { on: false, date: '', watch: null, buf: [], last: null, fix: null, err: '', wait: false, timer: null, lock: null, sending: false, live: false, info: null };
+  const secOf = (date, ts) => Math.round((ts - new Date(date + 'T00:00:00').getTime()) / 1000);
+  const hm = sec => `${z(Math.floor(sec / 3600) % 24)}:${z(Math.floor(sec / 60) % 60)}`;
+  function meters(a, b) {
+    const R = 6371000, r = x => x * Math.PI / 180;
+    const dLat = r(b[1] - a[1]), dLng = r(b[2] - a[2]);
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(r(a[1])) * Math.cos(r(b[1])) * Math.sin(dLng / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+  function trkStart(resume) {
+    trk.err = '';
+    if (!window.isSecureContext || !navigator.geolocation) {
+      st.gpsBlocked = true; store('gpsBlocked', true);
+      return drawTrk(); // thẻ đã hướng dẫn gửi link Chia sẻ vị trí của Google Maps
+    }
+    trk.on = true; trk.date = isoDate(); trk.last = null; trk.wait = true;
+    store('trk', { date: trk.date });
+    trk.watch = navigator.geolocation.watchPosition(onFix, onFixErr, { enableHighAccuracy: true, maximumAge: 15000, timeout: 60000 });
+    clearInterval(trk.timer);
+    trk.timer = setInterval(trkFlush, 60000);
+    keepAwake();
+    if (!resume || !(trk.info && trk.info.on)) call('POST', 'track', { date: trk.date, on: true }).then(r => { trk.info = Object.assign({}, trk.info, r); }).catch(() => {});
+    drawTrk();
+  }
+  function onFix(pos) {
+    if (!trk.on) return;
+    const c = pos.coords, now = isoDate();
+    if (now !== trk.date) { trkFlush(); trk.date = now; trk.last = null; store('trk', { date: now }); } // qua ngày mới
+    const p = [secOf(trk.date, pos.timestamp || Date.now()), Math.round(c.latitude * 1e5) / 1e5, Math.round(c.longitude * 1e5) / 1e5, Math.round(c.accuracy || 0)];
+    trk.fix = { lat: c.latitude, lng: c.longitude, acc: c.accuracy, ts: Date.now() };
+    trk.wait = false; trk.err = '';
+    const L = trk.last;
+    if (L && c.accuracy > 150) return drawTrkStatus(); // tín hiệu yếu: bỏ qua
+    if (!L || (p[0] - L[0] >= 20 && meters(L, p) >= Math.max(25, c.accuracy || 0)) || p[0] - L[0] >= 300 || p[0] < L[0]) {
+      trk.buf.push(p); trk.last = p;
+      if (trk.buf.length >= 30) trkFlush();
+    }
+    drawTrkStatus();
+  }
+  function onFixErr(e) {
+    if (e.code === 1) {
+      trkStop(true);
+      st.gpsBlocked = true; store('gpsBlocked', true);
+      trk.err = ONLINE ? '' : 'Chưa cho phép định vị – bật quyền Vị trí cho trình duyệt rồi bấm Thử bật GPS lại, hoặc gửi link Chia sẻ vị trí của Google Maps.';
+      return drawTrk();
+    }
+    trk.wait = true; drawTrkStatus(); // mất tín hiệu GPS tạm thời: vẫn chờ
+  }
+  async function trkFlush(extra) {
+    if (trk.sending || !st.token || (!trk.buf.length && !extra)) return;
+    const pts = trk.buf.splice(0), date = trk.date || isoDate();
+    trk.sending = true;
+    try {
+      const r = await call('POST', 'track', Object.assign({ date, pts }, extra));
+      trk.info = Object.assign({}, trk.info, r, { last: pts[pts.length - 1] || (trk.info || {}).last });
+      trk.err = '';
+    } catch (e) {
+      if (pts.length) trk.buf = pts.concat(trk.buf).slice(-1500); // giữ lại gửi lần sau
+      if (e.status === 401) { trk.sending = false; return logout(e.message); }
+      trk.err = 'Chưa gửi được vị trí (mất mạng?) – web sẽ tự gửi lại.';
+    } finally { trk.sending = false; }
+    drawTrkStatus();
+  }
+  // tắt chia sẻ (đăng xuất / thoát / bấm Dừng): gửi nốt các điểm còn lại
+  function trkStop(keepFlag) {
+    if (!trk.on) return;
+    trk.on = false;
+    if (trk.watch != null) navigator.geolocation.clearWatch(trk.watch);
+    trk.watch = null; clearInterval(trk.timer); trk.timer = null;
+    if (trk.lock) { trk.lock.release().catch(() => {}); trk.lock = null; }
+    if (!keepFlag) store('trk', null);
+    const pts = trk.buf.splice(0);
+    if (st.token) call('POST', 'track', { date: trk.date, pts, on: false }).then(r => { trk.info = Object.assign({}, trk.info, r); drawTrkStatus(); }).catch(() => {});
+  }
+  // giữ màn hình sáng khi đang chia sẻ (trình duyệt cho phép thì mới được)
+  async function keepAwake() {
+    if (!trk.on || trk.lock || document.hidden || !('wakeLock' in navigator)) return;
+    try { trk.lock = await navigator.wakeLock.request('screen'); trk.lock.addEventListener('release', () => { trk.lock = null; }); } catch (e) { trk.lock = null; }
+  }
+  document.addEventListener('visibilitychange', () => { if (!trk.on) return; if (document.hidden) trkFlush(); else keepAwake(); });
+  window.addEventListener('pagehide', () => { if (trk.on) trkFlush(); });
+
+  function trkStatusText() {
+    const I = trk.info || {}, n = Math.max(I.n || 0, 0) + trk.buf.length;
+    if (trk.on) {
+      if (trk.wait && !trk.fix) return 'Đang bật GPS, chờ vị trí…';
+      const at = trk.fix ? `${z(new Date(trk.fix.ts).getHours())}:${z(new Date(trk.fix.ts).getMinutes())}` : '';
+      return `Đang chia sẻ · ${n} điểm${at ? ' · vị trí lúc ' + at : ''}${trk.buf.length ? ` · ${trk.buf.length} điểm chờ gửi` : ''}${trk.wait ? ' · đang chờ tín hiệu GPS' : ''}`;
+    }
+    return n ? `Đang tắt · hôm nay đã ghi ${n} điểm${I.last ? ', lần cuối ' + hm(I.last[0]) : ''}` : 'Đang tắt';
+  }
+  function trkCard() {
+    if (st.date !== isoDate()) return '';
+    const I = trk.info || {};
+    const steps = `<ol class="gh-steps"><li>Mở app <b>Google Maps</b> → bấm <b>ảnh đại diện</b> (góc trên bên phải) → <b>Chia sẻ vị trí</b></li>
+      <li>Chọn thời gian <b>Cho đến khi bạn tắt</b> → chọn <b>Sao chép</b> (hoặc Chia sẻ qua đường liên kết)</li><li>Quay lại đây, dán link vào ô dưới – web tự gửi cho kho</li></ol>`;
+    return `<section class="gh-card gh-trk ${trk.on ? 'on' : ''}" id="gh-trk">
+      <div class="gh-trk-head"><h3>🛰 Chia sẻ hành trình</h3><span class="gh-trk-st" id="gh-trk-st">${esc(trkStatusText())}</span></div>
+      ${trk.on ? `<button class="gh-btn danger" data-trk="stop">■ Dừng chia sẻ</button>
+        <p class="gh-muted gh-small">Giữ web này mở trên điện thoại trong lúc giao (nên để màn hình sáng) – kho thấy đường đi và vị trí của bạn.</p>`
+      : st.gpsBlocked ? `<p class="gh-muted gh-small">Trang này chưa đọc được định vị điện thoại. Gửi <b>link Chia sẻ vị trí</b> của Google Maps để kho thấy bạn đang ở đâu;
+        đường đi trong ngày ghi theo thứ tự các khách bạn bấm <b>Đã giao</b>. <button class="gh-linkbtn" data-trk="start">Thử bật GPS lại</button></p>`
+      : `<button class="gh-btn primary" data-trk="start">▶ Bật chia sẻ hành trình</button>
+        <p class="gh-muted gh-small">Bật lúc bắt đầu đi giao, tắt khi xong – điện thoại sẽ hỏi quyền <b>Vị trí</b>, bấm <b>Cho phép</b>.</p>`}
+      ${trk.err ? `<p class="gh-red gh-small" id="gh-trk-err">${esc(trk.err)}</p>` : ''}
+      <div class="gh-locline">${I.live ? `<span class="gh-badge ok">🔗 Đã gửi link vị trí trực tiếp</span>
+        <a class="gh-link" href="${esc(I.live)}" target="_blank" rel="noopener">xem</a>
+        <button class="gh-linkbtn" data-trk="live">Đổi link</button><button class="gh-linkbtn" data-trk="unlive">Bỏ link</button>`
+      : trk.live ? '' : '<button class="gh-linkbtn" data-trk="live">🔗 Gửi link vị trí trực tiếp Google Maps</button>'}</div>
+      ${trk.live ? `<div class="gh-panel"><div class="gh-panel-title">🔗 Link vị trí trực tiếp (Google Maps)</div>${steps}
+        <input class="gh-input" data-live autocomplete="off" placeholder="Dán link chia sẻ vị trí (maps.app.goo.gl/…)">
+        <div class="gh-actions"><button class="gh-btn ok" data-trk="live-save">Gửi cho kho</button><button class="gh-btn" data-trk="live-cancel">Hủy</button></div></div>` : ''}
+    </section>`;
+  }
+  function drawTrk() {
+    const el = $('#gh-trk');
+    if (!el) return;
+    el.outerHTML = trkCard();
+    bindTrk();
+  }
+  function drawTrkStatus() {
+    const el = $('#gh-trk-st');
+    if (el) el.textContent = trkStatusText();
+    const er = $('#gh-trk-err');
+    if (er && !trk.err) er.remove(); else if (trk.err && !er && $('#gh-trk')) drawTrk();
+  }
+  async function sendLive(url) {
+    const r = await guard(() => call('POST', 'track', { date: isoDate(), live: url }));
+    if (!r) return;
+    trk.info = Object.assign({}, trk.info, r); trk.live = false;
+    toast(url ? 'Đã gửi link vị trí trực tiếp cho kho' : 'Đã bỏ link vị trí trực tiếp');
+    drawTrk();
+  }
+  function bindTrk() {
+    const box = $('#gh-trk');
+    if (!box) return;
+    $$('[data-trk]', box).forEach(b => b.onclick = () => {
+      const a = b.dataset.trk;
+      if (a === 'start') { st.gpsBlocked = false; store('gpsBlocked', null); trkStart(); }
+      else if (a === 'stop') { trkStop(); drawTrk(); toast('Đã tắt chia sẻ hành trình'); }
+      else if (a === 'live') { trk.live = true; drawTrk(); const i = $('[data-live]'); if (i) i.focus({ preventScroll: true }); }
+      else if (a === 'live-cancel') { trk.live = false; drawTrk(); }
+      else if (a === 'unlive') sendLive('');
+      else if (a === 'live-save') {
+        const url = mapsLink(($('[data-live]') || {}).value);
+        if (!url) { toast('Chưa nhận ra link. Trong Google Maps bấm Chia sẻ vị trí → Sao chép rồi dán vào ô.', true); return; }
+        sendLive(url);
+      }
+    });
+    const inp = $('[data-live]', box);
+    if (inp) inp.oninput = e => { const url = mapsLink(inp.value); if (url && e.inputType === 'insertFromPaste') sendLive(url); };
   }
 
   /* ---------------------------------------------------------- ảnh giao hàng */
@@ -534,5 +699,5 @@ const GiaoHang = (() => {
     if (st.token) await showMain(); else drawLogin();
   }
   function onRemoteChange() { if (st.token && $('#gh-main') && !st.busy && !st.panel) loadDay(true); }
-  return { start, onRemoteChange, stop: stopTimer };
+  return { start, onRemoteChange, stop: () => { stopTimer(); trkStop(); } };
 })();

@@ -277,3 +277,9 @@ body.locked #sidebar, body.locked #topbar, body.locked #ro-banner { display: non
 .login-card { max-width: 380px; margin: 8vh auto; text-align: center; }
 .login-card h2 { margin: 0 0 6px; font-size: 20px; }
 .login-card form { text-align: left; margin-top: 16px; }
+
+/* ---------- hành trình giao hàng */
+.jr-card { border: 1px solid var(--line); border-radius: var(--radius); padding: 10px 12px; margin-bottom: 12px; background: var(--panel); }
+.jr-head { display: flex; flex-wrap: wrap; align-items: baseline; gap: 6px 10px; }
+.jr-map { display: block; width: 100%; max-height: 320px; background: #f7f9f8; border: 1px solid var(--line); border-radius: var(--radius); margin: 6px 0 10px; }
+@media print { .jr-map { max-height: none; } }

@@ -12,6 +12,8 @@
      kho/<kho>/plans/<yyyy-mm>    {ym, p: {id: dòng kế hoạch|null}}
      kho/TP/giao/<yyyy-mm-dd>     {date, d: {mã khách: kết quả giao|null}}  – web giao hàng ghi (kèm ảnh, vị trí lúc giao)
      kho/TP/meta/vitri            {v: {mã khách: {lat, lng, acc, name, driver, at}|null}}  – vị trí khách người giao đã lưu
+     kho/TP/hanhtrinh/<ngày>-<id người giao>  {date, driver, name, pts: [[giây từ 0h, lat, lng, acc]], live, liveAt, on, at}
+                                  – hành trình GPS người giao chia sẻ trong ngày (+ link vị trí trực tiếp Google Maps)
      kho/TP/anh/<id>              {date, key, data}  – ảnh giao hàng khi trang không lưu được vào kho ảnh (assets)
      log/<yyyy-mm-dd>             {date, e: {id: thao tác}}
    Tài khoản giao hàng nằm trong cài đặt: s.drivers {id: {nick, name, phone, routes, active, salt, pin}|null}
@@ -120,6 +122,7 @@ const Backend = (() => {
     giao: d => dbx().doc(`kho/TP/giao/${d}`),
     giaoAll: () => dbx().collection('kho/TP/giao'),
     vitri: () => dbx().doc('kho/TP/meta/vitri'),
+    track: (d, id) => dbx().doc(`kho/TP/hanhtrinh/${d}-${id}`),
     anh: id => dbx().doc(`kho/TP/anh/${id}`),
     logs: () => dbx().collection('log'),
     logDay: d => dbx().doc('log/' + d),
@@ -801,6 +804,37 @@ const Backend = (() => {
     return photoCache[r];
   }
   const PHOTO_REF = /^[ad]:[A-Za-z0-9_-]{4,64}$/;
+  // Hành trình giao hàng: điện thoại người giao gửi từng đợt điểm GPS [giây tính từ 0h, lat, lng, độ chính xác m]
+  const TRACK_MAX = 4000;
+  function cleanPts(a) {
+    return (Array.isArray(a) ? a : []).slice(0, 600).map(p => {
+      if (!Array.isArray(p)) return null;
+      const t = Math.round(Number(p[0])), g = cleanGps({ lat: p[1], lng: p[2] }), acc = Number(p[3]);
+      return g && t >= 0 && t < 172800 ? [t, Math.round(g.lat * 1e5) / 1e5, Math.round(g.lng * 1e5) / 1e5, isFinite(acc) ? Math.min(9999, Math.max(0, Math.round(acc))) : 0] : null;
+    }).filter(Boolean);
+  }
+  function mergeTrack(old, body, d, id, me) {
+    const m = new Map((old.pts || []).map(p => [p[0], p]));
+    cleanPts(body.pts).forEach(p => m.set(p[0], p));
+    let pts = Array.from(m.values()).sort((a, b) => a[0] - b[0]);
+    while (pts.length > TRACK_MAX) pts = pts.filter((p, i) => i % 2 === 0 || i === pts.length - 1); // quá dài: bỏ bớt 1/2 điểm
+    const rec = { date: d, driver: id, name: me.name || me.nick || '', pts, live: old.live || '', liveAt: old.liveAt || '', on: !!old.on, at: nowStr() };
+    if (body.live !== undefined) {
+      const url = text(body.live);
+      if (url && !(MAPS_URL.test(url) && url.length < 500)) throw new ApiError(400, 'Link không phải link chia sẻ vị trí của Google Maps');
+      rec.live = url; rec.liveAt = url ? nowStr() : '';
+    }
+    if (body.on !== undefined) rec.on = !!body.on;
+    return rec;
+  }
+  async function tracksOf(d) {
+    if (VIEW) return [];
+    const ids = Object.keys(drivers());
+    try {
+      const snaps = await Promise.all(ids.map(id => ref.track(d, id).get()));
+      return snaps.map(docData).filter(x => x && (x.pts || []).length + (x.live ? 1 : 0));
+    } catch (e) { throw dbError(e); }
+  }
   // dữ liệu phân tuyến kho TP (điện thoại người giao chỉ tải phần này)
   async function ensureGiaoData() {
     if (VIEW || st.giaoLive || (st.wh === 'TP' && st.loaded)) return;
@@ -886,6 +920,19 @@ const Backend = (() => {
       await log({ ok: 'Đã giao', fail: 'Không giao được', '': 'Bỏ đánh dấu giao' }[status], `${key} ${d}`, note, 'TP');
       st.who = who;
       return { ok: true };
+    }
+    if (action === 'track') {
+      const d = validDate(method === 'GET' ? q.date || today() : body.date), r = ref.track(d, id);
+      let old;
+      try { old = docData(await r.get()) || {}; } catch (e) { throw dbError(e); }
+      if (method === 'GET') return { n: (old.pts || []).length, last: (old.pts || []).slice(-1)[0] || null, live: old.live || '', on: !!old.on };
+      if (method !== 'POST') throw new ApiError(405, 'Sai phương thức');
+      const rec = mergeTrack(old, body, d, id, me);
+      await write(() => r.set(rec));
+      if (body.live !== undefined || (body.on !== undefined && !!body.on !== !!old.on)) {
+        await asDriver(body.live !== undefined ? (rec.live ? 'Gửi link vị trí trực tiếp' : 'Bỏ link vị trí trực tiếp') : rec.on ? 'Bật chia sẻ hành trình' : 'Tắt chia sẻ hành trình', d, rec.live || '');
+      }
+      return { ok: true, n: rec.pts.length, live: rec.live, on: rec.on };
     }
     throw new ApiError(404, 'Không có chức năng này');
   }
@@ -1152,6 +1199,7 @@ const Backend = (() => {
     }
     if (res === 'deliveries' && method === 'GET') return deliveriesOf(validDate(q.date));
     if (res === 'locations' && method === 'GET') return locationsAll();
+    if (res === 'tracks' && method === 'GET') return tracksOf(validDate(q.date));
     if (!st.days[wh] && !VIEW && res !== 'meta' && res !== 'settings' && res !== 'routes') throw new ApiError(400, 'Chưa tải dữ liệu kho ' + wh);
 
     if (res === 'meta' && method === 'GET') {
