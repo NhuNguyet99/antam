@@ -58,13 +58,14 @@ a { color: var(--accent); }
 .tabs { display: flex; gap: 2px; flex-wrap: wrap; flex: 1; min-width: 0; }
 .tabs button { border: 0; background: none; padding: 7px 11px; border-radius: 999px; cursor: pointer; color: var(--ink-2); font-weight: 500; white-space: nowrap; }
 .tabs button:hover { background: var(--hover); }
-body.role-nhap .ql-only { display: none !important; }
+body.no-ql .ql-only, body.no-dp .dp-only { display: none !important; }
 body.locked #tabs, body.locked #me-btn, body.locked #sync { visibility: hidden; }
 .login { max-width: 380px; margin: 8vh auto; display: grid; gap: 12px; }
 .login h2 { margin: 0; }
 .login .err { color: var(--bad); min-height: 1.2em; margin: 0; font-size: 13.5px; }
 .pill.ql { background: var(--accent-soft); color: var(--accent); }
 .pill.nhap { background: var(--line-2); color: var(--ink-2); }
+.pill.dp { background: var(--warn-soft); color: var(--warn); }
 .tabs button.on { background: var(--accent); color: var(--accent-ink); }
 .me-btn { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 5px 12px; cursor: pointer; color: var(--ink-2); white-space: nowrap; }
 .sync { font-size: 12px; color: var(--muted); white-space: nowrap; }
@@ -738,6 +739,7 @@ function t1DriverFor(g, assign) {
 }
 const t1DrvLabel = g => ((S.drivers || []).length ? driverName(t1DriverFor(g, S.t1.day && S.t1.day.assign)[0]) || 'chưa có người giao' : '');
 function t1EditDrivers() {
+  if (!dpOnly('chọn người giao')) return;
   const d = S.t1.date || S.date, a = (S.t1.day && S.t1.day.assign) || {}, drv = S.drivers || [], list = t1List();
   modal({
     title: 'Người giao tuyến kebab 123 · ' + vn(d), ok: 'Lưu', wide: true,
@@ -808,7 +810,7 @@ function drawKho() {
 }
 function khoBar(kind, d) {
   return `<span class="kho-bar"><span data-kho="${esc(khoId(kind, d))}">${khoStatusHtml(khoId(kind, d))}</span>
-    <button class="btn sm ghost" data-kho-send="${kind}" title="Để sẵn bản mới nhất (kèm người giao) cho web Giao hàng và Kho ngay bây giờ">📤 Gửi ngay</button></span>`;
+    <button class="btn sm ghost dp-only" data-kho-send="${kind}" title="Để sẵn bản mới nhất (kèm người giao) cho web Giao hàng và Kho ngay bây giờ">📤 Gửi ngay</button></span>`;
 }
 function bindKhoBar(d) {
   $$('[data-kho-send]').forEach(b => b.onclick = () => guard(async () => {
@@ -869,7 +871,7 @@ function routeOf(o, c) {
 function rtSelect(o, c) {
   const [code, src] = routeOf(o, c), auto = c ? autoRouteOf(c)[0] : '', cur = (o && o.rt) || (c && c.rt) || '';
   const extra = cur && !routes().some(r => r.code === cur) ? `<option value="${esc(cur)}" selected>${esc(cur)}</option>` : '';
-  return `<select class="in rt-sel${code ? '' : ' rt-none'}" data-k="rt" aria-label="Tuyến giao" title="${code ? esc(routeLabel(code)) + ' – ' + src : 'Chưa khớp tuyến nào – chọn tuyến'}">
+  return `<select class="in rt-sel${code ? '' : ' rt-none'}" data-k="rt" aria-label="Tuyến giao" ${isDP() ? '' : 'disabled'} title="${code ? esc(routeLabel(code)) + ' – ' + src : 'Chưa khớp tuyến nào – chọn tuyến'}${isDP() ? '' : ' (chỉ Điều phối / Quản lý đổi được)'}">
     <option value="">${auto ? esc(auto) + ' (tự)' : '⚠ chưa chia'}</option>${routes().map(r => `<option value="${esc(r.code)}" ${r.code === cur ? 'selected' : ''}>${esc(r.code)} – ${esc(r.name)}</option>`).join('')}${extra}</select>`;
 }
 // NGƯỜI GIAO từng tuyến: danh sách tài khoản người giao lấy từ web Kho (giaonv/list); mặc định người có tuyến đó trong
@@ -882,6 +884,7 @@ function driverFor(code, assign) {
   return [d ? d.id : '', 'tự'];
 }
 function editDrivers() {
+  if (!dpOnly('chọn người giao')) return;
   const d = S.date, a = (S.day && S.day.assign) || {}, cnt = {};
   for (const { o, c, cid } of dayOrders(S.day ? S.day.r : {})) { const k = routeOf(o, S.cust[cid] || c)[0]; if (k) cnt[k] = (cnt[k] || 0) + 1; }
   const codes = Object.keys(cnt).sort((x, y) => routeIdx(x) - routeIdx(y));
@@ -920,7 +923,7 @@ function rtChipsHtml() {
   const as = (S.day && S.day.assign) || {}, hasDrv = (S.drivers || []).length;
   const lab = k => { const n = driverName(driverFor(k, as)[0]); return hasDrv ? `${k} · ${n || '⚠ chưa có người'}` : k; };
   return `<span class="small muted">🚚 Chia tuyến:</span>${cnt['-'] ? chip('-', '⚠ Chưa chia', cnt['-'], 'Đơn chưa khớp tuyến nào – chọn ở cột Tuyến') : ''}${keys.map(k => chip(k, lab(k), cnt[k], routeLabel(k))).join('')}
-    ${keys.length || cnt['-'] ? '' : '<span class="small muted">chưa có đơn</span>'}<button class="btn sm" id="rt-drv" title="Chọn nhân viên giao cho từng tuyến">👤 Người giao</button><button class="btn sm ghost" id="rt-cfg" title="Sửa danh sách tuyến và quy tắc chia tự động">⚙ Quy tắc chia tuyến</button>`;
+    ${keys.length || cnt['-'] ? '' : '<span class="small muted">chưa có đơn</span>'}<button class="btn sm dp-only" id="rt-drv" title="Chọn nhân viên giao cho từng tuyến">👤 Người giao</button><button class="btn sm ghost dp-only" id="rt-cfg" title="Sửa danh sách tuyến và quy tắc chia tự động">⚙ Quy tắc chia tuyến</button>`;
 }
 function drawRtChips() {
   const el = $('#d-rt'); if (!el) return;
@@ -929,7 +932,7 @@ function drawRtChips() {
   $('#rt-cfg', el).onclick = editRoutes; $('#rt-drv', el).onclick = editDrivers;
 }
 function editRoutes() {
-  if (!qlOnly('sửa quy tắc chia tuyến')) return;
+  if (!dpOnly('sửa quy tắc chia tuyến')) return;
   let list = routes().map(r => Object.assign({}, r));
   const m = modal({
     title: 'Tuyến giao hàng & quy tắc chia tự động', ok: 'Lưu', wide: true,
@@ -1019,17 +1022,24 @@ $('#me-btn').onclick = () => (S.acc || hasAcc() ? accMenu() : modal({
 }));
 
 /* ================================================================ TÀI KHOẢN NHÂN VIÊN
-   cfg/tk {a: {id: {user, name, role: 'ql' | 'nhap', active, salt, pw, at, by}|null}}. Chưa có tài khoản nào thì web dùng như cũ.
+   cfg/tk {a: {id: {user, name, role: 'ql' | 'dp' | 'nhap', active, salt, pw, at, by}|null}}. Chưa có tài khoản nào thì web dùng như cũ.
    Có tài khoản: ai mở web cũng phải đăng nhập (trừ chủ trang); tên tài khoản ghi vào cột Người tạo đơn.
    Quyền Nhập liệu: Đơn hàng ngày, Tuyến 123, Định mức đóng hàng, Khách hàng (thêm / sửa), Thống kê.
+   Quyền Điều phối: thêm chia tuyến (cột Tuyến, quy tắc chia tuyến), chọn người giao, gửi ngay sang Giao hàng & Kho.
    Quyền Quản lý: thêm Định mức & cài đặt, Nhập từ sheet, Tài khoản, quy tắc chia tuyến, giá Tuyến 123, xóa khách, cập nhật từ MISA. */
 const QL_VIEWS = ['cd', 'nhap', 'acc'];
 const SESSION_DAYS = 30;
 const hasAcc = () => Object.values(S.tk).some(a => a && a.active !== false);
 const authReady = () => S.tkLoaded && (S.isOwner != null || !hasAcc());
 const needLogin = () => hasAcc() && !S.acc && !S.isOwner;
-const isQL = () => !hasAcc() || S.isOwner || !!(S.acc && S.acc.role === 'ql');
+const ROLES = [['nhap', 'Nhập liệu'], ['dp', 'Điều phối'], ['ql', 'Quản lý']];
+const roleOf = a => (ROLES.some(r => r[0] === (a && a.role)) ? a.role : 'nhap');
+const roleName = a => ROLES.find(r => r[0] === roleOf(a))[1];
+const rolePill = a => `<span class="pill ${roleOf(a)}">${roleName(a)}</span>`;
+const isQL = () => !hasAcc() || S.isOwner || roleOf(S.acc) === 'ql' && !!S.acc;
+const isDP = () => isQL() || (!!S.acc && roleOf(S.acc) === 'dp');
 function qlOnly(what) { if (isQL()) return true; toast(`Chỉ tài khoản Quản lý mới ${what}.`, true); return false; }
+function dpOnly(what) { if (isDP()) return true; toast(`Chỉ tài khoản Điều phối hoặc Quản lý mới ${what}.`, true); return false; }
 const normUser = v => noAcc(String(v || '')).toLowerCase().replace(/[^a-z0-9._-]/g, '');
 const hex = buf => Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 // mật khẩu băm PBKDF2 (dữ liệu trang ai được mời cũng đọc được – không lưu mật khẩu gốc)
@@ -1073,7 +1083,7 @@ function accMenu() {
   const a = S.acc;
   const m = modal({
     title: a ? 'Tài khoản của bạn' : 'Chủ trang',
-    body: a ? `<p style="margin:0 0 10px"><b>${esc(a.name || a.user)}</b> · ${esc(a.user)} · <span class="pill ${a.role === 'ql' ? 'ql' : 'nhap'}">${a.role === 'ql' ? 'Quản lý' : 'Nhập liệu'}</span></p>
+    body: a ? `<p style="margin:0 0 10px"><b>${esc(a.name || a.user)}</b> · ${esc(a.user)} · ${rolePill(a)}</p>
         <p class="hint" style="margin:0 0 12px">Tên này được ghi vào cột <b>Người tạo đơn</b>.</p>
         <div class="row"><button class="btn" id="am-pw">Đổi mật khẩu</button><button class="btn danger" id="am-out">Đăng xuất</button></div>`
       : `<p style="margin:0 0 10px">Bạn là <b>chủ trang</b> – dùng web không cần đăng nhập và quản lý được tài khoản.</p>
@@ -1107,21 +1117,22 @@ function changePw() {
 function viewAccounts(main) {
   if (!isQL()) { main.innerHTML = '<div class="card empty"><div class="big">Chỉ quản lý mới xem được mục này</div></div>'; return; }
   const list = Object.entries(S.tk).filter(([, a]) => a).map(([id, a]) => Object.assign({ id }, a))
-    .sort((x, y) => (y.active !== false) - (x.active !== false) || (x.role === 'ql' ? 0 : 1) - (y.role === 'ql' ? 0 : 1) || String(x.name).localeCompare(String(y.name), 'vi'));
+    .sort((x, y) => (y.active !== false) - (x.active !== false) || ROLES.findIndex(r => r[0] === roleOf(y)) - ROLES.findIndex(r => r[0] === roleOf(x)) || String(x.name).localeCompare(String(y.name), 'vi'));
   const first = !hasAcc();
   main.innerHTML = `<div class="card" style="display:grid;gap:12px">
       <div class="row"><h2 style="margin:0">Tài khoản nhân viên nhập liệu</h2><span class="grow"></span>
         ${first && !S.isOwner ? '' : '<button class="btn pri" id="ac-add">+ Thêm tài khoản</button>'}</div>
       <p class="hint" style="margin:0">Mỗi nhân viên 1 tài khoản (tên đăng nhập + mật khẩu). Khi đã có tài khoản, ai mở web cũng phải <b>đăng nhập</b>
         (chủ trang thì không cần); tên tài khoản tự ghi vào cột <b>Người tạo đơn</b>.
-        <b>Nhập liệu</b>: nhập đơn, Tuyến 123, khách hàng (thêm / sửa), xem định mức, thống kê, in. <b>Quản lý</b>: thêm cài đặt, nhập từ sheet,
-        quy tắc chia tuyến, giá Tuyến 123, xóa khách, cập nhật từ MISA và mục Tài khoản này.</p>
+        <b>Nhập liệu</b>: nhập đơn, Tuyến 123, khách hàng (thêm / sửa), xem định mức, thống kê, in.
+        <b>Điều phối</b>: thêm chia tuyến (cột Tuyến, quy tắc chia tuyến), chọn người giao, gửi ngay sang Giao hàng &amp; Kho.
+        <b>Quản lý</b>: tất cả – thêm cài đặt, nhập từ sheet, giá Tuyến 123, xóa khách, cập nhật từ MISA và mục Tài khoản này.</p>
       <p class="hint" style="margin:0">Nhân viên vẫn cần được chủ trang mời vào trang (nút <b>Share</b>, mời bằng email, quyền <b>Editor</b>) mới mở được web;
         tài khoản ở đây để biết ai nhập và giới hạn chức năng.</p>
       ${first && !S.isOwner ? '<p class="muted">Chưa có tài khoản nào – chủ trang mở web để tạo tài khoản đầu tiên.</p>' : ''}
       ${list.length ? `<div class="tw"><table><thead><tr><th>Họ tên</th><th>Tên đăng nhập</th><th>Quyền</th><th>Trạng thái</th><th>Cập nhật</th><th></th></tr></thead><tbody>
         ${list.map(a => `<tr data-id="${esc(a.id)}" ${a.active === false ? 'style="opacity:.55"' : ''}><td><b>${esc(a.name)}</b>${S.acc && S.acc.id === a.id ? ' <span class="small muted">(bạn)</span>' : ''}</td>
-          <td class="mono">${esc(a.user)}</td><td><span class="pill ${a.role === 'ql' ? 'ql' : 'nhap'}">${a.role === 'ql' ? 'Quản lý' : 'Nhập liệu'}</span></td>
+          <td class="mono">${esc(a.user)}</td><td>${rolePill(a)}</td>
           <td>${a.active === false ? '<span class="pill off">Đã khóa</span>' : 'Đang dùng'}</td><td class="small muted">${esc(a.at || '')}</td>
           <td class="nowrap"><button class="btn sm" data-ed>Sửa</button> <button class="btn sm danger" data-del>Xóa</button></td></tr>`).join('')}</tbody></table></div>`
       : first && !S.isOwner ? '' : '<p class="muted">Chưa có tài khoản nào. Bấm <b>+ Thêm tài khoản</b> – nên tạo 1 tài khoản Quản lý trước.</p>'}</div>`;
@@ -1145,7 +1156,7 @@ function editAccount(id) {
       <label class="field">Họ tên (ghi vào cột Người tạo đơn)<input id="ea-name" value="${esc(a.name || '')}" maxlength="60"></label>
       <label class="field">Tên đăng nhập (không dấu, viết liền, VD <i>lan.nh</i>)<input id="ea-user" value="${esc(a.user || '')}" autocapitalize="none" spellcheck="false" maxlength="40"></label>
       <label class="field">${id ? 'Mật khẩu mới (để trống = giữ mật khẩu cũ)' : 'Mật khẩu (ít nhất 4 ký tự)'}<input id="ea-pw" type="text" autocomplete="new-password" maxlength="60"></label>
-      <label class="field">Quyền<select id="ea-role"><option value="nhap" ${a.role !== 'ql' ? 'selected' : ''}>Nhập liệu</option><option value="ql" ${a.role === 'ql' ? 'selected' : ''}>Quản lý</option></select></label>
+      <label class="field">Quyền<select id="ea-role">${ROLES.map(([k, l]) => `<option value="${k}" ${roleOf(a) === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       <label class="field">Trạng thái<select id="ea-act"><option value="1">Đang dùng</option><option value="" ${a.active === false ? 'selected' : ''}>Khóa (không đăng nhập được)</option></select></label>
     </div>`,
     onOk: async r => {
@@ -1173,7 +1184,7 @@ function render() {
   if (!S.loaded.cfg || !S.loaded.cust) return;
   if (!authReady()) { main.innerHTML = '<div class="card empty"><div class="big">Đang kiểm tra tài khoản…</div></div>'; return; }
   document.body.classList.toggle('locked', needLogin());
-  document.body.classList.toggle('role-nhap', !isQL());
+  document.body.classList.toggle('no-ql', !isQL()); document.body.classList.toggle('no-dp', !isDP());
   if (needLogin()) return drawLogin(main);
   if (!isQL() && QL_VIEWS.includes(S.view)) { S.view = 'don'; store('view', 'don'); }
   $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === S.view));
@@ -1700,7 +1711,7 @@ function editCustomer(id) {
       <label class="field">Bill<input id="ec-bill" type="number" min="0" value="${esc(c.bill == null ? 1 : c.bill)}"></label>
       <label class="field wide">Ghi chú / chành xe<input id="ec-note" value="${esc(c.note || '')}"></label>
       <label class="field">Đóng gói mặc định<select id="ec-pk"><option value="">Tự chọn (theo ghi chú)</option>${['TÚI ĐEN', 'THÙNG'].map(x => `<option ${x === c.pk ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
-      <label class="field">Tuyến giao<select id="ec-rt"><option value="">Tự chia (${esc(autoRouteOf(c)[0] || 'chưa khớp')})</option>${routes().map(r => `<option value="${esc(r.code)}" ${r.code === c.rt ? 'selected' : ''}>${esc(r.code)} – ${esc(r.name)}</option>`).join('')}</select></label>
+      <label class="field">Tuyến giao<select id="ec-rt" ${isDP() ? '' : 'disabled title="Chỉ Điều phối / Quản lý đổi được tuyến"'}><option value="">Tự chia (${esc(autoRouteOf(c)[0] || 'chưa khớp')})</option>${routes().map(r => `<option value="${esc(r.code)}" ${r.code === c.rt ? 'selected' : ''}>${esc(r.code)} – ${esc(r.name)}</option>`).join('')}</select></label>
       <label class="field">Giao dịch<select id="ec-off"><option value="">Đang giao dịch</option><option value="1" ${c.off ? 'selected' : ''}>Ngừng (ẩn khỏi danh sách)</option></select></label>
     </div><datalist id="dl-area">${areas().map(a => `<option value="${esc(a)}">`).join('')}</datalist>
     ${id && isQL() ? '<div style="margin-top:12px"><button class="btn danger sm" id="ec-del">Xóa khách</button></div>' : ''}`,
@@ -2633,7 +2644,7 @@ function viewT123(main) {
         <button class="btn sm" id="t1-today">Hôm nay</button>
         <span class="date-big">Tuyến kebab 123 · ${vn(d)}</span><span class="dow">${dow(d)}</span>
         <span class="grow"></span>
-        <button class="btn sm" id="t1-drv" title="Chọn nhân viên giao cho từng tuyến">👤 Người giao</button>
+        <button class="btn sm dp-only" id="t1-drv" title="Chọn nhân viên giao cho từng tuyến">👤 Người giao</button>
         <button class="btn sm" id="t1-print" title="In báo cáo tất cả hoặc theo bộ lọc đang chọn">🖨 In báo cáo</button>
         <button class="btn sm" id="t1-copy" title="Lấy số lượng của ngày gần nhất trước đó làm sẵn">Chép số ngày trước</button>
         <button class="btn sm pri" id="t1-send" title="Ghi tổng số tuyến 123 vào dòng BÁNH TUYẾN của Đơn hàng ngày">→ Đưa vào Bánh tuyến</button>
