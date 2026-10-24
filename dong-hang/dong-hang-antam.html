@@ -1054,7 +1054,7 @@ $('#me-btn').onclick = () => (S.acc || hasAcc() ? accMenu() : modal({
 }));
 
 /* ================================================================ THEO DÕI GIAO HÀNG
-   Kết quả giao do người giao bấm ở trang Giao hàng An Tâm (kho/TP/giao/<ngày>) được tác vụ tự động chép sang đây mỗi giờ:
+   Kết quả giao do người giao bấm ở trang Giao hàng An Tâm (kho/TP/giao/<ngày>) được tác vụ tự động chép sang đây mỗi 15 phút (4 tác vụ: phút :07, :22, :37, :52):
    giaokq/<ngày> {date, d: {mã khách (CRM): {status 'ok'|'fail', note, at, driver, route, name, photos, gps}}}, giaokq/index {s, at}.
    Ảnh giao hàng (photos 'a:<mã ảnh bên Giao>') được chép sang kho ảnh của trang này: giaoanh/<ngày> {m: {mã ảnh bên Giao: url ảnh ở đây}}.
    Ghép với đơn Đơn hàng ngày + Tuyến kebab 123 của ngày theo mã CRM (hoặc mã đầu tên khách). */
@@ -1126,7 +1126,7 @@ function viewTrack(main) {
         <button class="btn sm" id="g-next" aria-label="Ngày sau">▶</button><button class="btn sm" id="g-today">Hôm nay</button>
         <span class="date-big">${vn(d)}</span><span class="dow">${dow(d)}</span><span class="grow"></span>
         <button class="btn sm" id="g-print">🖨 In theo dõi giao hàng</button></div>
-      <p class="hint" style="margin:0">Kết quả do người giao bấm <b>Đã giao / Không giao được</b> trên trang Giao hàng An Tâm, tự chuyển sang đây <b>mỗi giờ</b>
+      <p class="hint" style="margin:0">Kết quả do người giao bấm <b>Đã giao / Không giao được</b> trên trang Giao hàng An Tâm, tự chuyển sang đây <b>khoảng 15 phút một lần</b> (6h–23h; trang tự hiện số mới, không cần tải lại)
         ${idx.at ? `(lần cập nhật gần nhất: <b>${esc(String(idx.at).replace('T', ' ').slice(0, 16))}</b>)` : ''}. Bấm ảnh nhỏ để xem ảnh giao hàng lớn (ảnh chép sang cùng lúc với kết quả); vị trí lúc giao xem ở trang Giao hàng An Tâm.</p>
       <div class="gh-stats"><div><div class="v">${fmt(n)}</div><div class="k">Điểm giao (khách có đơn)</div></div>
         <div class="ok"><div class="v">${fmt(ok)}</div><div class="k">Đã giao</div></div><div class="bad"><div class="v">${fmt(bad)}</div><div class="k">Không giao được</div></div>

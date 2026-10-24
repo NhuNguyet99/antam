@@ -46,7 +46,8 @@ Web riêng (trang claude.ai, một file `dong-hang-antam.html`) thay cho Google 
   Bản in có bảng **Tổng theo tuyến giao – số lượng từng sản phẩm** (đơn, số lượng từng sản phẩm, bao bì) và
   dưới danh sách mỗi tuyến / nhóm là bảng **TỔNG** của nhóm đó (số lượng từng sản phẩm, bao bì). Lựa chọn nhớ trên máy (`dh_prDon`, `dh_prT1`).
 - **Theo dõi giao hàng**: kết quả người giao bấm *Đã giao / Không giao được* ở trang Giao hàng An Tâm (`kho/TP/giao/<ngày>`)
-  được tác vụ tự động chép sang `giaokq/<ngày>` (+ `giaokq/index` {s, at}) mỗi giờ. Mục này ghép với đơn Đơn hàng ngày và Tuyến
+  được tác vụ tự động chép sang `giaokq/<ngày>` (+ `giaokq/index` {s, at}) khoảng 15 phút một lần (phút :07 cùng tác vụ chính,
+  thêm 3 tác vụ riêng phút :22, :37, :52; 6h–23h); trang tự hiện số mới. Mục này ghép với đơn Đơn hàng ngày và Tuyến
   kebab 123 theo mã CRM (hoặc mã đầu tên): số điểm giao, đã giao, không giao được, chưa giao, % hoàn thành; từng tuyến kèm người giao
   và thanh tiến độ; lọc trạng thái / tuyến / tìm; kết quả không khớp đơn nào nằm ở nhóm *Khác*; nút **🖨 In theo dõi giao hàng**.
   **Ảnh giao hàng**: tác vụ tự động chép ảnh (kho ảnh của trang Giao hàng) sang kho ảnh của trang này và ghi `giaoanh/<ngày>`
