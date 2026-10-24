@@ -61,6 +61,8 @@ a { color: var(--accent); }
 .perm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px 16px; margin-top: 4px; }
 .perm-grid fieldset { border: 1px solid var(--line); border-radius: var(--r); padding: 6px 10px 8px; margin: 0; display: grid; gap: 4px; }
 .perm-grid legend { font-size: 12px; font-weight: 700; color: var(--ink-2); padding: 0 4px; }
+.ro-note { margin: 0; padding: 6px 10px; border-radius: var(--r); background: var(--line-2); color: var(--ink-2); font-size: 13px; }
+.orders input.q:disabled, .orders select:disabled { opacity: .75; cursor: default; }
 .perm-list { font-size: 12px; color: var(--ink-2); max-width: 420px; }
 body.locked #tabs, body.locked #me-btn, body.locked #sync { visibility: hidden; }
 .login { max-width: 380px; margin: 8vh auto; display: grid; gap: 12px; }
@@ -1033,7 +1035,8 @@ $('#me-btn').onclick = () => (S.acc || hasAcc() ? accMenu() : modal({
    Quyền Quản lý: thêm Định mức & cài đặt, Nhập từ sheet, Tài khoản, quy tắc chia tuyến, giá Tuyến 123, xóa khách, cập nhật từ MISA. */
 // danh sách quyền (tích chọn riêng cho từng tài khoản); mục = tab có cùng mã
 const PERMS = [
-  ['Nhập liệu', [['don', 'Đơn hàng ngày – xem & nhập đơn'], ['t123', 'Tuyến kebab 123 – xem & nhập đơn'], ['in', 'Định mức đóng hàng – xem & in'],
+  ['Nhập liệu', [['don', 'Đơn hàng ngày – xem'], ['donNhap', 'Đơn hàng ngày – nhập / sửa đơn'], ['t123', 'Tuyến kebab 123 – xem'], ['t123Nhap', 'Tuyến kebab 123 – nhập / sửa đơn'],
+    ['in', 'Định mức đóng hàng – xem & in'],
     ['khach', 'Khách hàng – thêm / sửa thông tin'], ['tk', 'Thống kê']]],
   ['Điều phối', [['tuyen', 'Đổi tuyến của đơn / khách'], ['quytac', 'Sửa quy tắc chia tuyến'], ['nguoigiao', 'Chọn người giao từng tuyến'], ['gui', 'Gửi ngay sang Giao hàng & Kho']]],
   ['Quản lý', [['xoa', 'Xóa khách'], ['misa', 'Cập nhật khách từ MISA'], ['gia', 'Sửa giá Tuyến 123'], ['nhap', 'Nhập từ sheet (Đơn hàng, Tuyến 123)'],
@@ -1042,7 +1045,9 @@ const PERMS = [
 const PERM_KEYS = PERMS.flatMap(([, l]) => l.map(x => x[0]));
 const PERM_LAB = Object.fromEntries(PERMS.flatMap(([, l]) => l));
 const VIEWS = ['don', 't123', 'in', 'khach', 'tk', 'cd', 'nhap', 'acc'];
-const PRESET = { nhap: ['don', 't123', 'in', 'khach', 'tk'], dp: ['don', 't123', 'in', 'khach', 'tk', 'tuyen', 'quytac', 'nguoigiao', 'gui'], ql: PERM_KEYS };
+// Điều phối: chỉ xem đơn (không nhập / sửa số lượng), được chia tuyến, chọn người giao, gửi ngay
+const PRESET = { nhap: ['don', 'donNhap', 't123', 't123Nhap', 'in', 'khach', 'tk'], dp: ['don', 't123', 'in', 'khach', 'tk', 'tuyen', 'quytac', 'nguoigiao', 'gui'], ql: PERM_KEYS };
+const PERM_V = 2; // bản 1: 'don' / 't123' gồm cả nhập đơn
 document.head.insertAdjacentHTML('beforeend', `<style>${PERM_KEYS.map(k => `body.no-p-${k} .p-${k}`).join(',')} { display: none !important; }</style>`);
 const SESSION_DAYS = 30;
 const newSess = (id, pw) => ({ id, sig: pw.slice(0, 24), iat: Date.now(), exp: Date.now() + SESSION_DAYS * 864e5 });
@@ -1054,7 +1059,12 @@ const roleOf = a => (ROLES.some(r => r[0] === (a && a.role)) ? a.role : 'nhap');
 const roleName = a => ROLES.find(r => r[0] === roleOf(a))[1];
 const rolePill = a => `<span class="pill ${roleOf(a)}">${roleName(a)}${custom(a) ? ' · tùy chỉnh' : ''}</span>`;
 // quyền của 1 tài khoản: danh sách tích riêng (perm), chưa có thì theo mẫu của vai trò
-const permsOf = a => new Set(Array.isArray(a && a.perm) ? a.perm.filter(k => PERM_KEYS.includes(k)) : PRESET[roleOf(a)]);
+function permsOf(a) {
+  if (!Array.isArray(a && a.perm)) return new Set(PRESET[roleOf(a)]);
+  const p = new Set(a.perm.filter(k => PERM_KEYS.includes(k)));
+  if ((a.pv || 1) < 2) { if (p.has('don')) p.add('donNhap'); if (p.has('t123')) p.add('t123Nhap'); }
+  return p;
+}
 const custom = a => { const p = permsOf(a), d = new Set(PRESET[roleOf(a)]); return p.size !== d.size || [...p].some(k => !d.has(k)); };
 function can(k) { if (!hasAcc()) return true; return !!S.acc && permsOf(S.acc).has(k); }
 function need(k, what) { if (can(k)) return true; toast(`Tài khoản của bạn chưa được cấp quyền ${what || PERM_LAB[k]} – nhờ quản lý phân quyền.`, true); return false; }
@@ -1221,7 +1231,9 @@ function editAccount(id) {
       if (id && pwIn && pwIn.length < 4) throw new Error('Mật khẩu cần ít nhất 4 ký tự');
       if (S.acc && S.acc.id === id && (!perm.includes('acc') || !active)) throw new Error('Không tự bỏ quyền quản lý tài khoản hoặc tự khóa tài khoản đang đăng nhập');
       if (!perm.some(k => VIEWS.includes(k))) throw new Error('Cần cấp ít nhất 1 mục để tài khoản vào được web (VD Đơn hàng ngày)');
-      const rec = Object.assign({}, a, { user, name, role, perm, active, at: nowStr(), by: S.me || '' });
+      if (perm.includes('donNhap') && !perm.includes('don')) perm.push('don');
+      if (perm.includes('t123Nhap') && !perm.includes('t123')) perm.push('t123');
+      const rec = Object.assign({}, a, { user, name, role, perm, pv: PERM_V, active, at: nowStr(), by: S.me || '' });
       if (pwIn) { rec.salt = rid('s'); rec.pw = await pwHash(rec.salt, pwIn); }
       const nid = id || rid('u');
       await mergeInto('cfg/tk', { a: { [nid]: rec } }, { a: {} });
@@ -1392,6 +1404,7 @@ function viewDay(main) {
       ${repFltHtml()}
       <div class="rtchips" id="d-rt"></div>
       ${khoBar('don', d)}
+      ${can('donNhap') ? '' : '<p class="ro-note">👁 Chế độ xem – tài khoản của bạn không nhập / sửa đơn' + (can('tuyen') ? ' (vẫn đổi tuyến, chọn người giao được)' : '') + '.</p>'}
       <div id="d-rep-wrap" ${S.repOpen ? '' : 'hidden'}>${reportHtml(dayReport(rr, repTuyen()), tot.need, repTuyen(), true, repPart())}</div>
     </div>
     <div class="row">
@@ -1613,6 +1626,7 @@ function rowHtml(c, ps, pay, H = new Set()) {
 S.localRows = {};
 const rowTimers = {};
 function patchRow(cid, patch) {
+  if (!('rt' in patch && Object.keys(patch).length === 1) && !need('donNhap')) return;
   const c = S.cust[cid];
   const cur = S.day.r[cid] = deepMerge(JSON.parse(JSON.stringify(S.day.r[cid] || {})), patch);
   if (!cur.tao && S.me && qtyTotal(cur.q) > 0) { cur.tao = S.me; patch.tao = S.me; }
@@ -1628,6 +1642,7 @@ function patchRow(cid, patch) {
   }, 700);
 }
 function bindRows(el) {
+  if (!can('donNhap')) $$('input.q, select[data-k]:not([data-k=rt])', el).forEach(x => { x.disabled = true; x.title = 'Chế độ xem – không sửa được'; });
   $$('tr[data-cid]', el).forEach(tr => {
     const cid = tr.dataset.cid;
     $$('input.q', tr).forEach(inp => {
@@ -1701,6 +1716,7 @@ function updateDayTotals() {
 S.localTuyen = {};
 let tuyenTimer = null;
 function bindReport() {
+  if (!can('donNhap')) $$('#d-report input[data-tuyen]').forEach(x => { x.disabled = true; });
   $$('#d-report input[data-tuyen]').forEach(inp => {
     inp.addEventListener('focus', () => inp.select());
     inp.addEventListener('input', () => {
@@ -1756,6 +1772,11 @@ function editOrder(cid) {
     $('#eo-pack', m.root).textContent = packLabel(packing(q, $('#eo-pk', m.root).value)) || '—';
   };
   $$('.qgrid input, #eo-pk', m.root).forEach(i => i.addEventListener('input', upd)); upd();
+  if (!can('donNhap')) { // chế độ xem: xem chi tiết đơn, không sửa
+    $$('input, select, textarea', m.root).forEach(i => { i.disabled = true; });
+    const ok = $('[data-ok]', m.root); if (ok) ok.remove();
+    $('h2', m.root).textContent += ' (chỉ xem)';
+  }
 }
 
 /* ================================================================ KHÁCH HÀNG */
@@ -2710,10 +2731,11 @@ function viewT123(main) {
         <span class="grow"></span>
         <button class="btn sm p-nguoigiao" id="t1-drv" title="Chọn nhân viên giao cho từng tuyến">👤 Người giao</button>
         <button class="btn sm" id="t1-print" title="In báo cáo tất cả hoặc theo bộ lọc đang chọn">🖨 In báo cáo</button>
-        <button class="btn sm" id="t1-copy" title="Lấy số lượng của ngày gần nhất trước đó làm sẵn">Chép số ngày trước</button>
-        <button class="btn sm pri" id="t1-send" title="Ghi tổng số tuyến 123 vào dòng BÁNH TUYẾN của Đơn hàng ngày">→ Đưa vào Bánh tuyến</button>
+        <button class="btn sm p-t123Nhap" id="t1-copy" title="Lấy số lượng của ngày gần nhất trước đó làm sẵn">Chép số ngày trước</button>
+        <button class="btn sm pri p-t123Nhap" id="t1-send" title="Ghi tổng số tuyến 123 vào dòng BÁNH TUYẾN của Đơn hàng ngày">→ Đưa vào Bánh tuyến</button>
       </div>
       ${khoBar('t123', d)}
+      ${can('t123Nhap') ? '' : '<p class="ro-note">👁 Chế độ xem – tài khoản của bạn không nhập / sửa đơn Tuyến 123.</p>'}
       <div id="t1-sum"></div>
       <div class="row" style="align-items:center">
         <span class="hint">Giá: ${T123_P.map(([k, l, , u]) => `${esc(l)} ${pr[k] ? fmt(pr[k]) + 'đ/' + u : '<b style="color:var(--bad)">chưa có</b>'}`).join(' · ')}</span>
@@ -2732,7 +2754,7 @@ function viewT123(main) {
   $('#t1-prev').onclick = () => go(addDays(d, -1)); $('#t1-next').onclick = () => go(addDays(d, 1)); $('#t1-today').onclick = () => go(today());
   $('#t1-date').onchange = e => e.target.value && go(e.target.value);
   $('#t1-price').onclick = t1EditPrice; $('#t1-add').onclick = () => t1EditCust(null); $('#t1-import').onclick = t1Import;
-  $('#t1-copy').onclick = () => guard(t1CopyPrev); $('#t1-send').onclick = () => guard(t1Send);
+  $('#t1-copy').onclick = () => need('t123Nhap') && guard(t1CopyPrev); $('#t1-send').onclick = () => need('t123Nhap') && guard(t1Send);
   $('#t1-csv').onclick = () => guard(() => saveFile(`tuyen-123-${d}.csv`, '﻿' + toCsv(t1Rows()), 'text/csv'));
   $('#t1-print').onclick = t1Print; $('#t1-drv').onclick = t1EditDrivers; $('#t1-cols').onclick = t1ColChooser; bindKhoBar(d);
   let qt; $('#t1f-q').oninput = e => { clearTimeout(qt); qt = setTimeout(() => { f.q = e.target.value; t1SaveF(); t1Draw(); }, 220); };
@@ -2830,6 +2852,7 @@ function t1RowHtml(c) {
     <td><button class="btn sm ghost" data-edit title="Sửa khách">⋯</button></td></tr>`;
 }
 function t1Patch(cid, patch) {
+  if (!need('t123Nhap')) return;
   const d = S.t1.date;
   S.t1.day.r[cid] = deepMerge(JSON.parse(JSON.stringify(S.t1.day.r[cid] || {})), patch);
   patch.at = nowStr(); if (S.me) patch.by = S.me;
@@ -2842,6 +2865,7 @@ function t1Patch(cid, patch) {
   }, 700);
 }
 function t1Bind() {
+  if (!can('t123Nhap')) $$('#t1-table input[data-q], #t1-table input[data-k], #t1-table select[data-k], #t1-table input[data-ht]').forEach(x => { x.disabled = true; });
   $$('#t1-table tr[data-t1]').forEach(tr => {
     const cid = tr.dataset.t1;
     const after = () => {
