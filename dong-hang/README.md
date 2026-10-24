@@ -55,8 +55,10 @@ Web riêng (trang claude.ai, một file `dong-hang-antam.html`) thay cho Google 
   trên claude.ai trang không tự mở được hộp thoại in nên web giữ sẵn bản in trong trang và hiện xem trước: bấm **Ctrl+P**
   (⌘+P) là in đúng bản đó (giống web Kho), không cần tải file. "⬇ Tải file in" để lưu / gửi bản in.
 - **Tài khoản** (chủ trang / Quản lý): mỗi nhân viên nhập liệu 1 tài khoản (họ tên, tên đăng nhập, mật khẩu, quyền
-  **Nhập liệu**, **Điều phối** hoặc **Quản lý**, khóa được). Khi đã có tài khoản, ai mở web cũng phải đăng nhập (chủ trang không cần); đăng nhập
-  nhớ 30 ngày trên máy; đổi mật khẩu / khóa / xóa tài khoản là phiên cũ hết hiệu lực. Tên tài khoản tự ghi vào cột Người tạo đơn.
+  **Nhập liệu**, **Điều phối** hoặc **Quản lý**, khóa được). Khi đã có tài khoản, ai mở web cũng phải đăng nhập bằng **nick + mật khẩu** (kể cả chủ
+  trang); đăng nhập nhớ 30 ngày trên máy; đổi mật khẩu / khóa / xóa tài khoản là phiên cũ hết hiệu lực. Nút **⏏ Đăng xuất tất cả**
+  (mục Tài khoản) bắt mọi máy đăng nhập lại (`cfg/tk.ep`). Chủ trang quên mật khẩu: ở màn đăng nhập bấm *Chủ trang: đặt lại mật
+  khẩu một tài khoản*. Tên tài khoản tự ghi vào cột Người tạo đơn.
   Nhập liệu: Đơn hàng ngày, Tuyến 123, Định mức đóng hàng, Khách hàng (thêm / sửa), Thống kê, in (cột Tuyến chỉ xem).
   Điều phối thêm: chia tuyến (cột Tuyến, tuyến của khách, quy tắc chia tuyến), chọn 👤 Người giao (Đơn hàng ngày, Tuyến 123),
   📤 Gửi ngay sang Giao hàng & Kho. Quản lý: tất cả – thêm Định mức & cài đặt,

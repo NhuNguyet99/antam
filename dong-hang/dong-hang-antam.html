@@ -603,7 +603,7 @@ async function boot() {
     if (can === false) { S.readOnly = true; toast('Bạn đang chỉ có quyền xem – nhờ chủ trang mời bằng email với quyền Editor để nhập liệu.', true); }
   }).catch(e => console.warn('user', e)).finally(() => { if (S.isOwner == null) { S.isOwner = false; applyAuth(); } });
   // tài khoản nhân viên nhập liệu
-  db.doc('cfg/tk').onSnapshot(sn => { S.tk = Object.fromEntries(live(((sn.exists && sn.data()) || {}).a)); S.tkLoaded = true; applyAuth(); },
+  db.doc('cfg/tk').onSnapshot(sn => { const d = (sn.exists && sn.data()) || {}; S.tk = Object.fromEntries(live(d.a)); S.tkEp = num(d.ep || 0); S.tkLoaded = true; applyAuth(); },
     e => { console.warn('tk', e); S.tkLoaded = true; applyAuth(); });
   $('#me-name').textContent = S.me || 'Đặt tên';
   // cài đặt: dùng mặc định ngay, có bản đã lưu thì thay
@@ -1023,20 +1023,22 @@ $('#me-btn').onclick = () => (S.acc || hasAcc() ? accMenu() : modal({
 
 /* ================================================================ TÀI KHOẢN NHÂN VIÊN
    cfg/tk {a: {id: {user, name, role: 'ql' | 'dp' | 'nhap', active, salt, pw, at, by}|null}}. Chưa có tài khoản nào thì web dùng như cũ.
-   Có tài khoản: ai mở web cũng phải đăng nhập (trừ chủ trang); tên tài khoản ghi vào cột Người tạo đơn.
+   Có tài khoản: ai mở web cũng phải đăng nhập bằng nick + mật khẩu (kể cả chủ trang); tên tài khoản ghi vào cột Người tạo đơn.
+   ep: lúc bấm "Đăng xuất tất cả" – phiên đăng nhập trước lúc đó hết hiệu lực.
    Quyền Nhập liệu: Đơn hàng ngày, Tuyến 123, Định mức đóng hàng, Khách hàng (thêm / sửa), Thống kê.
    Quyền Điều phối: thêm chia tuyến (cột Tuyến, quy tắc chia tuyến), chọn người giao, gửi ngay sang Giao hàng & Kho.
    Quyền Quản lý: thêm Định mức & cài đặt, Nhập từ sheet, Tài khoản, quy tắc chia tuyến, giá Tuyến 123, xóa khách, cập nhật từ MISA. */
 const QL_VIEWS = ['cd', 'nhap', 'acc'];
 const SESSION_DAYS = 30;
+const newSess = (id, pw) => ({ id, sig: pw.slice(0, 24), iat: Date.now(), exp: Date.now() + SESSION_DAYS * 864e5 });
 const hasAcc = () => Object.values(S.tk).some(a => a && a.active !== false);
-const authReady = () => S.tkLoaded && (S.isOwner != null || !hasAcc());
-const needLogin = () => hasAcc() && !S.acc && !S.isOwner;
+const authReady = () => S.tkLoaded;
+const needLogin = () => hasAcc() && !S.acc;
 const ROLES = [['nhap', 'Nhập liệu'], ['dp', 'Điều phối'], ['ql', 'Quản lý']];
 const roleOf = a => (ROLES.some(r => r[0] === (a && a.role)) ? a.role : 'nhap');
 const roleName = a => ROLES.find(r => r[0] === roleOf(a))[1];
 const rolePill = a => `<span class="pill ${roleOf(a)}">${roleName(a)}</span>`;
-const isQL = () => !hasAcc() || S.isOwner || roleOf(S.acc) === 'ql' && !!S.acc;
+const isQL = () => !hasAcc() || (!!S.acc && roleOf(S.acc) === 'ql');
 const isDP = () => isQL() || (!!S.acc && roleOf(S.acc) === 'dp');
 function qlOnly(what) { if (isQL()) return true; toast(`Chỉ tài khoản Quản lý mới ${what}.`, true); return false; }
 function dpOnly(what) { if (isDP()) return true; toast(`Chỉ tài khoản Điều phối hoặc Quản lý mới ${what}.`, true); return false; }
@@ -1049,7 +1051,7 @@ async function pwHash(salt, pw) {
 }
 function applyAuth() {
   const ss = store('tk'), a = ss && S.tk[ss.id];
-  const ok = a && a.active !== false && a.pw && ss.sig === a.pw.slice(0, 24) && ss.exp > Date.now();
+  const ok = a && a.active !== false && a.pw && ss.sig === a.pw.slice(0, 24) && ss.exp > Date.now() && num(ss.iat) >= (S.tkEp || 0);
   if (ss && S.tkLoaded && !ok) { store('tk', null); if (S.acc) toast('Phiên đăng nhập đã hết hạn hoặc tài khoản đã đổi mật khẩu / bị khóa – hãy đăng nhập lại.', true); }
   S.acc = ok ? Object.assign({ id: ss.id }, a) : null;
   if (S.acc) S.me = S.acc.name || S.acc.user;
@@ -1057,15 +1059,21 @@ function applyAuth() {
   if (S.loaded.cfg && S.loaded.cust) render();
 }
 function drawLogin(main) {
-  if ($('#lg-form', main)) return; // dữ liệu cập nhật trong lúc đang gõ: giữ nguyên ô đăng nhập
+  const ex = $('#lg-form', main);
+  if (ex) { // dữ liệu cập nhật trong lúc đang gõ: giữ nguyên ô đăng nhập (chỉ thêm nút của chủ trang khi biết là chủ trang)
+    if (S.isOwner && !$('#lg-owner', ex)) { ex.insertAdjacentHTML('beforeend', '<button class="btn sm ghost" type="button" id="lg-owner">Chủ trang: đặt lại mật khẩu một tài khoản</button>'); $('#lg-owner', ex).onclick = ownerResetPw; }
+    return;
+  }
   main.innerHTML = `<form class="card login" id="lg-form" autocomplete="on">
       <h2>Đăng nhập Đóng hàng An Tâm</h2>
-      <p class="hint" style="margin:0">Mỗi nhân viên nhập liệu dùng tài khoản riêng do quản lý cấp.</p>
-      <label class="field">Tên đăng nhập<input id="lg-user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" value="${esc(store('lastUser') || '')}" required></label>
+      <p class="hint" style="margin:0">Đăng nhập bằng nick và mật khẩu của bạn (do quản lý cấp).</p>
+      <label class="field">Nick<input id="lg-user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" value="${esc(store('lastUser') || '')}" required></label>
       <label class="field">Mật khẩu<input id="lg-pw" name="password" type="password" autocomplete="current-password" required></label>
       <button class="btn pri" type="submit">Đăng nhập</button>
       <p class="err" id="lg-err"></p>
-      <p class="hint" style="margin:0">Quên mật khẩu: nhờ quản lý đặt lại ở mục Tài khoản.</p></form>`;
+      <p class="hint" style="margin:0">Quên mật khẩu: nhờ quản lý đặt lại ở mục Tài khoản.</p>
+      ${S.isOwner ? '<button class="btn sm ghost" type="button" id="lg-owner">Chủ trang: đặt lại mật khẩu một tài khoản</button>' : ''}</form>`;
+  const ow = $('#lg-owner'); if (ow) ow.onclick = ownerResetPw;
   const u = $('#lg-user'), pw = $('#lg-pw');
   (u.value ? pw : u).focus();
   $('#lg-form').onsubmit = async e => {
@@ -1073,10 +1081,33 @@ function drawLogin(main) {
     const btn = $('#lg-form button[type=submit]'); btn.disabled = true; btn.textContent = 'Đang đăng nhập…';
     const name = normUser(u.value), hit = Object.entries(S.tk).find(([, a]) => a && a.active !== false && normUser(a.user) === name);
     const ok = hit && (await pwHash(hit[1].salt, pw.value)) === hit[1].pw;
-    if (!ok) { await sleep(600); $('#lg-err').textContent = 'Sai tên đăng nhập hoặc mật khẩu'; btn.disabled = false; btn.textContent = 'Đăng nhập'; pw.select(); return; }
-    store('tk', { id: hit[0], sig: hit[1].pw.slice(0, 24), exp: Date.now() + SESSION_DAYS * 864e5 }); store('lastUser', hit[1].user);
+    if (!ok) { await sleep(600); $('#lg-err').textContent = 'Sai nick hoặc mật khẩu'; btn.disabled = false; btn.textContent = 'Đăng nhập'; pw.select(); return; }
+    store('tk', newSess(hit[0], hit[1].pw)); store('lastUser', hit[1].user);
     applyAuth(); toast('Xin chào ' + (hit[1].name || hit[1].user));
   };
+}
+// chủ trang quên mật khẩu (kể cả tài khoản quản lý): đặt mật khẩu mới cho 1 tài khoản rồi đăng nhập bằng mật khẩu đó
+function ownerResetPw() {
+  if (!S.isOwner) return;
+  const list = Object.entries(S.tk).filter(([, a]) => a && a.active !== false);
+  modal({
+    title: 'Đặt lại mật khẩu (chủ trang)', ok: 'Đặt mật khẩu',
+    body: `<div class="fgrid"><label class="field wide">Tài khoản<select id="or-id">${list.map(([id, a]) => `<option value="${esc(id)}">${esc(a.user)} – ${esc(a.name)} (${roleName(a)})</option>`).join('')}</select></label>
+      <label class="field wide">Mật khẩu mới (ít nhất 4 ký tự)<input id="or-pw" type="text" autocomplete="new-password"></label></div>`,
+    onOk: async r => {
+      const id = $('#or-id', r).value, np = $('#or-pw', r).value, cur = S.tk[id];
+      if (!cur) throw new Error('Chọn tài khoản');
+      if (np.length < 4) throw new Error('Mật khẩu cần ít nhất 4 ký tự');
+      const salt = rid('s'), pw = await pwHash(salt, np);
+      await mergeInto('cfg/tk', { a: { [id]: Object.assign({}, cur, { salt, pw, at: nowStr(), by: 'chủ trang' }) } }, { a: {} });
+      S.tk[id] = Object.assign({}, cur, { salt, pw }); toast(`Đã đặt mật khẩu mới cho ${cur.user} – đăng nhập lại bằng mật khẩu này`);
+      const u = $('#lg-user'); if (u) u.value = cur.user; return true;
+    },
+  });
+}
+async function logoutAll() {
+  if (!(await confirmBox('Đăng xuất tất cả tài khoản trên mọi máy? Mọi người (kể cả bạn) phải đăng nhập lại bằng nick và mật khẩu.', 'Đăng xuất tất cả', true))) return;
+  await guard(async () => { const ep = Date.now(); await mergeInto('cfg/tk', { ep }, { a: {} }); S.tkEp = ep; toast('Đã đăng xuất tất cả tài khoản'); applyAuth(); });
 }
 function logout() { store('tk', null); S.acc = null; S.me = store('me') || ''; applyAuth(); render(); }
 function accMenu() {
@@ -1109,7 +1140,7 @@ function changePw() {
       const np = $('#cp-new', r).value; if (np.length < 4) throw new Error('Mật khẩu mới cần ít nhất 4 ký tự');
       const salt = rid('s'), pw = await pwHash(salt, np);
       await mergeInto('cfg/tk', { a: { [a.id]: Object.assign({}, cur, { salt, pw, at: nowStr() }) } }, { a: {} });
-      store('tk', { id: a.id, sig: pw.slice(0, 24), exp: Date.now() + SESSION_DAYS * 864e5 });
+      store('tk', newSess(a.id, pw));
       S.tk[a.id] = Object.assign({}, cur, { salt, pw }); applyAuth(); toast('Đã đổi mật khẩu'); return true;
     },
   });
@@ -1121,22 +1152,24 @@ function viewAccounts(main) {
   const first = !hasAcc();
   main.innerHTML = `<div class="card" style="display:grid;gap:12px">
       <div class="row"><h2 style="margin:0">Tài khoản nhân viên nhập liệu</h2><span class="grow"></span>
+        ${hasAcc() ? '<button class="btn" id="ac-out" title="Bắt mọi người đăng nhập lại">⏏ Đăng xuất tất cả</button>' : ''}
         ${first && !S.isOwner ? '' : '<button class="btn pri" id="ac-add">+ Thêm tài khoản</button>'}</div>
-      <p class="hint" style="margin:0">Mỗi nhân viên 1 tài khoản (tên đăng nhập + mật khẩu). Khi đã có tài khoản, ai mở web cũng phải <b>đăng nhập</b>
-        (chủ trang thì không cần); tên tài khoản tự ghi vào cột <b>Người tạo đơn</b>.
+      <p class="hint" style="margin:0">Mỗi nhân viên 1 tài khoản (nick + mật khẩu). Khi đã có tài khoản, ai mở web cũng phải <b>đăng nhập</b>
+        bằng nick và mật khẩu (kể cả chủ trang); tên tài khoản tự ghi vào cột <b>Người tạo đơn</b>.
         <b>Nhập liệu</b>: nhập đơn, Tuyến 123, khách hàng (thêm / sửa), xem định mức, thống kê, in.
         <b>Điều phối</b>: thêm chia tuyến (cột Tuyến, quy tắc chia tuyến), chọn người giao, gửi ngay sang Giao hàng &amp; Kho.
         <b>Quản lý</b>: tất cả – thêm cài đặt, nhập từ sheet, giá Tuyến 123, xóa khách, cập nhật từ MISA và mục Tài khoản này.</p>
       <p class="hint" style="margin:0">Nhân viên vẫn cần được chủ trang mời vào trang (nút <b>Share</b>, mời bằng email, quyền <b>Editor</b>) mới mở được web;
         tài khoản ở đây để biết ai nhập và giới hạn chức năng.</p>
       ${first && !S.isOwner ? '<p class="muted">Chưa có tài khoản nào – chủ trang mở web để tạo tài khoản đầu tiên.</p>' : ''}
-      ${list.length ? `<div class="tw"><table><thead><tr><th>Họ tên</th><th>Tên đăng nhập</th><th>Quyền</th><th>Trạng thái</th><th>Cập nhật</th><th></th></tr></thead><tbody>
+      ${list.length ? `<div class="tw"><table><thead><tr><th>Họ tên</th><th>Nick</th><th>Quyền</th><th>Trạng thái</th><th>Cập nhật</th><th></th></tr></thead><tbody>
         ${list.map(a => `<tr data-id="${esc(a.id)}" ${a.active === false ? 'style="opacity:.55"' : ''}><td><b>${esc(a.name)}</b>${S.acc && S.acc.id === a.id ? ' <span class="small muted">(bạn)</span>' : ''}</td>
           <td class="mono">${esc(a.user)}</td><td>${rolePill(a)}</td>
           <td>${a.active === false ? '<span class="pill off">Đã khóa</span>' : 'Đang dùng'}</td><td class="small muted">${esc(a.at || '')}</td>
           <td class="nowrap"><button class="btn sm" data-ed>Sửa</button> <button class="btn sm danger" data-del>Xóa</button></td></tr>`).join('')}</tbody></table></div>`
       : first && !S.isOwner ? '' : '<p class="muted">Chưa có tài khoản nào. Bấm <b>+ Thêm tài khoản</b> – nên tạo 1 tài khoản Quản lý trước.</p>'}</div>`;
   const add = $('#ac-add'); if (add) add.onclick = () => editAccount(null);
+  const out = $('#ac-out'); if (out) out.onclick = logoutAll;
   $$('tr[data-id]', main).forEach(tr => {
     const id = tr.dataset.id;
     $('[data-ed]', tr).onclick = () => editAccount(id);
@@ -1154,7 +1187,7 @@ function editAccount(id) {
     title: id ? 'Sửa tài khoản ' + a.user : 'Thêm tài khoản nhân viên', ok: 'Lưu',
     body: `<div class="fgrid">
       <label class="field">Họ tên (ghi vào cột Người tạo đơn)<input id="ea-name" value="${esc(a.name || '')}" maxlength="60"></label>
-      <label class="field">Tên đăng nhập (không dấu, viết liền, VD <i>lan.nh</i>)<input id="ea-user" value="${esc(a.user || '')}" autocapitalize="none" spellcheck="false" maxlength="40"></label>
+      <label class="field">Nick đăng nhập (không dấu, viết liền, VD <i>lan.nh</i>)<input id="ea-user" value="${esc(a.user || '')}" autocapitalize="none" spellcheck="false" maxlength="40"></label>
       <label class="field">${id ? 'Mật khẩu mới (để trống = giữ mật khẩu cũ)' : 'Mật khẩu (ít nhất 4 ký tự)'}<input id="ea-pw" type="text" autocomplete="new-password" maxlength="60"></label>
       <label class="field">Quyền<select id="ea-role">${ROLES.map(([k, l]) => `<option value="${k}" ${roleOf(a) === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       <label class="field">Trạng thái<select id="ea-act"><option value="1">Đang dùng</option><option value="" ${a.active === false ? 'selected' : ''}>Khóa (không đăng nhập được)</option></select></label>
@@ -1163,8 +1196,8 @@ function editAccount(id) {
       const v = k => $(k, r).value.trim();
       const user = normUser(v('#ea-user')), name = v('#ea-name'), pwIn = $('#ea-pw', r).value, role = v('#ea-role'), active = !!v('#ea-act');
       if (!name) throw new Error('Cần nhập họ tên');
-      if (user.length < 2) throw new Error('Tên đăng nhập cần ít nhất 2 ký tự (chữ không dấu, số, dấu chấm, gạch)');
-      if (Object.entries(S.tk).some(([k, x]) => x && k !== id && normUser(x.user) === user)) throw new Error('Tên đăng nhập "' + user + '" đã có');
+      if (user.length < 2) throw new Error('Nick cần ít nhất 2 ký tự (chữ không dấu, số, dấu chấm, gạch)');
+      if (Object.entries(S.tk).some(([k, x]) => x && k !== id && normUser(x.user) === user)) throw new Error('Nick "' + user + '" đã có');
       if (!id && pwIn.length < 4) throw new Error('Mật khẩu cần ít nhất 4 ký tự');
       if (id && pwIn && pwIn.length < 4) throw new Error('Mật khẩu cần ít nhất 4 ký tự');
       if (S.acc && S.acc.id === id && (role !== 'ql' || !active)) throw new Error('Không tự hạ quyền hoặc tự khóa tài khoản đang đăng nhập');
@@ -1173,8 +1206,8 @@ function editAccount(id) {
       const nid = id || rid('u');
       await mergeInto('cfg/tk', { a: { [nid]: rec } }, { a: {} });
       S.tk[nid] = rec;
-      if (S.acc && S.acc.id === nid && pwIn) store('tk', { id: nid, sig: rec.pw.slice(0, 24), exp: Date.now() + SESSION_DAYS * 864e5 });
-      toast(id ? 'Đã lưu tài khoản ' + user : `Đã tạo tài khoản ${user} – gửi tên đăng nhập và mật khẩu cho ${name}`);
+      if (S.acc && S.acc.id === nid && pwIn) store('tk', newSess(nid, rec.pw));
+      toast(id ? 'Đã lưu tài khoản ' + user : !Object.keys(S.tk).filter(k => k !== nid).length ? `Đã tạo tài khoản đầu tiên ${user} – từ giờ mọi người (kể cả bạn) đăng nhập bằng nick và mật khẩu` : `Đã tạo tài khoản ${user} – gửi nick và mật khẩu cho ${name}`);
       applyAuth(); return true;
     },
   });
