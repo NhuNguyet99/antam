@@ -1,0 +1,128 @@
+<title>Cổng web An Tâm</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700;800&family=JetBrains+Mono:wght@500&display=swap">
+<style>
+/* Bố cục: một cột, ô tìm trên cùng, các nhóm web dạng lưới thẻ bấm được; mỗi thẻ có nút chép link */
+:root {
+  --bg: #f3f6f4; --panel: #ffffff; --ink: #18241f; --ink-2: #4b5c54; --muted: #7a8a83; --line: #dce4e0;
+  --accent: #0f6e5a; --accent-soft: #e1f1ec; --accent-ink: #ffffff; --warm: #b86a1d; --warm-soft: #f8ecdd;
+  --f-body: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
+  --r: 10px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #101714; --panel: #17211c; --ink: #e4ece8; --ink-2: #b2c1b9; --muted: #84968e; --line: #2a3832;
+  --accent: #43b796; --accent-soft: #183730; --accent-ink: #07130f; --warm: #e2a560; --warm-soft: #3a2a18; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #101714; --panel: #17211c; --ink: #e4ece8; --ink-2: #b2c1b9; --muted: #84968e; --line: #2a3832;
+  --accent: #43b796; --accent-soft: #183730; --accent-ink: #07130f; --warm: #e2a560; --warm-soft: #3a2a18; color-scheme: dark }
+body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5;
+  padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 40px; }
+.wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 22px; }
+header { display: flex; flex-wrap: wrap; align-items: center; gap: 12px 16px; }
+.logo { width: 44px; height: 44px; border-radius: 12px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-weight: 800; font-size: 16px; letter-spacing: .02em; flex: none; }
+h1 { margin: 0; font-size: 24px; font-weight: 800; text-wrap: balance; }
+.sub { margin: 0; color: var(--ink-2); font-size: 14px; }
+.head-text { min-width: 0; flex: 1 1 260px; }
+.search { position: relative; }
+.search input { width: 100%; box-sizing: border-box; font: inherit; font-size: 16px; padding: 12px 14px 12px 40px; border-radius: var(--r); border: 1px solid var(--line); background: var(--panel); color: var(--ink); }
+.search input:focus { outline: 2px solid var(--accent); outline-offset: 1px; border-color: transparent; }
+.search svg { position: absolute; left: 13px; top: 50%; transform: translateY(-50%); width: 18px; height: 18px; color: var(--muted); }
+section { display: grid; gap: 10px; }
+h2 { margin: 0; font-size: 12px; font-weight: 700; letter-spacing: .08em; text-transform: uppercase; color: var(--ink-2); display: flex; align-items: center; gap: 8px; }
+h2 .n { font-family: var(--f-mono); font-size: 11px; color: var(--muted); letter-spacing: 0; }
+.grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 10px; }
+.card { display: grid; grid-template-columns: 40px 1fr auto; align-items: start; gap: 4px 12px; padding: 14px; border-radius: var(--r); background: var(--panel); border: 1px solid var(--line); min-width: 0; }
+.card.main { border-color: var(--accent); }
+.ico { grid-row: span 2; width: 40px; height: 40px; border-radius: 10px; display: grid; place-items: center; font-size: 19px; background: var(--accent-soft); }
+.card.doc .ico { background: var(--warm-soft); }
+.card a.name { color: var(--ink); font-weight: 700; font-size: 15.5px; text-decoration: none; min-width: 0; overflow-wrap: anywhere; }
+.card a.name:hover { color: var(--accent); text-decoration: underline; text-underline-offset: 3px; }
+.card a.name:focus-visible, .copy:focus-visible, .open:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; border-radius: 4px; }
+.desc { grid-column: 2 / -1; margin: 0; color: var(--ink-2); font-size: 13.5px; min-width: 0; }
+.acts { grid-column: 1 / -1; display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-top: 6px; }
+.open { font: inherit; font-size: 13.5px; font-weight: 600; padding: 7px 14px; border-radius: 8px; background: var(--accent); color: var(--accent-ink); text-decoration: none; }
+.open:hover { filter: brightness(1.06); }
+.copy { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--line); background: transparent; color: var(--ink-2); cursor: pointer; }
+.copy:hover { background: var(--accent-soft); color: var(--ink); }
+.url { font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); user-select: all; overflow-wrap: anywhere; min-width: 0; flex: 1 1 180px; }
+.tag { grid-column: 3; grid-row: 1; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
+.empty { color: var(--muted); padding: 20px 0; }
+.tip { font-size: 13px; color: var(--ink-2); background: var(--panel); border: 1px dashed var(--line); border-radius: var(--r); padding: 10px 14px; margin: 0; }
+@media (prefers-reduced-motion: no-preference) { .card { transition: border-color .15s, box-shadow .15s; } .card:hover { box-shadow: 0 4px 16px rgba(15, 110, 90, .08); } }
+</style>
+
+<div class="wrap">
+  <header>
+    <div class="logo" aria-hidden="true">AT</div>
+    <div class="head-text"><h1>Cổng web An Tâm</h1>
+      <p class="sub">Tất cả các trang làm việc, biểu mẫu và quy trình của Công ty An Tâm ở một chỗ. Bấm <b>Mở</b> để vào trang.</p></div>
+  </header>
+  <label class="search" for="q"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
+    <input id="q" type="search" placeholder="Tìm trang… (VD: kho, giao, quy trình, phiếu)" autocomplete="off" aria-label="Tìm trang"></label>
+  <div id="list"></div>
+  <p class="tip">Mẹo: ghim trang này lên thanh bên của claude.ai để mở nhanh mỗi ngày. Người khác chỉ mở được trang nào bạn đã chia sẻ cho họ (nút <b>Share</b> của từng trang).</p>
+</div>
+
+<script>
+const BASE = 'https://claude.ai/artifact/';
+const GROUPS = [
+  ['Web làm việc hằng ngày', [
+    ['FGE3VTLud2r3LnEjm5nkLK', 'Đóng hàng An Tâm', 'Nhập đơn hàng ngày, Tuyến kebab 123, chia tuyến, định mức đóng hàng, theo dõi giao hàng, tài khoản nhân viên.', '📦', 'Chính'],
+    ['ErmZYgHgUzBeTJrtTR6yAC', 'Kho An Tâm', 'Phiếu nhập – xuất kho, tồn kho, kiểm kê, phân tuyến giao hàng.', '🏭', 'Chính'],
+    ['6bVzsWLxPdkdCKF687Bnky', 'Giao hàng An Tâm', 'Người giao đăng nhập xem tuyến, bấm Đã giao kèm ảnh; quản lý xem kết quả và hành trình.', '🚚', 'Chính'],
+    ['FR5exq3vhG67nKqfWiPtVq', 'Tuyến Lẻ CT2', 'Danh sách tuyến lẻ CT2.', '🛵'],
+  ]],
+  ['Quản lý', [
+    ['JMsE7j3eDSYj5L24xo1SVu', 'Quản trị An Tâm', 'Trang quản trị chung của công ty.', '📊'],
+    ['GAwGsda7xfb2G3TRBWfEov', 'Nhân sự An Tâm', 'Thông tin nhân sự.', '👥'],
+  ]],
+  ['Biểu mẫu kho', [
+    ['PraDahaEWxU4gxL5ZW9qEp', 'Thẻ kho hằng ngày – Thành phẩm & Hàng hóa', 'Thẻ kho ghi hằng ngày cho kho thành phẩm và hàng hóa.', '🗂', '', 'doc'],
+    ['5t55G9bixhR3PrBL1psWNF', 'Mẫu phiếu nhập – xuất kho ghi tay', 'Mẫu phiếu in ra để ghi tay.', '🧾', '', 'doc'],
+  ]],
+  ['Quy trình làm việc', [
+    ['QtyqVErqohJRVeJvAcWEbi', 'Quy trình – Quản lý (Đào Đình Đức)', 'Công việc của quản lý.', '📋', '', 'doc'],
+    ['U5m7ENGdcmLiRGoYmeANBx', 'Quy trình – Kiểm duyệt mức cuối (Đào Như Nguyệt)', 'Kiểm duyệt mức cuối.', '📋', '', 'doc'],
+    ['9cf6KT5pZHh72yNQdSURR8', 'Quy trình – Giám sát ca ngày (Hoàng Thị Hương Loan)', 'Giám sát ca ngày.', '📋', '', 'doc'],
+    ['NfXpeQwcTPty1ohzLoq94h', 'Quy trình – Giám sát ca đêm (Nguyễn Thị Ngọc Mai)', 'Giám sát ca đêm.', '📋', '', 'doc'],
+    ['GHE5tokrJ6rvrrKCvgqvad', 'Quy trình – Đóng hàng', 'Công việc bộ phận đóng hàng.', '📋', '', 'doc'],
+    ['A3tGxLPt6DAEHjQeTdRdhp', 'Quy trình – Thủ kho', 'Công việc thủ kho.', '📋', '', 'doc'],
+    ['Ao6LRDFGLhjXk8H8oWZzpd', 'Quy trình kiểm soát phiếu nhập – xuất kho', 'Kiểm soát phiếu nhập – xuất kho.', '📋', '', 'doc'],
+    ['1Sbxvoy7iaXQG3JMwLPbZN', 'Bàn giao công việc theo quy trình phiếu nhập – xuất kho', 'Bàn giao công việc theo quy trình phiếu.', '📋', '', 'doc'],
+    ['CatsGEXvmVBk2VRRcd5VzJ', 'Quy trình mua hàng – Xưởng + Văn phòng', 'Mua hàng cho xưởng và văn phòng.', '📋', '', 'doc'],
+  ]],
+  ['Khác', [
+    ['5MCTBfPPmKsayMFqDFqM57', 'Slides', 'Bản trình bày.', '🖼', '', 'doc'],
+  ]],
+];
+const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
+function draw(q) {
+  const t = norm(q).split(/\s+/).filter(Boolean);
+  const hit = x => t.every(w => norm(x[1] + ' ' + x[2] + ' ' + x[0]).includes(w));
+  const html = GROUPS.map(([g, items]) => {
+    const list = items.filter(hit); if (!list.length) return '';
+    return `<section><h2>${esc(g)} <span class="n">${list.length}</span></h2><div class="grid">${list.map(([id, name, desc, ico, tag, kind]) => {
+      const url = BASE + id;
+      return `<article class="card${tag ? ' main' : ''}${kind ? ' ' + kind : ''}"><div class="ico" aria-hidden="true">${ico}</div>
+        <a class="name" href="${url}" target="_blank" rel="noopener">${esc(name)}</a>${tag ? `<span class="tag">${esc(tag)}</span>` : ''}
+        <p class="desc">${esc(desc)}</p>
+        <div class="acts"><a class="open" href="${url}" target="_blank" rel="noopener">Mở</a><button class="copy" type="button" data-url="${url}">Chép link</button><span class="url">${url}</span></div></article>`;
+    }).join('')}</div></section>`;
+  }).join('');
+  document.getElementById('list').innerHTML = html || '<p class="empty">Không có trang nào khớp – thử từ khác.</p>';
+}
+document.getElementById('list').addEventListener('click', async e => {
+  const b = e.target.closest('.copy'); if (!b) return;
+  try { await navigator.clipboard.writeText(b.dataset.url); b.textContent = 'Đã chép'; }
+  catch (err) { const s = b.nextElementSibling; const r = document.createRange(); r.selectNodeContents(s); const sel = getSelection(); sel.removeAllRanges(); sel.addRange(r); b.textContent = 'Bấm Ctrl+C để chép'; }
+  setTimeout(() => { b.textContent = 'Chép link'; }, 1800);
+});
+const q = document.getElementById('q');
+let last = ''; try { last = localStorage.getItem('cong.q') || ''; } catch (e) {}
+q.value = last; draw(last);
+q.addEventListener('input', () => { draw(q.value); try { localStorage.setItem('cong.q', q.value); } catch (e) {} });
+</script>
