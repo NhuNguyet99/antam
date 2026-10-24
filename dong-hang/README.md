@@ -52,6 +52,10 @@ Web riêng (trang claude.ai, một file `dong-hang-antam.html`) thay cho Google 
   trên claude.ai trang không tự mở được hộp thoại in nên web giữ sẵn bản in trong trang và hiện xem trước: bấm **Ctrl+P**
   (⌘+P) là in đúng bản đó (giống web Kho), không cần tải file. "⬇ Tải file in" để lưu / gửi bản in.
 - **Khách hàng**: danh mục khách (khu vực, CRM, địa chỉ, SĐT, ghi chú/chành xe, đóng gói mặc định).
+  **Sửa khách ngay trên bảng**: ở Đơn hàng ngày, Tuyến kebab 123 và danh mục Khách hàng, bấm vào tên khách / CRM / SĐT (danh mục:
+  cả khu vực, ghi chú) → ô sửa nhỏ hiện cạnh dòng (tên – địa chỉ, CRM, SĐT, khu vực, ghi chú/chành xe). **Enter** hoặc bấm ra ngoài
+  là lưu, **Esc** là hủy, *Thêm thông tin…* mở form đầy đủ (đóng gói, tuyến, bill, ngừng giao dịch). Khách có đơn trong ngày thì
+  đơn gửi Kho / Giao hàng tự cập nhật tên mới.
   **⇅ Cập nhật từ MISA**: trong MISA xuất danh sách khách hàng ra Excel → mở file, Ctrl+A, Ctrl+C → dán vào ô (hoặc chọn file
   .csv/.txt). Web tự tìm dòng tiêu đề và các cột (mã khách hàng / mã CRM, tên, địa chỉ, điện thoại – ưu tiên ĐT di động, quận/huyện;
   chọn lại được), lấy cột mã trùng nhiều mã CRM của web nhất, khớp theo **ô CRM** hoặc **mã đứng đầu tên** (VD "KH00152 - …"),

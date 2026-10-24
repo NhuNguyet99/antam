@@ -348,6 +348,16 @@ tr.hit > td:first-child { box-shadow: inset 4px 0 0 var(--hit-bar); }
 /* nhập */
 .paste { border: 2px dashed var(--line); border-radius: var(--r); padding: 22px; text-align: center; color: var(--ink-2); background: var(--panel); }
 .paste.on { border-color: var(--accent); background: var(--accent-soft); }
+.cpop { position: fixed; z-index: 60; width: min(400px, calc(100vw - 16px)); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r);
+  box-shadow: var(--shadow); padding: 10px 12px; display: grid; gap: 7px; }
+.cpop .ttl { font-size: 13px; font-weight: 700; color: var(--ink); }
+.cpop .two { display: grid; grid-template-columns: 1fr 1fr; gap: 7px; }
+.cpop .acts { display: flex; gap: 6px; align-items: center; flex-wrap: wrap; }
+.cpop .acts .sp { flex: 1; }
+.cpop .field textarea { min-height: 52px; }
+.cedit { cursor: pointer; }
+.cedit:hover b, .cedit:hover .sub, td.cedit:hover { text-decoration: underline dotted var(--muted); text-underline-offset: 3px; }
+#cf-list td.cedit:hover { background: var(--hover); }
 .ms-map { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 8px; margin-top: 12px; }
 .ms-map select { width: 100%; }
 .chk { display: inline-flex; align-items: center; gap: 5px; font-size: 13.5px; }
@@ -1319,8 +1329,8 @@ function rowHtml(c, ps, pay, H = new Set()) {
   const p = packing(o.q, pk);
   const q = S.filter.q, on = k => !H.has(k);
   return `<tr data-cid="${esc(c.id)}" class="${hasOrder(o) ? 'has-order' : ''}${q ? ' hit' : ''}">
-    ${on('crm') ? `<td class="stick s-crm" title="${esc(c.crm || '')}">${c.crm ? hl(c.crm, q) : '–'}</td>` : ''}
-    <td class="cust stick"><b>${hl(c.name, q)}</b><div class="sub">${hl(c.phone || '', q)}${c.note ? ' · ' + hl(c.note, q) : ''}${q && c.q && matchCust({ q: c.q }, norm(q)) ? ' · ' + hl(c.q, q) : ''}</div></td>
+    ${on('crm') ? `<td class="stick s-crm cedit" data-cf="crm" title="${esc(c.crm || '')} – bấm để sửa">${c.crm ? hl(c.crm, q) : '–'}</td>` : ''}
+    <td class="cust stick cedit" data-cf="name" title="Bấm để sửa tên, địa chỉ, SĐT, ghi chú của khách"><b>${hl(c.name, q)}</b><div class="sub">${hl(c.phone || '', q)}${c.note ? ' · ' + hl(c.note, q) : ''}${q && c.q && matchCust({ q: c.q }, norm(q)) ? ' · ' + hl(c.q, q) : ''}</div></td>
     ${on('st') ? `<td><select class="in st-sel${st === 'HOẠT ĐỘNG' ? ' st-on' : ''}" data-k="hd"><option value="">${st === 'HOẠT ĐỘNG' ? 'HOẠT ĐỘNG' : 'NGHỈ'} (tự)</option><option ${o.hd === 'HOẠT ĐỘNG' ? 'selected' : ''}>HOẠT ĐỘNG</option><option ${o.hd === 'NGHỈ' ? 'selected' : ''}>NGHỈ</option></select></td>` : ''}
     ${on('tt') ? `<td>${paySelect(o.tt)}</td>` : ''}
     ${on('rt') ? `<td>${rtSelect(o, c)}</td>` : ''}
@@ -1377,6 +1387,15 @@ function bindRows(el) {
     });
 
     $('[data-more]', tr).onclick = () => editOrder(cid);
+    $$('[data-cf]', tr).forEach(td => td.onclick = e => {
+      if (!S.cust[cid]) return;
+      const sub = e.target.closest('.sub');
+      editCustInline(td, cid, sub ? 'phone' : td.dataset.cf, c => {
+        const a = $('td.cust', tr), b = $('td.s-crm', tr);
+        if (a) a.innerHTML = `<b>${esc(c.name)}</b><div class="sub">${esc(c.phone || '')}${c.note ? ' · ' + esc(c.note) : ''}</div>`;
+        if (b) { b.textContent = c.crm || '–'; b.title = (c.crm || '') + ' – bấm để sửa'; }
+      });
+    });
   });
 }
 function updateRow(tr, cid) {
@@ -1519,11 +1538,12 @@ function viewCust(main) {
     const list = all.filter(c => (!f.area || c.q === f.area) && matchCust(c, qn) && (f.off === 'all' || (f.off === '1' ? c.off : !c.off)));
     const lim = list.slice(0, 500);
     $('#cf-list').innerHTML = `<div class="tw"><table><thead><tr><th>Khu vực</th><th>CRM</th><th>Khách hàng – địa chỉ</th><th>SĐT</th><th>Ghi chú / chành xe</th><th>Đóng gói</th><th class="n">Bill</th><th></th></tr></thead>
-      <tbody>${lim.map(c => `<tr data-id="${esc(c.id)}" class="${f.q.trim() ? 'hit' : ''}"><td class="small">${hl(c.q, f.q)}</td><td class="mono">${hl(c.crm, f.q)}</td><td>${hl(c.name, f.q)}${c.off ? ' <span class="pill off">Ngừng</span>' : ''}</td><td class="mono small">${hl(c.phone, f.q)}</td>
-        <td class="small">${hl(c.note, f.q)}</td><td><span class="pill box">${esc(c.pk || autoPack(c))}</span>${c.pk ? '' : ' <span class="muted small">tự</span>'}</td><td class="n">${fmt(c.bill == null ? 1 : c.bill)}</td>
+      <tbody>${lim.map(c => `<tr data-id="${esc(c.id)}" class="${f.q.trim() ? 'hit' : ''}"><td class="small cedit" data-cf="q">${hl(c.q, f.q)}</td><td class="mono cedit" data-cf="crm">${hl(c.crm, f.q)}</td><td class="cedit" data-cf="name">${hl(c.name, f.q)}${c.off ? ' <span class="pill off">Ngừng</span>' : ''}</td><td class="mono small cedit" data-cf="phone">${hl(c.phone, f.q)}</td>
+        <td class="small cedit" data-cf="note">${hl(c.note, f.q)}</td><td><span class="pill box">${esc(c.pk || autoPack(c))}</span>${c.pk ? '' : ' <span class="muted small">tự</span>'}</td><td class="n">${fmt(c.bill == null ? 1 : c.bill)}</td>
         <td><button class="btn sm" data-edit>Sửa</button></td></tr>`).join('')}</tbody></table></div>
-      <p class="hint" style="margin-top:8px">${list.length} khách${list.length > lim.length ? ` (hiện ${lim.length} đầu – gõ tìm để lọc)` : ''} · Tổng ${all.length} khách trong danh mục.</p>`;
+      <p class="hint" style="margin-top:8px">${list.length} khách${list.length > lim.length ? ` (hiện ${lim.length} đầu – gõ tìm để lọc)` : ''} · Tổng ${all.length} khách trong danh mục. Bấm vào ô khu vực, CRM, tên, SĐT, ghi chú để sửa ngay; nút Sửa để sửa đầy đủ.</p>`;
     $$('#cf-list [data-edit]').forEach(b => b.onclick = () => editCustomer(b.closest('tr').dataset.id));
+    $$('#cf-list td[data-cf]').forEach(td => td.onclick = () => editCustInline(td, td.closest('tr').dataset.id, td.dataset.cf, draw));
   };
   const save = () => store('cf', f);
   let t; $('#cf-q').oninput = e => { clearTimeout(t); t = setTimeout(() => { f.q = e.target.value; save(); draw(); }, 200); };
@@ -1532,6 +1552,83 @@ function viewCust(main) {
   $('#cf-add').onclick = () => editCustomer(null);
   $('#cf-misa').onclick = () => misaUpdate();
   draw();
+}
+
+/* ---------------- sửa thông tin khách ngay trên bảng: bấm vào tên / CRM / SĐT → ô sửa nhỏ cạnh dòng, Enter hoặc bấm ra ngoài là lưu */
+const CPOP_F = { crm: 'Mã CRM', name: 'Khách hàng – địa chỉ', phone: 'SĐT', note: 'Ghi chú / chành xe', q: 'Khu vực / quận' };
+let cpopOpen = null;
+// anchor: ô bảng; c: khách hiện tại; fields: các trường; focus: trường đặt con trỏ; save(vals đã đổi) ; more(): mở form đầy đủ
+function custPop({ anchor, c, fields, focus, save, more, title }) {
+  if (S.readOnly) { toast('Bạn đang chỉ có quyền xem – không sửa được khách.', true); return; }
+  if (cpopOpen) cpopOpen.close(true);
+  const el = document.createElement('div'); el.className = 'cpop'; el.setAttribute('role', 'dialog');
+  const inp = k => k === 'name' ? `<textarea data-f="name" rows="2">${esc(c.name || '')}</textarea>`
+    : `<input data-f="${k}" value="${esc(c[k] || '')}" ${k === 'q' ? 'list="dl-cpop-area"' : ''} ${k === 'phone' ? 'inputmode="tel"' : ''} autocomplete="off">`;
+  const f = k => `<label class="field">${CPOP_F[k]}${inp(k)}</label>`;
+  const short = fields.filter(k => ['crm', 'phone', 'q'].includes(k));
+  el.innerHTML = `<div class="ttl">✎ ${esc(title || 'Sửa thông tin khách')}</div>
+    ${fields.includes('name') ? f('name') : ''}
+    <div class="two">${short.map(f).join('')}</div>
+    ${fields.includes('note') ? f('note') : ''}
+    <datalist id="dl-cpop-area">${fields.includes('q') ? areas().map(a => `<option value="${esc(a)}">`).join('') : ''}</datalist>
+    <div class="acts"><button class="btn sm pri" data-save>Lưu</button><button class="btn sm" data-cancel>Hủy</button><span class="sp"></span>
+      ${more ? '<button class="btn sm ghost" data-more>Thêm thông tin…</button>' : ''}</div>
+    <div class="small muted">Enter để lưu · Esc để hủy · bấm ra ngoài cũng tự lưu</div>`;
+  document.body.appendChild(el);
+  const place = () => {
+    if (!anchor.isConnected) return;
+    const r = anchor.getBoundingClientRect(), w = el.offsetWidth, h = el.offsetHeight;
+    let x = Math.min(Math.max(8, r.left), innerWidth - w - 8), y = r.bottom + 4;
+    if (y + h > innerHeight - 8) y = Math.max(8, r.top - h - 4);
+    el.style.left = x + 'px'; el.style.top = y + 'px';
+  };
+  place();
+  let done = false;
+  const vals = () => Object.fromEntries($$('[data-f]', el).map(i => [i.dataset.f, i.value.replace(/\s+/g, ' ').trim()]));
+  async function close(doSave) {
+    if (done) return; done = true;
+    document.removeEventListener('mousedown', outside, true); removeEventListener('scroll', place, true); removeEventListener('resize', place);
+    el.remove(); if (cpopOpen === api) cpopOpen = null;
+    if (!doSave) return;
+    const v = vals(), ch = Object.fromEntries(Object.entries(v).filter(([k, x]) => x !== String(c[k] || '').trim()));
+    if (!Object.keys(ch).length) return;
+    if ('name' in ch && !ch.name) { toast('Tên khách không được để trống – chưa lưu', true); return; }
+    await guard(async () => { await save(ch); toast('Đã lưu khách ' + (ch.name || c.name)); });
+  }
+  const api = { close };
+  cpopOpen = api;
+  const outside = e => { if (!el.contains(e.target)) close(true); };
+  setTimeout(() => document.addEventListener('mousedown', outside, true), 0);
+  addEventListener('scroll', place, true); addEventListener('resize', place);
+  el.addEventListener('keydown', e => {
+    if (e.key === 'Escape') { e.preventDefault(); e.stopPropagation(); close(false); }
+    else if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); close(true); }
+  });
+  $('[data-save]', el).onclick = () => close(true);
+  $('[data-cancel]', el).onclick = () => close(false);
+  if (more) $('[data-more]', el).onclick = () => { close(true); more(); };
+  const t = $(`[data-f="${focus || fields[0]}"]`, el) || $('[data-f]', el);
+  t.focus(); if (t.setSelectionRange) t.setSelectionRange(t.value.length, t.value.length);
+}
+// khách Đơn hàng ngày / danh mục khách
+function editCustInline(anchor, id, focus, after) {
+  const c = S.cust[id]; if (!c) return;
+  custPop({ anchor, c, fields: ['name', 'crm', 'phone', 'q', 'note'], focus, more: () => editCustomer(id),
+    save: async ch => {
+      const n = Object.assign({}, S.cust[id], ch); S.cust[id] = n; await saveCustomer(n);
+      if (S.day && hasOrder(orderOf(id) || {})) khoOutLater('don', S.date); // đơn hôm nay đã gửi kho / giao hàng: gửi lại tên mới
+      if (after) after(n);
+    } });
+}
+// khách Tuyến kebab 123
+function editT1Inline(anchor, id, focus, after) {
+  const c = S.t1.cust[id]; if (!c) return;
+  custPop({ anchor, c, fields: ['name', 'crm', 'phone', 'note'], focus, more: () => t1EditCust(id), title: 'Sửa khách Tuyến 123',
+    save: async ch => {
+      S.t1.cust[id] = Object.assign({}, S.t1.cust[id], ch); await t1SaveCust(id, ch);
+      if (S.t1.date && t1Qty(t1Order(id)) > 0) khoOutLater('t123', S.t1.date);
+      if (after) after(S.t1.cust[id]);
+    } });
 }
 
 /* ---------------- cập nhật thông tin khách theo danh sách khách hàng MISA (khớp theo mã CRM) */
@@ -2449,8 +2546,8 @@ function t1TableHtml(list, sums, total) {
 function t1RowHtml(c) {
   const o = t1Order(c.id), st = t1Status(o), b = t1Bags(o);
   return `<tr data-t1="${esc(c.id)}" class="${st === 'HOẠT ĐỘNG' ? 'has-order' : ''}">
-    ${t1On('crm') ? `<td class="stick s-crm" title="${esc(c.crm || '')}">${esc(c.crm || '–')}</td>` : ''}
-    <td class="cust stick"><b>${esc(c.name)}</b>${c.phone ? `<div class="sub mono">${esc(c.phone)}</div>` : ''}</td>
+    ${t1On('crm') ? `<td class="stick s-crm cedit" data-cf="crm" title="${esc(c.crm || '')} – bấm để sửa">${esc(c.crm || '–')}</td>` : ''}
+    <td class="cust stick cedit" data-cf="name" title="Bấm để sửa tên, SĐT, ghi chú của khách"><b>${esc(c.name)}</b>${c.phone ? `<div class="sub mono">${esc(c.phone)}</div>` : ''}</td>
     ${t1On('ht') ? `<td class="t1ht"><label class="htlab${c.ht ? ' on' : ''}"><input type="checkbox" data-ht ${c.ht ? 'checked' : ''} aria-label="Hỗ trợ">${c.ht ? 'HỖ TRỢ' : ''}</label></td>` : ''}
     ${t1On('st') ? `<td><select class="in st-sel${st === 'HOẠT ĐỘNG' ? ' st-on' : ''}" data-k="st"><option value="">${st === 'HOẠT ĐỘNG' && !o.st ? 'HOẠT ĐỘNG' : 'NGHỈ'} (tự)</option><option ${o.st === 'HOẠT ĐỘNG' ? 'selected' : ''}>HOẠT ĐỘNG</option><option ${o.st === 'NGHỈ' ? 'selected' : ''}>NGHỈ</option></select></td>` : ''}
     ${t1P().map(([k, l]) => { const v = t1V(o, k); return `<td class="${t1Cls(k)}"><input class="q ${v > 0 ? 'has' : ''}" data-q="${k}" inputmode="decimal" value="${v ? esc(v) : ''}" aria-label="${esc(l)}" title="${esc(l)}"></td>`; }).join('')}
@@ -2499,6 +2596,15 @@ function t1Bind() {
       S.t1.cust[cid] = Object.assign({}, S.t1.cust[cid], { ht: on }); await t1SaveCust(cid, { ht: on });
     });
     $('[data-edit]', tr).onclick = () => t1EditCust(cid);
+    $$('[data-cf]', tr).forEach(td => td.onclick = e => {
+      const sub = e.target.closest('.sub');
+      editT1Inline(td, cid, sub ? 'phone' : td.dataset.cf, c => {
+        const a = $('td.cust', tr), b = $('td.s-crm', tr), nt = $('td.t1note', tr);
+        if (a) a.innerHTML = `<b>${esc(c.name)}</b>${c.phone ? `<div class="sub mono">${esc(c.phone)}</div>` : ''}`;
+        if (b) { b.textContent = c.crm || '–'; b.title = (c.crm || '') + ' – bấm để sửa'; }
+        if (nt) { let n = $('.sub', nt); if (!n && c.note) { n = document.createElement('div'); n.className = 'sub'; nt.prepend(n); } if (n) n.textContent = c.note || ''; }
+      });
+    });
   });
 }
 // o: head, note, sec {sum, det}, act, cols (Set), brk, sign
