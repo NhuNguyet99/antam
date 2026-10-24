@@ -1802,7 +1802,7 @@ function rowHtml(c, ps, pay, H = new Set()) {
     ${ps.map((pr, i) => { const v = (o.q || {})[pr.id], g = groupOf(pr), st = !i || groupOf(ps[i - 1]) !== g; return `<td class="pc g-${g}${st ? ' gstart' : ''}"><input class="q ${num(v) > 0 ? 'has' : ''}" data-p="${esc(pr.id)}" inputmode="decimal" value="${v ? esc(v) : ''}" aria-label="${esc(prodLabel(pr))}" title="${esc(prodLabel(pr))}"></td>`; }).join('')}
     ${on('pk') ? `<td><select class="in" data-k="pk">${['TÚI ĐEN', 'THÙNG'].map(x => `<option ${norm(x) === norm(pk) ? 'selected' : ''}>${x}</option>`).join('')}</select></td>` : ''}
     ${on('pack') ? `<td class="pack" data-out="pack">${esc(packLabel(p))}</td>` : ''}
-    <td class="nowrap"><button class="btn sm ghost" data-more title="Chi tiết đơn">⋯</button>${!c._extra && hasOrder(o) && !orderOf(baseId(c.id) + XSUF) && (S.tnMode || isTn(o) === false) && can('donNhap') && S.tnMode ? '<button class="btn sm ghost" data-xadd title="Khách lên thêm đơn đi trong ngày (dòng riêng)">+⚡</button>' : ''}</td></tr>`;
+    <td class="nowrap"><button class="btn sm ghost" data-more title="Chi tiết đơn">⋯</button>${S.tnMode && !c._extra && hasOrder(o) && !isTn(o) && !orderOf(c.id + XSUF) && can('donNhap') ? '<button class="btn sm ghost" data-xadd title="Khách lên thêm đơn đi trong ngày (dòng riêng)">+⚡</button>' : ''}</td></tr>`;
 }
 // tạo đơn thứ 2 (đi trong ngày) cho khách rồi đặt con trỏ vào ô số lượng đầu tiên của dòng mới
 function addExtraOrder(cid) {
