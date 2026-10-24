@@ -348,6 +348,9 @@ tr.hit > td:first-child { box-shadow: inset 4px 0 0 var(--hit-bar); }
 /* nhập */
 .paste { border: 2px dashed var(--line); border-radius: var(--r); padding: 22px; text-align: center; color: var(--ink-2); background: var(--panel); }
 .paste.on { border-color: var(--accent); background: var(--accent-soft); }
+.repflt { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 10px; padding: 8px 12px; border-radius: var(--r); background: var(--warn-soft); color: var(--warn); font-size: 13.5px; }
+.repflt b { color: var(--ink); }
+.repflt[hidden] { display: none; }
 .cpop { position: fixed; z-index: 60; width: min(400px, calc(100vw - 16px)); background: var(--panel); border: 1px solid var(--line); border-radius: var(--r);
   box-shadow: var(--shadow); padding: 10px 12px; display: grid; gap: 7px; }
 .cpop .ttl { font-size: 13px; font-weight: 700; color: var(--ink); }
@@ -1053,9 +1056,30 @@ function repProducts(tuyen) {
   const H = hideSet('hideDon'), vis = new Set(visibleProducts().map(p => p.id));
   return S.cfg.products.filter(p => p.show !== false && !H.has('p:' + p.id) && (vis.has(p.id) || num((tuyen || {})[p.id]) > 0));
 }
+// Báo cáo ngày theo tuyến đang lọc (chip tuyến / cột Tuyến): chỉ tính đơn của tuyến đó, không cộng BÁNH TUYẾN của cả ngày
+const repRt = () => colF().rt || '';
+function repDayR() {
+  const r = S.day ? S.day.r : {}, rt = repRt();
+  if (!rt) return r;
+  return Object.fromEntries(dayOrders(r).filter(x => { const k = routeOf(x.o, x.c)[0]; return rt === '-' ? !k : k === rt; }).map(x => [x.cid, x.o]));
+}
+const repTuyen = () => (repRt() ? {} : S.day && S.day.tuyen);
+const repPart = () => (repRt() ? { tuyen: false } : {});
+function repFltHtml() {
+  const rt = repRt();
+  return `<div class="repflt" id="d-repflt" ${rt ? '' : 'hidden'}>📍 Báo cáo đang tính theo tuyến <b>${esc(rt === '-' ? 'Chưa chia tuyến' : routeLabel(rt))}</b>
+    – chỉ các đơn của tuyến này${rt && S.day && Object.values(S.day.tuyen || {}).some(v => num(v) > 0) ? ' (không cộng bánh tuyến của cả ngày)' : ''}.
+    <button class="btn sm" id="d-repflt-x">✕ Bỏ lọc – xem cả ngày</button></div>`;
+}
 function refreshRep() {
-  const w = $('#d-rep-wrap'), r = S.day ? S.day.r : {};
-  if (w) { w.innerHTML = reportHtml(dayReport(r, S.day && S.day.tuyen), dayTotals(r).need, S.day && S.day.tuyen, true); bindReport(); }
+  const w = $('#d-rep-wrap'), r = repDayR();
+  S.repRtShown = repRt();
+  if (w) { w.innerHTML = reportHtml(dayReport(r, repTuyen()), dayTotals(r).need, repTuyen(), true, repPart()); bindReport(); }
+  const m = $('#d-mini'); if (m) m.outerHTML = miniHtml(dayReport(r, repTuyen()));
+  const f = $('#d-repflt'); if (f) { f.outerHTML = repFltHtml(); bindRepFlt(); }
+}
+function bindRepFlt() {
+  const x = $('#d-repflt-x'); if (x) x.onclick = () => { colF().rt = ''; store('filter', S.filter); shown = PAGE; drawTable(); };
 }
 // tên các cột đang ẩn (ghi chú trên bản in)
 function hiddenDonText() {
@@ -1077,13 +1101,13 @@ function reportHtml(rep, need, tuyen, editable, part = {}) {
     <div class="tw"><table class="orders rept"><thead>
       <tr><th class="stick rl" rowspan="2"></th>${runs.map(r => `<th class="gh g-${r.g} gstart" colspan="${r.list.length}">${esc(GROUPS[r.g].name)}</th>`).join('')}</tr>
       <tr>${runs.map(r => r.list.map((p, i) => `<th class="p g-${r.g}${i ? '' : ' gstart'}" title="${esc(p.name)} · ${perOf(p)} cái/túi">${esc(prodShort(p))}</th>`).join('')).join('')}</tr></thead><tbody>
-      <tr class="r-tuyen"><td class="stick rl" title="Bánh mang theo tuyến – cộng vào Tổng cái, không vào Tổng túi">BÁNH TUYẾN</td>${cells(p => editable
+      ${on('tuyen') ? `<tr class="r-tuyen"><td class="stick rl" title="Bánh mang theo tuyến – cộng vào Tổng cái, không vào Tổng túi">BÁNH TUYẾN</td>${cells(p => editable
         ? `<input class="q ${num((tuyen || {})[p.id]) > 0 ? 'has' : ''}" data-tuyen="${esc(p.id)}" inputmode="decimal" value="${num((tuyen || {})[p.id]) || ''}" aria-label="Bánh tuyến ${esc(prodLabel(p))}">`
-        : nz(num((tuyen || {})[p.id]), 'tuyen:' + p.id))}</tr>
+        : nz(num((tuyen || {})[p.id]), 'tuyen:' + p.id))}</tr>` : ''}
       <tr class="r-tui"><td class="stick rl">TỔNG TÚI</td>${cells(p => nz(rep.tui[p.id] || 0, 'tui:' + p.id))}</tr>
       <tr class="r-cai"><td class="stick rl">TỔNG CÁI</td>${cells(p => nz(rep.cai[p.id] || 0, 'cai:' + p.id))}</tr>
     </tbody></table></div>
-    <p class="hint" data-r="tuyenTxt">${rep.tuyenTxt ? 'Bánh tuyến: ' + esc(rep.tuyenTxt) : 'Bánh tuyến: chưa nhập. Nhập số túi ở dòng BÁNH TUYẾN (được cộng vào Tổng cái).'}</p>` : ''}${on('need') ? `
+    ${on('tuyen') ? `<p class="hint" data-r="tuyenTxt">${rep.tuyenTxt ? 'Bánh tuyến: ' + esc(rep.tuyenTxt) : 'Bánh tuyến: chưa nhập. Nhập số túi ở dòng BÁNH TUYẾN (được cộng vào Tổng cái).'}</p>` : ''}` : ''}${on('need') ? `
     <div><h4>Tổng cần chuẩn bị (bao bì)</h4><div class="need">${NEED.map(([k, n]) => `<div class="box"><div class="k">${esc(n)}</div><div class="v" data-r="need:${k}">${fmt(need[k])}</div></div>`).join('')}</div></div>` : ''}
   </div>`;
 }
@@ -1105,7 +1129,8 @@ function visibleAuto(ps) {
 function viewDay(main) {
   if (!Object.keys(S.cust).length) { main.innerHTML = emptyCust(); return; }
   const d = S.date, f = S.filter;
-  const tot = dayTotals(S.day ? S.day.r : {});
+  const rr = repDayR(), tot = dayTotals(rr);
+  S.repRtShown = repRt();
   main.innerHTML = `
     <div class="card" id="d-head" style="display:grid;gap:12px">
       <div class="daybar">
@@ -1120,10 +1145,11 @@ function viewDay(main) {
         <button class="btn sm" id="d-rp" title="In báo cáo tất cả hoặc theo bộ lọc đang chọn">🖨 In báo cáo</button>
         <button class="btn sm" id="d-print">Xem định mức đóng hàng</button>
       </div>
-      ${miniHtml(dayReport(S.day ? S.day.r : {}, S.day && S.day.tuyen))}
+      ${miniHtml(dayReport(rr, repTuyen()))}
+      ${repFltHtml()}
       <div class="rtchips" id="d-rt"></div>
       ${khoBar('don', d)}
-      <div id="d-rep-wrap" ${S.repOpen ? '' : 'hidden'}>${reportHtml(dayReport(S.day ? S.day.r : {}, S.day && S.day.tuyen), tot.need, S.day && S.day.tuyen, true)}</div>
+      <div id="d-rep-wrap" ${S.repOpen ? '' : 'hidden'}>${reportHtml(dayReport(rr, repTuyen()), tot.need, repTuyen(), true, repPart())}</div>
     </div>
     <div class="row">
       <label class="field grow" style="min-width:200px">Tìm khách (tên, CRM, SĐT, địa chỉ) – tìm trong tất cả khách để thêm đơn<input id="f-q" value="${esc(f.q)}" placeholder="VD: K1326 hoặc Wallace"></label>
@@ -1142,7 +1168,7 @@ function viewDay(main) {
   $('#d-rp').onclick = () => dayPrint(d); bindKhoBar(d);
   $('#d-rep-t').onclick = () => setRepOpen(!S.repOpen);
   $('#d-max').onclick = () => setMax(!document.body.classList.contains('tbl-max'));
-  bindReport();
+  bindReport(); bindRepFlt();
   $('#d-add').onclick = () => editCustomer(null);
   const saveF = () => store('filter', S.filter);
   let qt; $('#f-q').oninput = e => { clearTimeout(qt); qt = setTimeout(() => { S.filter.q = e.target.value; saveF(); shown = PAGE; drawTable(); }, 220); };
@@ -1291,6 +1317,7 @@ function drawTable() {
   const rk = c => routeOf(orderOf(c.id), c)[0];
   if (byRt) rows = rows.map((c, i) => [c, routeIdx(rk(c)), i]).sort((a, b) => a[1] - b[1] || a[2] - b[2]).map(x => x[0]);
   drawRtChips();
+  if ((S.repRtShown || '') !== repRt()) refreshRep(); // lọc theo tuyến: báo cáo tính theo tuyến đó
   if (!rows.length && !colFCount()) {
     const nf = colFCount();
     el.innerHTML = `<div class="card empty"><div class="big">${nf ? 'Không có dòng nào khớp bộ lọc cột' : S.filter.q ? 'Không tìm thấy khách' : S.filter.mode === 'co' ? 'Ngày này chưa có đơn' : 'Không có khách ở khu vực này'}</div>
@@ -1410,7 +1437,8 @@ function updateRow(tr, cid) {
 // cập nhật số trên báo cáo mà không vẽ lại ô đang gõ
 function updateDayTotals() {
   const root = $('#d-head'); if (!root || !S.day) return;
-  const rep = dayReport(S.day.r, S.day.tuyen), t = dayTotals(S.day.r);
+  if ((S.repRtShown || '') !== repRt()) return refreshRep(); // vừa đổi tuyến lọc: vẽ lại báo cáo
+  const rr = repDayR(), rep = dayReport(rr, repTuyen()), t = dayTotals(rr);
   const val = key => {
     const [k, id] = key.split(':');
     if (k === 'tui') return rep.tui[id] || 0; if (k === 'cai') return rep.cai[id] || 0; if (k === 'need') return t.need[id];

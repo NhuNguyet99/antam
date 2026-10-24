@@ -47,6 +47,9 @@ Web riêng (trang claude.ai, một file `dong-hang-antam.html`) thay cho Google 
   dưới danh sách mỗi tuyến / nhóm là bảng **TỔNG** của nhóm đó (số lượng từng sản phẩm, bao bì). Lựa chọn nhớ trên máy (`dh_prDon`, `dh_prT1`).
 - **Lọc theo yêu cầu + In báo cáo** (cả Đơn hàng ngày và Tuyến kebab 123): lọc bằng ô tìm, chọn khu vực / tuyến và dòng
   "▼ Lọc theo cột" dưới tiêu đề bảng (CRM, hỗ trợ, tình trạng, từng sản phẩm có/trống, túi 50, túi lẻ, ghi chú…).
+  Ở Đơn hàng ngày, khi lọc theo **tuyến** (bấm chip tuyến hoặc chọn ở cột Tuyến) thì báo cáo (TACOS, KEBAB, BILL, số đơn,
+  thanh toán, Tổng túi / Tổng cái, bao bì) chỉ tính các đơn của tuyến đó, không cộng bánh tuyến của cả ngày; có dòng nhắc và nút
+  *Bỏ lọc – xem cả ngày*.
   Ở Tuyến 123, bảng tổng tính theo các khách đang lọc. Nút **🖨 In báo cáo** cho chọn in *theo bộ lọc* hoặc *tất cả*,
   kèm/không kèm chi tiết từng khách. Bấm **🖨 In** là mở thẳng hộp thoại in của trình duyệt (A4 ngang, nền trắng);
   trên claude.ai trang không tự mở được hộp thoại in nên web giữ sẵn bản in trong trang và hiện xem trước: bấm **Ctrl+P**
