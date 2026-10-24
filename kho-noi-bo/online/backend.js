@@ -466,17 +466,24 @@ const Backend = (() => {
     }
     await mergeInto(ref.day(wh, d), { v: { [id]: stored } }, { date: d });
     applyLocalVoucher(wh, d, id, stored);
-    const summ = clean.map(l => `${l.product_code} x ${fmtq(l.qty)}`);
+    // lịch sử: lưu đủ nội dung phiếu trước / sau khi sửa để xem lại chi tiết
     await log(old ? 'Sửa phiếu' : 'Lập phiếu' + (ap.status === 'pending' ? ' (chờ duyệt)' : ''), no,
-      old ? { 'trước': { 'ngày': old.date, 'dòng': old.lines.map(l => `${l.product_code} x ${fmtq(l.qty)}`) }, 'sau': summ } : summ, wh);
+      old ? { 'trước': logSnap(old), 'sau': logSnap(v), id } : { 'sau': logSnap(v), id }, wh);
     return id;
+  }
+  // nội dung phiếu ghi vào lịch sử thao tác: ngày, các dòng (đọc nhanh) + đủ thông tin phiếu (xem chi tiết)
+  const LOG_FIELDS = ['type', 'route', 'from_party', 'to_party', 'giver', 'receiver', 'reason', 'bill_count', 'doc_ref', 'note'];
+  function logSnap(v) {
+    const h = {}; LOG_FIELDS.forEach(k => { if (v[k] != null && v[k] !== '') h[k] = v[k]; });
+    return { 'ngày': v.date, 'dòng': (v.lines || []).map(l => `${l.product_code} x ${fmtq(l.qty)}`), v: Object.assign(h, { no: v.no,
+      lines: (v.lines || []).map(l => [l.product_code, num(l.qty), num(l.price), text(l.note)]) }) };
   }
   async function deleteVoucher(id, me) {
     const v = voucherFull(id);
     if (lockedFor(v, me)) throw new ApiError(403, `Phiếu điều chỉnh ${v.no} đã được duyệt – chỉ Quản lý sửa / xóa được`);
     await mergeInto(ref.day(v.wh, v.date), { v: { [id]: null } }, { date: v.date });
     applyLocalVoucher(v.wh, v.date, id, null);
-    await log('Xóa phiếu', v.no, { 'ngày': v.date, 'dòng': v.lines.map(l => `${l.product_code} x ${fmtq(l.qty)}`) }, v.wh);
+    await log('Xóa phiếu', v.no, { 'trước': logSnap(v), id }, v.wh);
   }
 
   /* ---------------------------------------------------------- nhập Excel (SheetJS) */

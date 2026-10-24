@@ -286,6 +286,9 @@ body.locked #sidebar, body.locked #topbar, body.locked #ro-banner { display: non
 .jr-map { display: block; width: 100%; max-height: 320px; background: #f7f9f8; border: 1px solid var(--line); border-radius: var(--radius); margin: 6px 0 10px; }
 @media print { .jr-map { max-height: none; } }
 
+/* ---------- lịch sử thao tác: chi tiết phiếu sửa */
+.data tr.lg-ch td { background: var(--warn-bg); }
+
 /* Web giao hàng An Tâm (điện thoại trước) – dùng chung cho trang /giao-hang và chế độ giao hàng của bản online */
 #gh-root {
   --gh-bg: #f2f4f3;
@@ -1002,17 +1005,24 @@ const Backend = (() => {
     }
     await mergeInto(ref.day(wh, d), { v: { [id]: stored } }, { date: d });
     applyLocalVoucher(wh, d, id, stored);
-    const summ = clean.map(l => `${l.product_code} x ${fmtq(l.qty)}`);
+    // lịch sử: lưu đủ nội dung phiếu trước / sau khi sửa để xem lại chi tiết
     await log(old ? 'Sửa phiếu' : 'Lập phiếu' + (ap.status === 'pending' ? ' (chờ duyệt)' : ''), no,
-      old ? { 'trước': { 'ngày': old.date, 'dòng': old.lines.map(l => `${l.product_code} x ${fmtq(l.qty)}`) }, 'sau': summ } : summ, wh);
+      old ? { 'trước': logSnap(old), 'sau': logSnap(v), id } : { 'sau': logSnap(v), id }, wh);
     return id;
+  }
+  // nội dung phiếu ghi vào lịch sử thao tác: ngày, các dòng (đọc nhanh) + đủ thông tin phiếu (xem chi tiết)
+  const LOG_FIELDS = ['type', 'route', 'from_party', 'to_party', 'giver', 'receiver', 'reason', 'bill_count', 'doc_ref', 'note'];
+  function logSnap(v) {
+    const h = {}; LOG_FIELDS.forEach(k => { if (v[k] != null && v[k] !== '') h[k] = v[k]; });
+    return { 'ngày': v.date, 'dòng': (v.lines || []).map(l => `${l.product_code} x ${fmtq(l.qty)}`), v: Object.assign(h, { no: v.no,
+      lines: (v.lines || []).map(l => [l.product_code, num(l.qty), num(l.price), text(l.note)]) }) };
   }
   async function deleteVoucher(id, me) {
     const v = voucherFull(id);
     if (lockedFor(v, me)) throw new ApiError(403, `Phiếu điều chỉnh ${v.no} đã được duyệt – chỉ Quản lý sửa / xóa được`);
     await mergeInto(ref.day(v.wh, v.date), { v: { [id]: null } }, { date: v.date });
     applyLocalVoucher(v.wh, v.date, id, null);
-    await log('Xóa phiếu', v.no, { 'ngày': v.date, 'dòng': v.lines.map(l => `${l.product_code} x ${fmtq(l.qty)}`) }, v.wh);
+    await log('Xóa phiếu', v.no, { 'trước': logSnap(v), id }, v.wh);
   }
 
   /* ---------------------------------------------------------- nhập Excel (SheetJS) */
@@ -5314,12 +5324,90 @@ async function viewPlanMonthly(main) {
 }
 
 /* ============================================================ Lịch sử */
+// Chi tiết phiếu trong lịch sử: detail = {trước?, sau?, id?} (mỗi bên {ngày, dòng: ["MÃ x SL"], v?: đủ thông tin phiếu});
+// bản cũ: Lập phiếu = ["MÃ x SL"], Xóa phiếu = {ngày, dòng}
+function logVoucher(r) {
+  if (!/phiếu/i.test(r.action) || /biên bản|kế hoạch/i.test(r.action)) return null;
+  let d; try { d = JSON.parse(r.detail); } catch (e) { return null; }
+  if (Array.isArray(d)) d = { sau: { 'dòng': d } };
+  else if (d && d['dòng'] && !d['trước'] && !d['sau']) d = { 'trước': d };
+  if (!d || (!d['trước'] && !d['sau'])) return null;
+  const side = x => {
+    if (!x) return null;
+    if (Array.isArray(x)) x = { 'dòng': x }; // bản cũ: "sau" chỉ là danh sách "MÃ x SL"
+    const lines = x.v && Array.isArray(x.v.lines) ? x.v.lines.map(([c, q, p, n]) => ({ c, q: Number(q) || 0, p: Number(p) || 0, n: n || '' }))
+      : (x['dòng'] || []).map(s => { const m = /^(.*)\s+x\s+(-?[\d.,]+)$/.exec(String(s)); return m ? { c: m[1], q: Number(m[2].replace(/,/g, '')) || 0, p: null, n: '' } : { c: String(s), q: 0, p: null, n: '' }; });
+    return { date: x['ngày'] || '', h: x.v || null, lines };
+  };
+  return { before: side(d['trước']), after: side(d['sau']), id: d.id || '' };
+}
+const LOG_H = [['type', 'Loại phiếu', v => TYPE_LABEL[v] || v], ['no', 'Số phiếu'], ['route', 'Tuyến'], ['from_party', 'Bên giao'], ['to_party', 'Bên nhận'], ['giver', 'Người giao'],
+  ['receiver', 'Người nhận'], ['reason', 'Lý do'], ['bill_count', 'Số bill'], ['doc_ref', 'Chứng từ kèm'], ['note', 'Ghi chú']];
+function logVoucherHtml(r, x) {
+  const pn = c => { const p = ((S.meta && S.meta.products) || []).find(y => y.code === c); return p ? p.name : ''; };
+  const B = x.before, A = x.after, both = B && A;
+  // thông tin phiếu
+  const hrows = [['date', 'Ngày phiếu']].concat(LOG_H).map(([k, lab, f]) => {
+    const g = s => (!s ? '' : k === 'date' ? (s.date ? vnDate(s.date) : '') : s.h ? (f ? f(s.h[k] || '') : s.h[k] || '') : '');
+    const b = g(B), a = g(A);
+    if (!b && !a) return '';
+    const ch = both && b !== a;
+    return `<tr${ch ? ' class="lg-ch"' : ''}><td>${esc(lab)}</td>${B ? `<td>${esc(b) || '<span class="muted">—</span>'}</td>` : ''}${A ? `<td>${esc(a) || '<span class="muted">—</span>'}</td>` : ''}</tr>`;
+  }).join('');
+  // các dòng hàng: ghép theo mã hàng
+  const codes = []; [B, A].forEach(s => s && s.lines.forEach(l => { if (!codes.includes(l.c)) codes.push(l.c); }));
+  const sum = (s, c) => s ? s.lines.filter(l => l.c === c).reduce((t, l) => t + l.q, 0) : 0;
+  const has = (s, c) => !!s && s.lines.some(l => l.c === c);
+  let nCh = 0;
+  const lrows = codes.map(c => {
+    const qb = sum(B, c), qa = sum(A, c), inB = has(B, c), inA = has(A, c);
+    let st = '';
+    if (both) { st = !inB ? 'Thêm' : !inA ? 'Bỏ' : qb !== qa ? 'Đổi' : ''; if (st) nCh++; }
+    const nb = B ? (B.lines.find(l => l.c === c) || {}).n || '' : '', na = A ? (A.lines.find(l => l.c === c) || {}).n || '' : '';
+    return `<tr class="${st ? 'lg-ch' : ''}"><td class="nowrap"><b>${esc(c)}</b></td><td>${esc(pn(c))}</td>
+      ${B ? `<td class="num">${inB ? fmt(qb) : '<span class="muted">—</span>'}</td>` : ''}${A ? `<td class="num">${inA ? fmt(qa) : '<span class="muted">—</span>'}</td>` : ''}
+      ${both ? `<td class="num">${inA && inB && qa !== qb ? (qa > qb ? '+' : '') + fmt(qa - qb) : ''}</td><td>${st ? `<span class="badge ${st === 'Thêm' ? 'ok' : st === 'Bỏ' ? 'bad' : 'warn'}">${st}</span>` : ''}</td>` : ''}
+      <td class="small">${esc(both && inA && inB && nb !== na ? `${nb || '—'} → ${na || '—'}` : na || nb)}</td></tr>`;
+  }).join('');
+  const tb = (s, t) => (s ? `<th class="num">${t}</th>` : '');
+  return `<p style="margin:0 0 10px"><b>${esc(r.action)}</b> ${esc(r.target)} · ${esc(r.who || '')} · ${esc(r.at)}${both ? ` · <b>${nCh}</b> dòng hàng thay đổi` : ''}</p>
+    ${hrows ? `<h4 style="margin:6px 0">Thông tin phiếu</h4><div class="table-wrap"><table class="data"><thead><tr><th></th>${B ? `<th>${both ? 'Trước khi sửa' : 'Lúc xóa'}</th>` : ''}${A ? `<th>${both ? 'Sau khi sửa' : 'Nội dung'}</th>` : ''}</tr></thead><tbody>${hrows}</tbody></table></div>` : ''}
+    <h4 style="margin:12px 0 6px">Mặt hàng</h4><div class="table-wrap"><table class="data"><thead><tr><th>Mã</th><th>Tên hàng</th>${tb(B, both ? 'SL trước' : 'Số lượng')}${tb(A, both ? 'SL sau' : 'Số lượng')}${both ? '<th class="num">Chênh lệch</th><th>Thay đổi</th>' : ''}<th>Ghi chú</th></tr></thead>
+    <tbody>${lrows || '<tr><td colspan="6" class="muted">Không có dòng hàng</td></tr>'}</tbody></table></div>
+    ${both && !nCh ? '<p class="hint">Số lượng các mặt hàng không đổi (chỉ sửa thông tin phiếu hoặc ngày).</p>' : ''}
+    ${!(B && B.h) && !(A && A.h) ? '<p class="hint">Thao tác ghi trước khi có bản lưu đầy đủ: chỉ xem được ngày và số lượng từng mã hàng.</p>' : ''}`;
+}
 async function viewLog(main) {
   setTitle('Lịch sử thao tác');
   const rows = await api('GET', '/log');
-  main.innerHTML = rows.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Thời gian</th><th>Người dùng</th><th>Thao tác</th><th>Đối tượng</th><th>Chi tiết</th></tr></thead><tbody>
-    ${rows.map(r => `<tr><td class="nowrap">${esc(r.at)}</td><td>${esc(r.who)}</td><td>${esc(r.action)}</td><td>${esc(r.target)}</td><td class="small" style="max-width:520px;word-break:break-word">${esc(r.detail)}</td></tr>`).join('')}
-    </tbody></table></div><p class="hint">500 thao tác gần nhất.</p>` : '<p class="muted">Chưa có thao tác nào.</p>';
+  const f = Object.assign({ q: '', only: '' }, store('logF') || {});
+  const short = (r, x) => {
+    if (!x) return esc(r.detail);
+    const n = s => (s ? s.lines.length : 0);
+    return x.before && x.after ? `Sửa ${n(x.before)} → ${n(x.after)} dòng hàng${x.before.date !== x.after.date ? ` · ngày ${vnDate(x.before.date)} → ${vnDate(x.after.date)}` : ''}`
+      : x.after ? `${n(x.after)} dòng hàng${x.after.date ? ' · ngày ' + vnDate(x.after.date) : ''}` : `${n(x.before)} dòng hàng${x.before.date ? ' · ngày ' + vnDate(x.before.date) : ''}`;
+  };
+  const list = rows.map(r => Object.assign({ x: logVoucher(r) }, r));
+  function draw() {
+    const qn = noAccent(f.q);
+    const show = list.filter(r => (!f.only || (f.only === 'sua' ? r.action === 'Sửa phiếu' : !!r.x)) && (!qn || noAccent([r.who, r.action, r.target, r.detail].join(' ')).includes(qn)));
+    $('#lg-body').innerHTML = show.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Thời gian</th><th>Người dùng</th><th>Thao tác</th><th>Đối tượng</th><th>Chi tiết</th><th></th></tr></thead><tbody>
+      ${show.map(r => `<tr${r.x ? ` class="clickable" data-lg="${esc(r.id)}"` : ''}><td class="nowrap">${esc(r.at)}</td><td>${esc(r.who)}</td><td>${esc(r.action)}</td><td>${esc(r.target)}</td>
+        <td class="small" style="max-width:520px;word-break:break-word">${short(r, r.x)}</td><td>${r.x ? '<button class="btn sm">🔍 Xem</button>' : ''}</td></tr>`).join('')}
+      </tbody></table></div>` : '<p class="muted">Không có thao tác nào khớp.</p>';
+    $$('#lg-body tr[data-lg]').forEach(tr => tr.onclick = () => {
+      const r = list.find(y => y.id === tr.dataset.lg); if (!r) return;
+      const m = openModal({ title: `${r.action} ${r.target}`, wide: true, body: logVoucherHtml(r, r.x) + (r.x.id && !/Xóa/.test(r.action) ? '<div class="form-actions" style="margin-top:12px"><button class="btn" id="lg-open">Mở phiếu hiện tại</button></div>' : '') });
+      const b = $('#lg-open', m.root); if (b) b.onclick = () => { m.close(); location.hash = '#/phieu/' + r.x.id; };
+    });
+  }
+  main.innerHTML = rows.length ? `<div class="toolbar"><label class="field">Tìm (người, thao tác, số phiếu…)<input id="lg-q" value="${esc(f.q)}"></label>
+      <label class="field">Hiện<select id="lg-only"><option value="">Tất cả thao tác</option><option value="phieu" ${f.only === 'phieu' ? 'selected' : ''}>Chỉ thao tác phiếu</option><option value="sua" ${f.only === 'sua' ? 'selected' : ''}>Chỉ phiếu sửa</option></select></label></div>
+    <div id="lg-body"></div><p class="hint">500 thao tác gần nhất. Bấm dòng phiếu (🔍 Xem) để xem chi tiết: phiếu sửa hiện trước / sau và các dòng hàng thay đổi.</p>` : '<p class="muted">Chưa có thao tác nào.</p>';
+  if (!rows.length) return;
+  let t; $('#lg-q').oninput = e => { clearTimeout(t); t = setTimeout(() => { f.q = e.target.value; store('logF', f); draw(); }, 200); };
+  $('#lg-only').onchange = e => { f.only = e.target.value; store('logF', f); draw(); };
+  draw();
 }
 
 /* ============================================================ trang xem công khai */

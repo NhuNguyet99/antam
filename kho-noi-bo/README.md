@@ -258,3 +258,11 @@ Mã nguồn bản online: `online/backend.js` (thay cho server.py, chạy trong 
 (web giao hàng được nhúng vào cùng trang để dùng chung dữ liệu).
 Đóng gói lại thành một trang: `python online/build.py` → `online/kho-antam.html`.
 
+
+## Lịch sử thao tác – xem chi tiết phiếu
+
+Mục **Lịch sử thao tác** có ô tìm và bộ lọc *Chỉ thao tác phiếu / Chỉ phiếu sửa*. Bấm dòng **Lập / Sửa / Xóa phiếu** (🔍 Xem) để xem
+chi tiết: phiếu sửa hiện **Trước khi sửa / Sau khi sửa** (ngày, loại, số phiếu, tuyến, bên giao / nhận, người giao / nhận, lý do,
+ghi chú – dòng thay đổi tô màu) và bảng mặt hàng với SL trước, SL sau, chênh lệch, Thêm / Bỏ / Đổi; nút *Mở phiếu hiện tại*.
+Từ bản này mỗi lần lập / sửa / xóa phiếu ghi đủ nội dung phiếu vào lịch sử (`detail` = {trước, sau, id}, mỗi bên {ngày, dòng, v});
+thao tác ghi trước đó chỉ xem được ngày và số lượng từng mã hàng.

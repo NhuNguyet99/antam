@@ -560,20 +560,29 @@ def save_voucher(con, wh, data, vid=None, who="", me=None):
         con.execute("UPDATE vouchers SET no=?, type=?, date=?, route=?, from_party=?, to_party=?, giver=?, receiver=?, "
                     "reason=?, bill_count=?, doc_ref=?, note=?, " + _AP_SET + ", updated_at=? WHERE id=?", vals + (ts, vid))
         con.execute("DELETE FROM voucher_lines WHERE voucher_id = ?", (vid,))
-        write_log(con, who, "Sửa phiếu", no, {"trước": _summary(old), "sau": _summary_lines(clean)}, wh)
+        new = dict(f, no=no, type=vtype, date=d, lines=[{"product_code": c, "qty": q, "price": p, "note": n} for c, q, p, n in clean])
+        write_log(con, who, "Sửa phiếu", no, {"trước": _summary(old), "sau": _summary(new), "id": vid}, wh)
     else:
         cur = con.execute("INSERT INTO vouchers(wh, no, type, date, route, from_party, to_party, giver, receiver, reason, "
                           "bill_count, doc_ref, note, " + _AP_LIST + ", created_at, updated_at) "
                           "VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?," + _AP_QS + ",?,?)", (wh,) + vals + (ts, ts))
         vid = cur.lastrowid
-        write_log(con, who, "Lập phiếu" + (" (chờ duyệt)" if ap["status"] == "pending" else ""), no, _summary_lines(clean), wh)
+        new = dict(f, no=no, type=vtype, date=d, lines=[{"product_code": c, "qty": q, "price": p, "note": n} for c, q, p, n in clean])
+        write_log(con, who, "Lập phiếu" + (" (chờ duyệt)" if ap["status"] == "pending" else ""), no, {"sau": _summary(new), "id": vid}, wh)
     con.executemany("INSERT INTO voucher_lines(voucher_id, line_no, product_code, qty, price, note) VALUES (?,?,?,?,?,?)",
                     [(vid, i + 1, c, q, p, n) for i, (c, q, p, n) in enumerate(clean)])
     return vid
 
 
+_LOG_FIELDS = ("type", "route", "from_party", "to_party", "giver", "receiver", "reason", "bill_count", "doc_ref", "note")
+
+
 def _summary(v):
-    return {"ngày": v["date"], "dòng": ["%s x %s" % (l["product_code"], _fmt(l["qty"])) for l in v["lines"]]}
+    """Nội dung phiếu ghi vào lịch sử: ngày, các dòng (đọc nhanh) + đủ thông tin phiếu (xem chi tiết)."""
+    h = {k: v.get(k) for k in _LOG_FIELDS if v.get(k) not in (None, "")}
+    h["no"] = v.get("no", "")
+    h["lines"] = [[l["product_code"], l["qty"], l.get("price") or 0, l.get("note") or ""] for l in v["lines"]]
+    return {"ngày": v["date"], "dòng": ["%s x %s" % (l["product_code"], _fmt(l["qty"])) for l in v["lines"]], "v": h}
 
 
 def _summary_lines(clean):
@@ -1726,7 +1735,7 @@ class Handler(BaseHTTPRequestHandler):
                 if v["type"] == "D" and not v.get("status") and me and not me[1].get("admin"):
                     raise ApiError(403, "Phiếu điều chỉnh %s đã được duyệt – chỉ Quản lý sửa / xóa được" % v["no"])
                 con.execute("DELETE FROM vouchers WHERE id=?", (int(arg),))
-                write_log(con, who, "Xóa phiếu", v["no"], _summary(v), v["wh"])
+                write_log(con, who, "Xóa phiếu", v["no"], {"trước": _summary(v), "id": int(arg)}, v["wh"])
                 return {"ok": True}
 
         if res == "notices":
