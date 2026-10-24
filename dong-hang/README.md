@@ -45,6 +45,11 @@ Web riêng (trang claude.ai, một file `dong-hang-antam.html`) thay cho Google 
   (tuyến / khu vực / thanh toán), khổ ngang / dọc, mỗi nhóm một trang, dòng ký tên.
   Bản in có bảng **Tổng theo tuyến giao – số lượng từng sản phẩm** (đơn, số lượng từng sản phẩm, bao bì) và
   dưới danh sách mỗi tuyến / nhóm là bảng **TỔNG** của nhóm đó (số lượng từng sản phẩm, bao bì). Lựa chọn nhớ trên máy (`dh_prDon`, `dh_prT1`).
+- **⚡ Đơn đi trong ngày** (Đơn hàng ngày): đơn phát sinh và giao ngay trong ngày. Đánh dấu bằng ô **⚡ Trong ngày** trên từng dòng
+  (hoặc trong chi tiết đơn ⋯); khi nhập nhiều đơn loại này bấm **⚡ Nhập đơn đi trong ngày: BẬT** – đơn mới gõ số lượng tự được đánh dấu
+  (nhớ trên máy, bấm lại để tắt). Chip **⚡ Đi trong ngày N** cạnh chip tuyến (hoặc dòng lọc cột) lọc riêng các đơn này và báo cáo
+  (TACOS, KEBAB, BILL, Tổng túi / cái, bao bì) tính riêng; kết hợp được với lọc tuyến. Bản in có điều kiện **Loại đơn** (đi trong ngày /
+  đơn thường) và cột *⚡ Đi trong ngày*; đơn gửi sang Kho / Giao hàng có ghi chú "⚡ ĐI TRONG NGÀY". Lưu ở `ngay/<ngày>.r.<khách>.tn`.
 - **Lọc theo yêu cầu + In báo cáo** (cả Đơn hàng ngày và Tuyến kebab 123): lọc bằng ô tìm, chọn khu vực / tuyến và dòng
   "▼ Lọc theo cột" dưới tiêu đề bảng (CRM, hỗ trợ, tình trạng, từng sản phẩm có/trống, túi 50, túi lẻ, ghi chú…).
   Ở Đơn hàng ngày, khi lọc theo **tuyến** (bấm chip tuyến hoặc chọn ở cột Tuyến) thì báo cáo (TACOS, KEBAB, BILL, số đơn,
