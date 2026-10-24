@@ -951,8 +951,9 @@ function rtChipsHtml() {
   const keys = Object.keys(cnt).filter(k => k !== '-').sort((a, b) => routeIdx(a) - routeIdx(b) || a.localeCompare(b));
   const as = (S.day && S.day.assign) || {}, hasDrv = (S.drivers || []).length;
   const lab = k => { const n = driverName(driverFor(k, as)[0]); return hasDrv ? `${k} · ${n || '⚠ chưa có người'}` : k; };
-  const nTn = dayOrders(S.day ? S.day.r : {}).filter(x => isTn(x.o)).length, tnCur = colF().tn || '';
-  const tnChip = `<button class="rtchip tnchip${tnCur === 'co' ? ' on' : ''}" data-tnf="co" title="Lọc đơn đi trong ngày – báo cáo tính riêng">⚡ Đi trong ngày <b>${nTn}</b></button>`;
+  const allD = dayOrders(S.day ? S.day.r : {}), nTn = allD.filter(x => isTn(x.o)).length, tnCur = colF().tn || '';
+  const tnChip = `<button class="rtchip tnchip${tnCur === 'co' ? ' on' : ''}" data-tnf="co" title="Lọc đơn đi trong ngày – báo cáo tính riêng">⚡ Đi trong ngày <b>${nTn}</b></button>`
+    + `<button class="rtchip${tnCur === 'khong' ? ' on' : ''}" data-tnf="khong" title="Lọc đơn thường (đặt trước, không đi trong ngày) – báo cáo tính riêng">Đơn thường <b>${allD.length - nTn}</b></button>`;
   return `${tnChip}<span class="small muted">🚚 Chia tuyến:</span>${cnt['-'] ? chip('-', '⚠ Chưa chia', cnt['-'], 'Đơn chưa khớp tuyến nào – chọn ở cột Tuyến') : ''}${keys.map(k => chip(k, lab(k), cnt[k], routeLabel(k))).join('')}
     ${keys.length || cnt['-'] ? '' : '<span class="small muted">chưa có đơn</span>'}<button class="btn sm p-nguoigiao" id="rt-drv" title="Chọn nhân viên giao cho từng tuyến">👤 Người giao</button><button class="btn sm ghost p-quytac" id="rt-cfg" title="Sửa danh sách tuyến và quy tắc chia tự động">⚙ Quy tắc chia tuyến</button>`;
 }

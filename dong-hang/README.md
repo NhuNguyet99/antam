@@ -55,7 +55,7 @@ Web riêng (trang claude.ai, một file `dong-hang-antam.html`) thay cho Google 
   quyền `assets` để nhận ảnh. Vị trí lúc giao vẫn xem ở trang Giao hàng An Tâm. Quyền *Theo dõi giao hàng* (mọi vai trò có sẵn).
 - **⚡ Đơn đi trong ngày** (Đơn hàng ngày): đơn phát sinh và giao ngay trong ngày. Đánh dấu bằng ô **⚡ Trong ngày** trên từng dòng
   (hoặc trong chi tiết đơn ⋯); khi nhập nhiều đơn loại này bấm **⚡ Nhập đơn đi trong ngày: BẬT** – đơn mới gõ số lượng tự được đánh dấu
-  (nhớ trên máy, bấm lại để tắt). Chip **⚡ Đi trong ngày N** cạnh chip tuyến (hoặc dòng lọc cột) lọc riêng các đơn này và báo cáo
+  (nhớ trên máy, bấm lại để tắt). Chip **⚡ Đi trong ngày N** và **Đơn thường M** cạnh chip tuyến (hoặc dòng lọc cột) lọc riêng từng loại và báo cáo
   (TACOS, KEBAB, BILL, Tổng túi / cái, bao bì) tính riêng; kết hợp được với lọc tuyến. Bản in có điều kiện **Loại đơn** (đi trong ngày /
   đơn thường) và cột *⚡ Đi trong ngày*; đơn gửi sang Kho / Giao hàng có ghi chú "⚡ ĐI TRONG NGÀY". Lưu ở `ngay/<ngày>.r.<khách>.tn`.
 - **Lọc theo yêu cầu + In báo cáo** (cả Đơn hàng ngày và Tuyến kebab 123): lọc bằng ô tìm, chọn khu vực / tuyến và dòng
