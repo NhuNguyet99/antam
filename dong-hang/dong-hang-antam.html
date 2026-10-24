@@ -58,7 +58,10 @@ a { color: var(--accent); }
 .tabs { display: flex; gap: 2px; flex-wrap: wrap; flex: 1; min-width: 0; }
 .tabs button { border: 0; background: none; padding: 7px 11px; border-radius: 999px; cursor: pointer; color: var(--ink-2); font-weight: 500; white-space: nowrap; }
 .tabs button:hover { background: var(--hover); }
-body.no-ql .ql-only, body.no-dp .dp-only { display: none !important; }
+.perm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px 16px; margin-top: 4px; }
+.perm-grid fieldset { border: 1px solid var(--line); border-radius: var(--r); padding: 6px 10px 8px; margin: 0; display: grid; gap: 4px; }
+.perm-grid legend { font-size: 12px; font-weight: 700; color: var(--ink-2); padding: 0 4px; }
+.perm-list { font-size: 12px; color: var(--ink-2); max-width: 420px; }
 body.locked #tabs, body.locked #me-btn, body.locked #sync { visibility: hidden; }
 .login { max-width: 380px; margin: 8vh auto; display: grid; gap: 12px; }
 .login h2 { margin: 0; }
@@ -410,14 +413,14 @@ tr.hit > td:first-child { box-shadow: inset 4px 0 0 var(--hit-bar); }
 <div class="top"><div class="wrap top-in">
   <div class="brand"><span class="brand-mark" aria-hidden="true">AT</span>Đóng hàng An Tâm</div>
   <nav class="tabs" id="tabs" aria-label="Các mục">
-    <button data-v="don">Đơn hàng ngày</button>
-    <button data-v="t123">Tuyến kebab 123</button>
-    <button data-v="in">Định mức đóng hàng</button>
-    <button data-v="khach">Khách hàng</button>
-    <button data-v="tk">Thống kê</button>
-    <button data-v="cd" class="ql-only">Định mức &amp; cài đặt</button>
-    <button data-v="nhap" class="ql-only">Nhập từ sheet</button>
-    <button data-v="acc" class="ql-only">Tài khoản</button>
+    <button data-v="don" class="p-don">Đơn hàng ngày</button>
+    <button data-v="t123" class="p-t123">Tuyến kebab 123</button>
+    <button data-v="in" class="p-in">Định mức đóng hàng</button>
+    <button data-v="khach" class="p-khach">Khách hàng</button>
+    <button data-v="tk" class="p-tk">Thống kê</button>
+    <button data-v="cd" class="p-cd">Định mức &amp; cài đặt</button>
+    <button data-v="nhap" class="p-nhap">Nhập từ sheet</button>
+    <button data-v="acc" class="p-acc">Tài khoản</button>
   </nav>
   <span class="sync" id="sync"></span>
   <button class="me-btn" id="me-btn" title="Tên ghi vào cột Người tạo đơn">👤 <span id="me-name">…</span></button>
@@ -739,7 +742,7 @@ function t1DriverFor(g, assign) {
 }
 const t1DrvLabel = g => ((S.drivers || []).length ? driverName(t1DriverFor(g, S.t1.day && S.t1.day.assign)[0]) || 'chưa có người giao' : '');
 function t1EditDrivers() {
-  if (!dpOnly('chọn người giao')) return;
+  if (!need('nguoigiao')) return;
   const d = S.t1.date || S.date, a = (S.t1.day && S.t1.day.assign) || {}, drv = S.drivers || [], list = t1List();
   modal({
     title: 'Người giao tuyến kebab 123 · ' + vn(d), ok: 'Lưu', wide: true,
@@ -810,7 +813,7 @@ function drawKho() {
 }
 function khoBar(kind, d) {
   return `<span class="kho-bar"><span data-kho="${esc(khoId(kind, d))}">${khoStatusHtml(khoId(kind, d))}</span>
-    <button class="btn sm ghost dp-only" data-kho-send="${kind}" title="Để sẵn bản mới nhất (kèm người giao) cho web Giao hàng và Kho ngay bây giờ">📤 Gửi ngay</button></span>`;
+    <button class="btn sm ghost p-gui" data-kho-send="${kind}" title="Để sẵn bản mới nhất (kèm người giao) cho web Giao hàng và Kho ngay bây giờ">📤 Gửi ngay</button></span>`;
 }
 function bindKhoBar(d) {
   $$('[data-kho-send]').forEach(b => b.onclick = () => guard(async () => {
@@ -871,7 +874,7 @@ function routeOf(o, c) {
 function rtSelect(o, c) {
   const [code, src] = routeOf(o, c), auto = c ? autoRouteOf(c)[0] : '', cur = (o && o.rt) || (c && c.rt) || '';
   const extra = cur && !routes().some(r => r.code === cur) ? `<option value="${esc(cur)}" selected>${esc(cur)}</option>` : '';
-  return `<select class="in rt-sel${code ? '' : ' rt-none'}" data-k="rt" aria-label="Tuyến giao" ${isDP() ? '' : 'disabled'} title="${code ? esc(routeLabel(code)) + ' – ' + src : 'Chưa khớp tuyến nào – chọn tuyến'}${isDP() ? '' : ' (chỉ Điều phối / Quản lý đổi được)'}">
+  return `<select class="in rt-sel${code ? '' : ' rt-none'}" data-k="rt" aria-label="Tuyến giao" ${can('tuyen') ? '' : 'disabled'} title="${code ? esc(routeLabel(code)) + ' – ' + src : 'Chưa khớp tuyến nào – chọn tuyến'}${can('tuyen') ? '' : ' (chưa được cấp quyền đổi tuyến)'}">
     <option value="">${auto ? esc(auto) + ' (tự)' : '⚠ chưa chia'}</option>${routes().map(r => `<option value="${esc(r.code)}" ${r.code === cur ? 'selected' : ''}>${esc(r.code)} – ${esc(r.name)}</option>`).join('')}${extra}</select>`;
 }
 // NGƯỜI GIAO từng tuyến: danh sách tài khoản người giao lấy từ web Kho (giaonv/list); mặc định người có tuyến đó trong
@@ -884,7 +887,7 @@ function driverFor(code, assign) {
   return [d ? d.id : '', 'tự'];
 }
 function editDrivers() {
-  if (!dpOnly('chọn người giao')) return;
+  if (!need('nguoigiao')) return;
   const d = S.date, a = (S.day && S.day.assign) || {}, cnt = {};
   for (const { o, c, cid } of dayOrders(S.day ? S.day.r : {})) { const k = routeOf(o, S.cust[cid] || c)[0]; if (k) cnt[k] = (cnt[k] || 0) + 1; }
   const codes = Object.keys(cnt).sort((x, y) => routeIdx(x) - routeIdx(y));
@@ -923,7 +926,7 @@ function rtChipsHtml() {
   const as = (S.day && S.day.assign) || {}, hasDrv = (S.drivers || []).length;
   const lab = k => { const n = driverName(driverFor(k, as)[0]); return hasDrv ? `${k} · ${n || '⚠ chưa có người'}` : k; };
   return `<span class="small muted">🚚 Chia tuyến:</span>${cnt['-'] ? chip('-', '⚠ Chưa chia', cnt['-'], 'Đơn chưa khớp tuyến nào – chọn ở cột Tuyến') : ''}${keys.map(k => chip(k, lab(k), cnt[k], routeLabel(k))).join('')}
-    ${keys.length || cnt['-'] ? '' : '<span class="small muted">chưa có đơn</span>'}<button class="btn sm dp-only" id="rt-drv" title="Chọn nhân viên giao cho từng tuyến">👤 Người giao</button><button class="btn sm ghost dp-only" id="rt-cfg" title="Sửa danh sách tuyến và quy tắc chia tự động">⚙ Quy tắc chia tuyến</button>`;
+    ${keys.length || cnt['-'] ? '' : '<span class="small muted">chưa có đơn</span>'}<button class="btn sm p-nguoigiao" id="rt-drv" title="Chọn nhân viên giao cho từng tuyến">👤 Người giao</button><button class="btn sm ghost p-quytac" id="rt-cfg" title="Sửa danh sách tuyến và quy tắc chia tự động">⚙ Quy tắc chia tuyến</button>`;
 }
 function drawRtChips() {
   const el = $('#d-rt'); if (!el) return;
@@ -932,7 +935,7 @@ function drawRtChips() {
   $('#rt-cfg', el).onclick = editRoutes; $('#rt-drv', el).onclick = editDrivers;
 }
 function editRoutes() {
-  if (!dpOnly('sửa quy tắc chia tuyến')) return;
+  if (!need('quytac')) return;
   let list = routes().map(r => Object.assign({}, r));
   const m = modal({
     title: 'Tuyến giao hàng & quy tắc chia tự động', ok: 'Lưu', wide: true,
@@ -1028,7 +1031,19 @@ $('#me-btn').onclick = () => (S.acc || hasAcc() ? accMenu() : modal({
    Quyền Nhập liệu: Đơn hàng ngày, Tuyến 123, Định mức đóng hàng, Khách hàng (thêm / sửa), Thống kê.
    Quyền Điều phối: thêm chia tuyến (cột Tuyến, quy tắc chia tuyến), chọn người giao, gửi ngay sang Giao hàng & Kho.
    Quyền Quản lý: thêm Định mức & cài đặt, Nhập từ sheet, Tài khoản, quy tắc chia tuyến, giá Tuyến 123, xóa khách, cập nhật từ MISA. */
-const QL_VIEWS = ['cd', 'nhap', 'acc'];
+// danh sách quyền (tích chọn riêng cho từng tài khoản); mục = tab có cùng mã
+const PERMS = [
+  ['Nhập liệu', [['don', 'Đơn hàng ngày – xem & nhập đơn'], ['t123', 'Tuyến kebab 123 – xem & nhập đơn'], ['in', 'Định mức đóng hàng – xem & in'],
+    ['khach', 'Khách hàng – thêm / sửa thông tin'], ['tk', 'Thống kê']]],
+  ['Điều phối', [['tuyen', 'Đổi tuyến của đơn / khách'], ['quytac', 'Sửa quy tắc chia tuyến'], ['nguoigiao', 'Chọn người giao từng tuyến'], ['gui', 'Gửi ngay sang Giao hàng & Kho']]],
+  ['Quản lý', [['xoa', 'Xóa khách'], ['misa', 'Cập nhật khách từ MISA'], ['gia', 'Sửa giá Tuyến 123'], ['nhap', 'Nhập từ sheet (Đơn hàng, Tuyến 123)'],
+    ['cd', 'Định mức & cài đặt'], ['acc', 'Quản lý tài khoản & phân quyền']]],
+];
+const PERM_KEYS = PERMS.flatMap(([, l]) => l.map(x => x[0]));
+const PERM_LAB = Object.fromEntries(PERMS.flatMap(([, l]) => l));
+const VIEWS = ['don', 't123', 'in', 'khach', 'tk', 'cd', 'nhap', 'acc'];
+const PRESET = { nhap: ['don', 't123', 'in', 'khach', 'tk'], dp: ['don', 't123', 'in', 'khach', 'tk', 'tuyen', 'quytac', 'nguoigiao', 'gui'], ql: PERM_KEYS };
+document.head.insertAdjacentHTML('beforeend', `<style>${PERM_KEYS.map(k => `body.no-p-${k} .p-${k}`).join(',')} { display: none !important; }</style>`);
 const SESSION_DAYS = 30;
 const newSess = (id, pw) => ({ id, sig: pw.slice(0, 24), iat: Date.now(), exp: Date.now() + SESSION_DAYS * 864e5 });
 const hasAcc = () => Object.values(S.tk).some(a => a && a.active !== false);
@@ -1037,11 +1052,13 @@ const needLogin = () => hasAcc() && !S.acc;
 const ROLES = [['nhap', 'Nhập liệu'], ['dp', 'Điều phối'], ['ql', 'Quản lý']];
 const roleOf = a => (ROLES.some(r => r[0] === (a && a.role)) ? a.role : 'nhap');
 const roleName = a => ROLES.find(r => r[0] === roleOf(a))[1];
-const rolePill = a => `<span class="pill ${roleOf(a)}">${roleName(a)}</span>`;
-const isQL = () => !hasAcc() || (!!S.acc && roleOf(S.acc) === 'ql');
-const isDP = () => isQL() || (!!S.acc && roleOf(S.acc) === 'dp');
-function qlOnly(what) { if (isQL()) return true; toast(`Chỉ tài khoản Quản lý mới ${what}.`, true); return false; }
-function dpOnly(what) { if (isDP()) return true; toast(`Chỉ tài khoản Điều phối hoặc Quản lý mới ${what}.`, true); return false; }
+const rolePill = a => `<span class="pill ${roleOf(a)}">${roleName(a)}${custom(a) ? ' · tùy chỉnh' : ''}</span>`;
+// quyền của 1 tài khoản: danh sách tích riêng (perm), chưa có thì theo mẫu của vai trò
+const permsOf = a => new Set(Array.isArray(a && a.perm) ? a.perm.filter(k => PERM_KEYS.includes(k)) : PRESET[roleOf(a)]);
+const custom = a => { const p = permsOf(a), d = new Set(PRESET[roleOf(a)]); return p.size !== d.size || [...p].some(k => !d.has(k)); };
+function can(k) { if (!hasAcc()) return true; return !!S.acc && permsOf(S.acc).has(k); }
+function need(k, what) { if (can(k)) return true; toast(`Tài khoản của bạn chưa được cấp quyền ${what || PERM_LAB[k]} – nhờ quản lý phân quyền.`, true); return false; }
+const isQL = () => can('acc');
 const normUser = v => noAcc(String(v || '')).toLowerCase().replace(/[^a-z0-9._-]/g, '');
 const hex = buf => Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
 // mật khẩu băm PBKDF2 (dữ liệu trang ai được mời cũng đọc được – không lưu mật khẩu gốc)
@@ -1146,7 +1163,7 @@ function changePw() {
   });
 }
 function viewAccounts(main) {
-  if (!isQL()) { main.innerHTML = '<div class="card empty"><div class="big">Chỉ quản lý mới xem được mục này</div></div>'; return; }
+  if (!can('acc')) { main.innerHTML = '<div class="card empty"><div class="big">Chưa được cấp quyền quản lý tài khoản</div></div>'; return; }
   const list = Object.entries(S.tk).filter(([, a]) => a).map(([id, a]) => Object.assign({ id }, a))
     .sort((x, y) => (y.active !== false) - (x.active !== false) || ROLES.findIndex(r => r[0] === roleOf(y)) - ROLES.findIndex(r => r[0] === roleOf(x)) || String(x.name).localeCompare(String(y.name), 'vi'));
   const first = !hasAcc();
@@ -1156,15 +1173,14 @@ function viewAccounts(main) {
         ${first && !S.isOwner ? '' : '<button class="btn pri" id="ac-add">+ Thêm tài khoản</button>'}</div>
       <p class="hint" style="margin:0">Mỗi nhân viên 1 tài khoản (nick + mật khẩu). Khi đã có tài khoản, ai mở web cũng phải <b>đăng nhập</b>
         bằng nick và mật khẩu (kể cả chủ trang); tên tài khoản tự ghi vào cột <b>Người tạo đơn</b>.
-        <b>Nhập liệu</b>: nhập đơn, Tuyến 123, khách hàng (thêm / sửa), xem định mức, thống kê, in.
-        <b>Điều phối</b>: thêm chia tuyến (cột Tuyến, quy tắc chia tuyến), chọn người giao, gửi ngay sang Giao hàng &amp; Kho.
-        <b>Quản lý</b>: tất cả – thêm cài đặt, nhập từ sheet, giá Tuyến 123, xóa khách, cập nhật từ MISA và mục Tài khoản này.</p>
+        Bấm <b>Sửa</b> để <b>phân quyền</b> cho từng tài khoản: chọn mẫu (Nhập liệu / Điều phối / Quản lý) rồi tích thêm hoặc bỏ từng quyền.
+        Mục nào, nút nào không được cấp quyền thì tài khoản đó không thấy.</p>
       <p class="hint" style="margin:0">Nhân viên vẫn cần được chủ trang mời vào trang (nút <b>Share</b>, mời bằng email, quyền <b>Editor</b>) mới mở được web;
         tài khoản ở đây để biết ai nhập và giới hạn chức năng.</p>
       ${first && !S.isOwner ? '<p class="muted">Chưa có tài khoản nào – chủ trang mở web để tạo tài khoản đầu tiên.</p>' : ''}
-      ${list.length ? `<div class="tw"><table><thead><tr><th>Họ tên</th><th>Nick</th><th>Quyền</th><th>Trạng thái</th><th>Cập nhật</th><th></th></tr></thead><tbody>
+      ${list.length ? `<div class="tw"><table><thead><tr><th>Họ tên</th><th>Nick</th><th>Vai trò</th><th>Quyền được cấp</th><th>Trạng thái</th><th>Cập nhật</th><th></th></tr></thead><tbody>
         ${list.map(a => `<tr data-id="${esc(a.id)}" ${a.active === false ? 'style="opacity:.55"' : ''}><td><b>${esc(a.name)}</b>${S.acc && S.acc.id === a.id ? ' <span class="small muted">(bạn)</span>' : ''}</td>
-          <td class="mono">${esc(a.user)}</td><td>${rolePill(a)}</td>
+          <td class="mono">${esc(a.user)}</td><td>${rolePill(a)}</td><td class="perm-list">${roleOf(a) === 'ql' && !custom(a) ? 'Tất cả' : [...permsOf(a)].map(k => esc(PERM_LAB[k])).join(' · ') || '<span class="muted">(chưa có quyền nào)</span>'}</td>
           <td>${a.active === false ? '<span class="pill off">Đã khóa</span>' : 'Đang dùng'}</td><td class="small muted">${esc(a.at || '')}</td>
           <td class="nowrap"><button class="btn sm" data-ed>Sửa</button> <button class="btn sm danger" data-del>Xóa</button></td></tr>`).join('')}</tbody></table></div>`
       : first && !S.isOwner ? '' : '<p class="muted">Chưa có tài khoản nào. Bấm <b>+ Thêm tài khoản</b> – nên tạo 1 tài khoản Quản lý trước.</p>'}</div>`;
@@ -1183,43 +1199,56 @@ function viewAccounts(main) {
 }
 function editAccount(id) {
   const a = id ? Object.assign({}, S.tk[id]) : { user: '', name: '', role: hasAcc() ? 'nhap' : 'ql', active: true };
-  modal({
+  const m = modal({
     title: id ? 'Sửa tài khoản ' + a.user : 'Thêm tài khoản nhân viên', ok: 'Lưu',
     body: `<div class="fgrid">
       <label class="field">Họ tên (ghi vào cột Người tạo đơn)<input id="ea-name" value="${esc(a.name || '')}" maxlength="60"></label>
-      <label class="field">Nick đăng nhập (không dấu, viết liền, VD <i>lan.nh</i>)<input id="ea-user" value="${esc(a.user || '')}" autocapitalize="none" spellcheck="false" maxlength="40"></label>
+      <label class="field">Nick (không dấu, viết liền)<input id="ea-user" placeholder="VD lan.nh" value="${esc(a.user || '')}" autocapitalize="none" spellcheck="false" maxlength="40"></label>
       <label class="field">${id ? 'Mật khẩu mới (để trống = giữ mật khẩu cũ)' : 'Mật khẩu (ít nhất 4 ký tự)'}<input id="ea-pw" type="text" autocomplete="new-password" maxlength="60"></label>
-      <label class="field">Quyền<select id="ea-role">${ROLES.map(([k, l]) => `<option value="${k}" ${roleOf(a) === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+      <label class="field">Vai trò (mẫu quyền)<select id="ea-role">${ROLES.map(([k, l]) => `<option value="${k}" ${roleOf(a) === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
       <label class="field">Trạng thái<select id="ea-act"><option value="1">Đang dùng</option><option value="" ${a.active === false ? 'selected' : ''}>Khóa (không đăng nhập được)</option></select></label>
-    </div>`,
+    </div>
+    <div style="margin-top:12px"><b>Phân quyền</b> <span class="small muted" id="ea-pst"></span>
+      <div class="perm-grid">${PERMS.map(([g, l]) => `<fieldset><legend>${g}</legend>${l.map(([k, t]) => `<label class="chk"><input type="checkbox" data-perm="${k}" ${permsOf(a).has(k) ? 'checked' : ''}> ${esc(t)}</label>`).join('')}</fieldset>`).join('')}</div></div>`,
     onOk: async r => {
       const v = k => $(k, r).value.trim();
       const user = normUser(v('#ea-user')), name = v('#ea-name'), pwIn = $('#ea-pw', r).value, role = v('#ea-role'), active = !!v('#ea-act');
+      const perm = $$('[data-perm]', r).filter(i => i.checked).map(i => i.dataset.perm);
       if (!name) throw new Error('Cần nhập họ tên');
       if (user.length < 2) throw new Error('Nick cần ít nhất 2 ký tự (chữ không dấu, số, dấu chấm, gạch)');
       if (Object.entries(S.tk).some(([k, x]) => x && k !== id && normUser(x.user) === user)) throw new Error('Nick "' + user + '" đã có');
       if (!id && pwIn.length < 4) throw new Error('Mật khẩu cần ít nhất 4 ký tự');
       if (id && pwIn && pwIn.length < 4) throw new Error('Mật khẩu cần ít nhất 4 ký tự');
-      if (S.acc && S.acc.id === id && (role !== 'ql' || !active)) throw new Error('Không tự hạ quyền hoặc tự khóa tài khoản đang đăng nhập');
-      const rec = Object.assign({}, a, { user, name, role, active, at: nowStr(), by: S.me || '' });
+      if (S.acc && S.acc.id === id && (!perm.includes('acc') || !active)) throw new Error('Không tự bỏ quyền quản lý tài khoản hoặc tự khóa tài khoản đang đăng nhập');
+      if (!perm.some(k => VIEWS.includes(k))) throw new Error('Cần cấp ít nhất 1 mục để tài khoản vào được web (VD Đơn hàng ngày)');
+      const rec = Object.assign({}, a, { user, name, role, perm, active, at: nowStr(), by: S.me || '' });
       if (pwIn) { rec.salt = rid('s'); rec.pw = await pwHash(rec.salt, pwIn); }
       const nid = id || rid('u');
       await mergeInto('cfg/tk', { a: { [nid]: rec } }, { a: {} });
       S.tk[nid] = rec;
       if (S.acc && S.acc.id === nid && pwIn) store('tk', newSess(nid, rec.pw));
-      toast(id ? 'Đã lưu tài khoản ' + user : !Object.keys(S.tk).filter(k => k !== nid).length ? `Đã tạo tài khoản đầu tiên ${user} – từ giờ mọi người (kể cả bạn) đăng nhập bằng nick và mật khẩu` : `Đã tạo tài khoản ${user} – gửi nick và mật khẩu cho ${name}`);
+      toast(id ? 'Đã lưu tài khoản & phân quyền ' + user : !Object.keys(S.tk).filter(k => k !== nid).length ? `Đã tạo tài khoản đầu tiên ${user} – từ giờ mọi người (kể cả bạn) đăng nhập bằng nick và mật khẩu` : `Đã tạo tài khoản ${user} – gửi nick và mật khẩu cho ${name}`);
       applyAuth(); return true;
     },
   });
+  const r = m.root, boxes = () => $$('[data-perm]', r);
+  const st = () => { const d = new Set(PRESET[$('#ea-role', r).value]), on = boxes().filter(i => i.checked).map(i => i.dataset.perm);
+    $('#ea-pst', r).textContent = on.length === d.size && on.every(k => d.has(k)) ? '(đúng mẫu ' + ROLES.find(x => x[0] === $('#ea-role', r).value)[1] + ')' : '(đã chỉnh riêng)'; };
+  $('#ea-role', r).onchange = () => { const d = new Set(PRESET[$('#ea-role', r).value]); boxes().forEach(i => { i.checked = d.has(i.dataset.perm); }); st(); };
+  boxes().forEach(i => i.onchange = st); st();
 }
 function render() {
   const main = $('#main');
   if (!S.loaded.cfg || !S.loaded.cust) return;
   if (!authReady()) { main.innerHTML = '<div class="card empty"><div class="big">Đang kiểm tra tài khoản…</div></div>'; return; }
   document.body.classList.toggle('locked', needLogin());
-  document.body.classList.toggle('no-ql', !isQL()); document.body.classList.toggle('no-dp', !isDP());
+  PERM_KEYS.forEach(k => document.body.classList.toggle('no-p-' + k, !needLogin() && !can(k)));
   if (needLogin()) return drawLogin(main);
-  if (!isQL() && QL_VIEWS.includes(S.view)) { S.view = 'don'; store('view', 'don'); }
+  if (!can(S.view)) {
+    const v = VIEWS.find(can);
+    if (!v) { main.innerHTML = '<div class="card empty"><div class="big">Tài khoản của bạn chưa được cấp quyền mục nào</div><p class="hint">Nhờ quản lý phân quyền ở mục Tài khoản.</p></div>'; return; }
+    S.view = v; store('view', v);
+  }
   $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === S.view));
   const views = { don: viewDay, t123: viewT123, in: viewPrint, khach: viewCust, tk: viewStats, nhap: viewImport, cd: viewSettings, acc: viewAccounts };
   (views[S.view] || viewDay)(main);
@@ -1371,7 +1400,7 @@ function viewDay(main) {
       <div class="field">Xếp theo<div class="seg" id="f-by"><button data-b="tuyen" class="${(f.by || 'tuyen') === 'tuyen' ? 'on' : ''}">Tuyến</button><button data-b="area" class="${f.by === 'area' ? 'on' : ''}">Khu vực</button></div></div>
       <div class="field">Hiện<div class="seg" id="f-mode"><button data-m="co" class="${f.mode === 'co' ? 'on' : ''}">Khách có đơn</button><button data-m="all" class="${f.mode === 'all' ? 'on' : ''}">Tất cả khách</button></div></div>
       <button class="btn" id="f-cols" title="Chọn cột muốn hiện / ẩn trên bảng">👁 Ẩn / hiện cột${hideSet('hideDon').size ? ` (ẩn ${hideSet('hideDon').size})` : ''}</button>
-      <button class="btn" id="d-add">+ Khách mới</button>
+      <button class="btn p-khach" id="d-add">+ Khách mới</button>
     </div>
     <div id="d-table"></div>`;
   $('#d-prev').onclick = () => { shown = PAGE; watchDay(addDays(d, -1)); render(); };
@@ -1733,6 +1762,7 @@ function editOrder(cid) {
 function custShardPatch(c) { const { id, ...rest } = c; return { c: { [id]: rest } }; }
 async function saveCustomer(c) { await mergeInto('khach/' + shardOf(c.id), custShardPatch(c), { c: {} }); }
 function editCustomer(id) {
+  if (!need('khach', 'thêm / sửa khách')) return;
   const c = id ? Object.assign({}, S.cust[id]) : { id: rid('c'), q: S.filter.area || '', bill: 1, s: (Math.max(0, ...Object.values(S.cust).map(x => x.s || 0)) + 10) };
   const m = modal({
     title: id ? 'Sửa khách hàng' : 'Thêm khách hàng', ok: 'Lưu',
@@ -1744,10 +1774,10 @@ function editCustomer(id) {
       <label class="field">Bill<input id="ec-bill" type="number" min="0" value="${esc(c.bill == null ? 1 : c.bill)}"></label>
       <label class="field wide">Ghi chú / chành xe<input id="ec-note" value="${esc(c.note || '')}"></label>
       <label class="field">Đóng gói mặc định<select id="ec-pk"><option value="">Tự chọn (theo ghi chú)</option>${['TÚI ĐEN', 'THÙNG'].map(x => `<option ${x === c.pk ? 'selected' : ''}>${x}</option>`).join('')}</select></label>
-      <label class="field">Tuyến giao<select id="ec-rt" ${isDP() ? '' : 'disabled title="Chỉ Điều phối / Quản lý đổi được tuyến"'}><option value="">Tự chia (${esc(autoRouteOf(c)[0] || 'chưa khớp')})</option>${routes().map(r => `<option value="${esc(r.code)}" ${r.code === c.rt ? 'selected' : ''}>${esc(r.code)} – ${esc(r.name)}</option>`).join('')}</select></label>
+      <label class="field">Tuyến giao<select id="ec-rt" ${can('tuyen') ? '' : 'disabled title="Chưa được cấp quyền đổi tuyến"'}><option value="">Tự chia (${esc(autoRouteOf(c)[0] || 'chưa khớp')})</option>${routes().map(r => `<option value="${esc(r.code)}" ${r.code === c.rt ? 'selected' : ''}>${esc(r.code)} – ${esc(r.name)}</option>`).join('')}</select></label>
       <label class="field">Giao dịch<select id="ec-off"><option value="">Đang giao dịch</option><option value="1" ${c.off ? 'selected' : ''}>Ngừng (ẩn khỏi danh sách)</option></select></label>
     </div><datalist id="dl-area">${areas().map(a => `<option value="${esc(a)}">`).join('')}</datalist>
-    ${id && isQL() ? '<div style="margin-top:12px"><button class="btn danger sm" id="ec-del">Xóa khách</button></div>' : ''}`,
+    ${id && can('xoa') ? '<div style="margin-top:12px"><button class="btn danger sm" id="ec-del">Xóa khách</button></div>' : ''}`,
     onOk: async root => {
       const v = k => $(k, root).value.trim();
       Object.assign(c, { q: v('#ec-q'), crm: v('#ec-crm'), name: v('#ec-name'), phone: v('#ec-phone'), bill: num(v('#ec-bill')), note: v('#ec-note'), pk: v('#ec-pk'), rt: v('#ec-rt'), off: !!v('#ec-off') });
@@ -1772,8 +1802,8 @@ function viewCust(main) {
       <label class="field grow" style="min-width:200px">Tìm<input id="cf-q" value="${esc(f.q)}" placeholder="Tên, CRM, SĐT, địa chỉ, ghi chú"></label>
       <label class="field">Khu vực<select id="cf-area"><option value="">Tất cả</option>${areas().map(a => `<option ${a === f.area ? 'selected' : ''}>${esc(a)}</option>`).join('')}</select></label>
       <label class="field">Giao dịch<select id="cf-off"><option value="">Đang giao dịch</option><option value="1" ${f.off === '1' ? 'selected' : ''}>Đã ngừng</option><option value="all" ${f.off === 'all' ? 'selected' : ''}>Tất cả</option></select></label>
-      <button class="btn" id="cf-misa" title="Dán danh sách khách hàng xuất từ MISA – sửa tên, địa chỉ, SĐT theo mã CRM">⇅ Cập nhật từ MISA</button>
-      <button class="btn pri" id="cf-add">+ Thêm khách</button></div>
+      <button class="btn p-misa" id="cf-misa" title="Dán danh sách khách hàng xuất từ MISA – sửa tên, địa chỉ, SĐT theo mã CRM">⇅ Cập nhật từ MISA</button>
+      <button class="btn pri p-khach" id="cf-add">+ Thêm khách</button></div>
     <div id="cf-list"></div>`;
   const draw = () => {
     const qn = norm(f.q);
@@ -1801,6 +1831,7 @@ const CPOP_F = { crm: 'Mã CRM', name: 'Khách hàng – địa chỉ', phone: '
 let cpopOpen = null;
 // anchor: ô bảng; c: khách hiện tại; fields: các trường; focus: trường đặt con trỏ; save(vals đã đổi) ; more(): mở form đầy đủ
 function custPop({ anchor, c, fields, focus, save, more, title }) {
+  if (!need('khach', 'sửa thông tin khách')) return;
   if (S.readOnly) { toast('Bạn đang chỉ có quyền xem – không sửa được khách.', true); return; }
   if (cpopOpen) cpopOpen.close(true);
   const el = document.createElement('div'); el.className = 'cpop'; el.setAttribute('role', 'dialog');
@@ -1916,7 +1947,7 @@ function misaName(old, ten, keep) {
   return [lead && !n.startsWith(norm(lead)) ? lead + ' - ' : '', ten, notes.length ? ' ' + notes.join(' ') : ''].join('');
 }
 function misaUpdate() {
-  if (!qlOnly('cập nhật khách từ MISA')) return;
+  if (!need('misa')) return;
   const st = { p: null, opt: Object.assign({ name: true, phone: true, area: false, nameMode: 'ten-dc', keep: true, d: true, t: true }, store('misaOpt') || {}), off: new Set() };
   const m = modal({
     title: 'Cập nhật khách hàng từ danh sách MISA', wide: true, ok: 'Cập nhật',
@@ -2677,7 +2708,7 @@ function viewT123(main) {
         <button class="btn sm" id="t1-today">Hôm nay</button>
         <span class="date-big">Tuyến kebab 123 · ${vn(d)}</span><span class="dow">${dow(d)}</span>
         <span class="grow"></span>
-        <button class="btn sm dp-only" id="t1-drv" title="Chọn nhân viên giao cho từng tuyến">👤 Người giao</button>
+        <button class="btn sm p-nguoigiao" id="t1-drv" title="Chọn nhân viên giao cho từng tuyến">👤 Người giao</button>
         <button class="btn sm" id="t1-print" title="In báo cáo tất cả hoặc theo bộ lọc đang chọn">🖨 In báo cáo</button>
         <button class="btn sm" id="t1-copy" title="Lấy số lượng của ngày gần nhất trước đó làm sẵn">Chép số ngày trước</button>
         <button class="btn sm pri" id="t1-send" title="Ghi tổng số tuyến 123 vào dòng BÁNH TUYẾN của Đơn hàng ngày">→ Đưa vào Bánh tuyến</button>
@@ -2687,8 +2718,8 @@ function viewT123(main) {
       <div class="row" style="align-items:center">
         <span class="hint">Giá: ${T123_P.map(([k, l, , u]) => `${esc(l)} ${pr[k] ? fmt(pr[k]) + 'đ/' + u : '<b style="color:var(--bad)">chưa có</b>'}`).join(' · ')}</span>
         <span class="grow"></span>
-        <button class="btn sm" id="t1-price">Sửa giá</button><button class="btn sm" id="t1-add">+ Khách tuyến</button>
-        <button class="btn sm" id="t1-import">Cập nhật từ sheet</button><button class="btn sm" id="t1-csv">Tải Excel (CSV)</button>
+        <button class="btn sm p-gia" id="t1-price">Sửa giá</button><button class="btn sm p-khach" id="t1-add">+ Khách tuyến</button>
+        <button class="btn sm p-nhap" id="t1-import">Cập nhật từ sheet</button><button class="btn sm" id="t1-csv">Tải Excel (CSV)</button>
       </div>
     </div>
     <div class="row">
@@ -2932,7 +2963,7 @@ async function t1Send() {
   toast('Đã ghi vào dòng BÁNH TUYẾN của Đơn hàng ngày ' + vn(d));
 }
 function t1EditPrice() {
-  if (!qlOnly('sửa giá Tuyến 123')) return;
+  if (!need('gia')) return;
   const pr = t1Price();
   modal({
     title: 'Giá bán tuyến 123 (tính doanh thu)', ok: 'Lưu giá',
@@ -2947,6 +2978,7 @@ function t1EditPrice() {
 }
 async function t1SaveCust(id, rec) { await mergeInto('tuyen123/khach', { c: { [id]: rec } }, { c: {} }); }
 function t1EditCust(id) {
+  if (!need('khach', 'thêm / sửa khách')) return;
   const c = id ? Object.assign({}, S.t1.cust[id], { g: t1G(S.t1.cust[id]) }) : { g: 't1', s: Math.max(0, ...Object.values(S.t1.cust).filter(Boolean).map(x => x.s || 0)) + 10 };
   const m = modal({
     title: id ? 'Sửa khách tuyến 123' : 'Thêm khách tuyến 123', ok: 'Lưu',
@@ -2959,7 +2991,7 @@ function t1EditCust(id) {
       <label class="field wide">Ghi chú giao hàng<input id="t1c-note" value="${esc(c.note || '')}"></label>
       <label class="field">Thứ tự (số nhỏ đứng trước)<input id="t1c-s" type="number" value="${esc(c.s || 0)}"></label>
     </div>
-    ${id && isQL() ? '<div style="margin-top:12px"><button class="btn danger sm" id="t1c-del">Xóa khách khỏi tuyến</button></div>' : ''}`,
+    ${id && can('xoa') ? '<div style="margin-top:12px"><button class="btn danger sm" id="t1c-del">Xóa khách khỏi tuyến</button></div>' : ''}`,
     onOk: async root => {
       const v = k => $(k, root).value.trim();
       const rec = { g: v('#t1c-g'), sub: '', crm: v('#t1c-crm'), phone: v('#t1c-phone'), ht: $('#t1c-ht', root).checked, name: v('#t1c-name'), note: v('#t1c-note'), s: num(v('#t1c-s')) };
@@ -3016,7 +3048,7 @@ function parseT123(table) {
   const seen = new Set(); return rows.filter(r => { const k = r.g + '|' + keyOf(r.name); if (seen.has(k)) return false; seen.add(k); return true; });
 }
 function t1Import() {
-  if (!qlOnly('nhập danh sách Tuyến 123 từ sheet')) return;
+  if (!need('nhap', 'nhập danh sách Tuyến 123 từ sheet')) return;
   const m = modal({
     title: 'Cập nhật tuyến 123 từ Google Sheet', ok: 'Cập nhật', wide: true,
     body: `<ol class="steps"><li>Mở sheet <b>2-KHÁCH TUYẾN 123</b>, chọn tab ngày cần lấy.</li><li>Bấm một ô, <b>Ctrl+A</b> rồi <b>Ctrl+C</b>.</li><li>Bấm vào ô dưới và <b>Ctrl+V</b>.</li></ol>

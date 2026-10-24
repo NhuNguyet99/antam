@@ -59,6 +59,10 @@ Web riêng (trang claude.ai, một file `dong-hang-antam.html`) thay cho Google 
   trang); đăng nhập nhớ 30 ngày trên máy; đổi mật khẩu / khóa / xóa tài khoản là phiên cũ hết hiệu lực. Nút **⏏ Đăng xuất tất cả**
   (mục Tài khoản) bắt mọi máy đăng nhập lại (`cfg/tk.ep`). Chủ trang quên mật khẩu: ở màn đăng nhập bấm *Chủ trang: đặt lại mật
   khẩu một tài khoản*. Tên tài khoản tự ghi vào cột Người tạo đơn.
+  **Phân quyền từng tài khoản** (Sửa tài khoản): chọn vai trò làm mẫu rồi tích thêm / bỏ từng quyền – Nhập liệu (Đơn hàng ngày,
+  Tuyến 123, Định mức đóng hàng, Khách hàng thêm/sửa, Thống kê), Điều phối (đổi tuyến, quy tắc chia tuyến, chọn người giao, gửi ngay),
+  Quản lý (xóa khách, cập nhật MISA, giá Tuyến 123, nhập từ sheet, Định mức & cài đặt, tài khoản & phân quyền). Mục / nút không được
+  cấp thì không hiện; lưu ở `perm` của tài khoản (chưa có thì theo mẫu của vai trò). Mẫu mặc định:
   Nhập liệu: Đơn hàng ngày, Tuyến 123, Định mức đóng hàng, Khách hàng (thêm / sửa), Thống kê, in (cột Tuyến chỉ xem).
   Điều phối thêm: chia tuyến (cột Tuyến, tuyến của khách, quy tắc chia tuyến), chọn 👤 Người giao (Đơn hàng ngày, Tuyến 123),
   📤 Gửi ngay sang Giao hàng & Kho. Quản lý: tất cả – thêm Định mức & cài đặt,
