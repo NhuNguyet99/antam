@@ -14,6 +14,9 @@
      kho/TP/meta/vitri            {v: {mã khách: {lat, lng, acc, name, driver, at}|null}}  – vị trí khách người giao đã lưu
      kho/TP/hanhtrinh/<ngày>-<id người giao>  {date, driver, name, pts: [[giây từ 0h, lat, lng, acc]], live, liveAt, on, at}
                                   – hành trình GPS người giao chia sẻ trong ngày (+ link vị trí trực tiếp Google Maps)
+     config/gps                   {url, t: {mã: {id, name, at}|null}, sync: {mod, at}}  – trang GPS An Tâm (Google Apps Script) + mã link
+                                  riêng của từng người giao; trang (chủ trang mở, có Google Drive) đọc Google Sheet "GPS An Tâm"
+                                  rồi chép điểm GPS vào kho/TP/hanhtrinh
      kho/TP/anh/<id>              {date, key, data}  – ảnh giao hàng khi trang không lưu được vào kho ảnh (assets)
      log/<yyyy-mm-dd>             {date, e: {id: thao tác}}
    Tài khoản giao hàng nằm trong cài đặt: s.drivers {id: {nick, name, phone, routes, active, salt, pin}|null}
@@ -127,6 +130,7 @@ const Backend = (() => {
     vitri: () => dbx().doc('kho/TP/meta/vitri'),
     track: (d, id) => dbx().doc(`kho/TP/hanhtrinh/${d}-${id}`),
     anh: id => dbx().doc(`kho/TP/anh/${id}`),
+    gps: () => dbx().doc('config/gps'),
     logs: () => dbx().collection('log'),
     logDay: d => dbx().doc('log/' + d),
     notice: sid => dbx().doc('notice/' + sid), // thông báo cho từng tài khoản nhân viên
@@ -851,6 +855,97 @@ const Backend = (() => {
     if (body.on !== undefined) rec.on = !!body.on;
     return rec;
   }
+  // GPS An Tâm: trang claude.ai không được đọc định vị điện thoại, nên người giao mở trang GPS riêng (Google Apps Script, có https)
+  // bằng link có mã ngẫu nhiên của mình; trang đó ghi điểm GPS vào Google Sheet; trang này đọc Sheet qua Google Drive của người xem
+  // (static/app.js gpsPull) rồi gửi các dòng vào đây: đổi mã → người giao và gộp vào hành trình.
+  // Cột diem: các lần gửi cách nhau "|", mỗi lần R<giây nhận>:<giây unix>,<vĩ×1e5>,<kinh×1e5>,<±m>;<+giây>,<+vĩ>,<+kinh>,<±m>… (gps-an-tam/Code.gs)
+  function gpsDecode(cell) {
+    const out = [];
+    text(cell).split('|').forEach(batch => {
+      const m = /^R\d+:(.*)$/.exec(batch);
+      if (!m) return;
+      let prev = null;
+      m[1].split(';').forEach(part => {
+        const v = part.split(',').map(Number);
+        if (v.length !== 4 || v.some(x => !Number.isInteger(x))) { prev = null; return; }
+        const p = prev ? [prev[0] + v[0], prev[1] + v[1], prev[2] + v[2], v[3]] : v;
+        prev = p; out.push(p);
+      });
+    });
+    return out;
+  }
+  const VN_SEC = 7 * 3600;
+  const vnDay = sec => new Date((sec + VN_SEC) * 1000).toISOString().slice(0, 10);
+  async function gpsCfg() { try { return docData(await ref.gps().get()) || {}; } catch (e) { throw dbError(e); } }
+  const gpsLink = (url, tok, name) => (url && tok ? `${url}${url.includes('?') ? '&' : '?'}t=${tok}&n=${encodeURIComponent(name || '')}` : '');
+  const gpsTokOf = (g, id) => (live(g.t).find(([, x]) => x.id === id) || [''])[0];
+  async function gpsApi(method, action, body) {
+    const g = await gpsCfg();
+    const drv = drivers();
+    if (method === 'GET') {
+      const links = {};
+      live(g.t).forEach(([tok, x]) => { if (drv[x.id]) links[x.id] = { link: gpsLink(g.url, tok, (drv[x.id] || {}).name || x.name), at: x.at || '' }; });
+      return { url: g.url || '', links, sync: g.sync || null };
+    }
+    if (method !== 'POST') throw new ApiError(405, 'Sai phương thức');
+    // các dòng của Sheet "GPS An Tâm" [{tok, upd, on, diem}] → gộp vào hành trình từng người giao, từng ngày
+    if (action === 'sync') {
+      const toks = Object.fromEntries(live(g.t)), now = Math.floor(Date.now() / 1000), docs = {};
+      const slot = (d, id) => (docs[d + '|' + id] = docs[d + '|' + id] || { d, id, pts: [], on: false });
+      (Array.isArray(body.rows) ? body.rows : []).forEach(r => {
+        const x = toks[text(r.tok)];
+        if (!x || !drv[x.id]) return;
+        gpsDecode(r.diem).forEach(([sec, lat, lng, acc]) => {
+          if (Math.abs(lat) > 9e6 || Math.abs(lng) > 18e6 || sec < now - 3 * 86400 || sec > now + 600) return;
+          slot(vnDay(sec), x.id).pts.push([(sec + VN_SEC) % 86400, lat / 1e5, lng / 1e5, Math.max(0, acc)]);
+        });
+        const on = text(r.on) === '1' && now - (Date.parse(text(r.upd)) / 1000 || 0) < 20 * 60;
+        if (on || docs[vnDay(now) + '|' + x.id]) slot(vnDay(now), x.id).on = on;
+      });
+      let added = 0;
+      for (const { d, id, pts: fresh, on } of Object.values(docs)) {
+        const r = ref.track(d, id);
+        let old;
+        try { old = docData(await r.get()) || {}; } catch (e) { throw dbError(e); }
+        const m = new Map((old.pts || []).map(p => [p[0], p]));
+        const before = m.size;
+        fresh.forEach(p => m.set(p[0], p));
+        if (m.size === before && !!old.on === on) continue;
+        added += m.size - before;
+        let pts = Array.from(m.values()).sort((a, b) => a[0] - b[0]);
+        while (pts.length > TRACK_MAX) pts = pts.filter((p, i) => i % 2 === 0 || i === pts.length - 1);
+        const dv = drv[id];
+        await write(() => r.set({ date: d, driver: id, name: dv.name || dv.nick || '', pts, live: old.live || '', liveAt: old.liveAt || '', on, at: nowStr(), gps: 'gps-an-tam' }));
+      }
+      await mergeInto(ref.gps(), { sync: { mod: text(body.mod), at: nowStr() } }, { url: '', t: {} });
+      return { ok: true, added, docs: Object.keys(docs).length };
+    }
+    if (action === 'url') {
+      const url = text(body.url);
+      if (url && !(/^https:\/\/[^\s"'<>?#]+$/.test(url) && url.length < 400)) throw new ApiError(400, 'Link trang GPS phải bắt đầu bằng https:// (link "Ứng dụng web" …/exec của Apps Script, không kèm dấu ?)');
+      await mergeInto(ref.gps(), { url }, { t: {} });
+      await log('Đặt link trang GPS An Tâm', url, '', 'TP');
+      return { ok: true };
+    }
+    const id = text(body.id), d = drv[id];
+    if (!d) throw new ApiError(404, 'Không tìm thấy tài khoản giao hàng');
+    const patch = {};
+    live(g.t).forEach(([tok, x]) => { if (x.id === id) patch[tok] = null; }); // mỗi người 1 link: link cũ hết hiệu lực
+    if (action === 'link') {
+      if (!g.url) throw new ApiError(400, 'Chưa có link trang GPS – dán link "Ứng dụng web" của Apps Script ở ô phía trên trước');
+      const tok = randHex(12);
+      patch[tok] = { id, name: d.name || d.nick, at: nowStr() };
+      await mergeInto(ref.gps(), { t: patch }, { url: '', t: {} });
+      await log('Tạo link GPS cho người giao', d.nick, '', 'TP');
+      return { ok: true, link: gpsLink(g.url, tok, d.name || d.nick) };
+    }
+    if (action === 'unlink') {
+      if (Object.keys(patch).length) await mergeInto(ref.gps(), { t: patch }, { url: '', t: {} });
+      await log('Bỏ link GPS của người giao', d.nick, '', 'TP');
+      return { ok: true };
+    }
+    throw new ApiError(404, 'Không có chức năng này');
+  }
   async function tracksOf(d) {
     if (VIEW) return [];
     const ids = Object.keys(drivers());
@@ -949,7 +1044,10 @@ const Backend = (() => {
       const d = validDate(method === 'GET' ? q.date || today() : body.date), r = ref.track(d, id);
       let old;
       try { old = docData(await r.get()) || {}; } catch (e) { throw dbError(e); }
-      if (method === 'GET') return { n: (old.pts || []).length, last: (old.pts || []).slice(-1)[0] || null, live: old.live || '', on: !!old.on };
+      if (method === 'GET') {
+        const g = await gpsCfg().catch(() => ({}));
+        return { n: (old.pts || []).length, last: (old.pts || []).slice(-1)[0] || null, live: old.live || '', on: !!old.on, gps: gpsLink(g.url, gpsTokOf(g, id), me.name || me.nick) };
+      }
       if (method !== 'POST') throw new ApiError(405, 'Sai phương thức');
       const rec = mergeTrack(old, body, d, id, me);
       await write(() => r.set(rec));
@@ -1539,6 +1637,7 @@ const Backend = (() => {
         return { ok: true };
       }
     }
+    if (res === 'gps') { if (method !== 'GET') must(me, 'taixe', 'quản lý tài khoản giao hàng'); return gpsApi(method, arg, body || {}); }
     if (res === 'deliveries' && method === 'GET') return deliveriesOf(validDate(q.date));
     if (res === 'locations' && method === 'GET') return locationsAll();
     if (res === 'tracks' && method === 'GET') return tracksOf(validDate(q.date));

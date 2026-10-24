@@ -141,6 +141,10 @@ Người giao hàng xem **tuyến đã được sắp của từng ngày** (lấ
   **■ Dừng chia sẻ** / đăng xuất là tắt. Đang chia sẻ thì bấm **Đã giao** lấy luôn vị trí mới nhất.
   Khi trang không đọc được định vị (bản trên claude.ai), người giao bấm **🔗 Gửi link vị trí trực tiếp Google Maps**: trong app
   Google Maps → ảnh đại diện → **Chia sẻ vị trí** → *Cho đến khi bạn tắt* → **Sao chép** → dán vào ô – kho bấm link là thấy xe đang ở đâu.
+- **🛰 GPS An Tâm** (đọc GPS thật cho bản trên claude.ai): trang nhỏ chạy bằng Google Apps Script, ghi điểm GPS vào Google Sheet
+  "GPS An Tâm"; khi chủ trang mở mục Người giao & kết quả giao, trang đọc Sheet qua Google Drive mỗi phút và gộp vào hành trình. Quản lý ở Giao hàng An Tâm › **Người giao & kết quả giao › 🛰 GPS An Tâm**
+  (dán link …/exec của Apps Script, **Tạo link** riêng cho từng người – lưu ở `config/gps`); người giao thấy nút **🛰 Mở GPS An Tâm**
+  trên thẻ Chia sẻ hành trình. Cách cài và mã nguồn: [`gps-an-tam/`](gps-an-tam/README.md).
 - Kho xem ở **Tài khoản giao hàng › 🛰 Hành trình giao hàng** (chọn ngày, người giao; tự cập nhật mỗi phút): mỗi người có
   sơ đồ đường đi GPS + các khách đánh số theo thứ tự giao (xanh đã giao, đỏ không giao được), giờ bắt đầu → kết thúc, số km,
   các chỗ dừng ≥ 10 phút, nút **📍 Vị trí mới nhất**, **🔗 Vị trí trực tiếp**, **🗺 Xem đường đi trên Google Maps**. Không có

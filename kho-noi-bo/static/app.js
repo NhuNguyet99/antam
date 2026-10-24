@@ -15,6 +15,46 @@ const GIAO_APP = !!window.ANTAM_GIAO_APP;
 // Bản online của web kho: link trang Giao hàng An Tâm – phân tuyến làm ở web kho rồi "Gửi sang" trang đó cho người giao
 const GIAO_URL = window.ANTAM_GIAO_URL || '';
 const GIAO_LINKED = ONLINE && !VIEW && !GIAO_APP && !!GIAO_URL;
+// Trang GPS An Tâm (đọc GPS điện thoại ngoài claude.ai): quản lý link ở trang có hành trình – Giao hàng An Tâm (hoặc web kho chưa tách trang giao)
+const GPS_HERE = ONLINE && !VIEW && !GIAO_LINKED;
+// Google Sheet "GPS An Tâm" (trang GPS ghi vào) – trang đọc qua kết nối Google Drive của người xem (chủ trang)
+const GPS_SHEET = '1icIATdG_hZxIv3MCkEJh1Gv3Bk0Uv_mCMiAO90OOF80';
+const GPS_DRIVE = 'Google Drive';
+const GPS_ERR = {
+  server_not_connected: 'Tài khoản đang xem chưa kết nối Google Drive (claude.ai › Cài đặt › Kết nối) – GPS chỉ đọc được khi chủ trang mở mục này.',
+  selection_required: 'Có nhiều kết nối Google Drive – chọn một ở hộp thoại claude.ai rồi bấm Đọc GPS ngay.',
+  needs_reauth: 'Kết nối Google Drive đã hết hạn – kết nối lại ở claude.ai › Cài đặt › Kết nối.',
+  not_in_manifest: 'Chưa cho phép trang dùng Google Drive – bấm Đọc GPS ngay để cho phép.',
+  approval_required: 'Chưa cho phép trang dùng Google Drive – bấm Đọc GPS ngay để cho phép.',
+  blocked_by_policy: 'Tổ chức đang chặn trang dùng Google Drive.',
+  tool_error: 'Google Drive không mở được Sheet "GPS An Tâm" (tài khoản Google này không có quyền xem Sheet?).',
+};
+// Đọc Sheet GPS An Tâm (chỉ khi Sheet đổi) rồi gộp vào hành trình. ask: người dùng bấm nút → được hỏi quyền Google Drive
+async function gpsPull(ask) {
+  if (!GPS_HERE || gpsPull.busy) return null;
+  gpsPull.busy = true;
+  try {
+    const mcp = await claude.use('mcp');
+    if (!mcp) return (gpsPull.last = { err: 'Trang này chưa dùng được Google Drive.' });
+    if (!ask) {
+      const perm = await claude.use('permissions');
+      const stt = perm ? await perm.state('mcp:' + GPS_DRIVE).catch(() => 'unavailable') : 'unavailable';
+      if (stt !== 'granted') return (gpsPull.last = { err: stt === 'denied' ? GPS_ERR.not_in_manifest : 'Bấm Đọc GPS ngay (lần đầu claude.ai hỏi cho phép dùng Google Drive).', wait: true });
+    }
+    const meta = (await mcp.callTool(GPS_DRIVE, 'get_file_metadata', { fileId: GPS_SHEET, excludeContentSnippets: true }, { cache: false })).payload || {};
+    if (!ask && meta.modifiedTime && meta.modifiedTime === gpsPull.mod) return (gpsPull.last = Object.assign({}, gpsPull.last, { err: '', at: Date.now() }));
+    const dl = (await mcp.callTool(GPS_DRIVE, 'download_file_content', { fileId: GPS_SHEET, exportMimeType: 'text/csv' }, { cache: false })).payload || {};
+    const csv = new TextDecoder().decode(Uint8Array.from(atob(String(dl.content || '')), c => c.charCodeAt(0)));
+    const [head, ...rows] = tableFromText(csv.replace(/^\ufeff/, ''));
+    const col = k => (head || []).indexOf(k);
+    const out = rows.filter(r => r[col('ma')]).map(r => ({ tok: r[col('ma')], upd: r[col('cap_nhat')], on: r[col('bat')], diem: r[col('diem')] }));
+    const res = await api('POST', '/gps/sync', { mod: meta.modifiedTime || '', rows: out });
+    gpsPull.mod = meta.modifiedTime;
+    return (gpsPull.last = { err: '', at: Date.now(), added: res.added, total: (gpsPull.last && gpsPull.last.total || 0) + res.added });
+  } catch (e) {
+    return (gpsPull.last = { err: GPS_ERR[e && e.code] || ('Chưa đọc được GPS: ' + ((e && (e.code || e.message)) || e) + ' – thử lại sau.') });
+  } finally { gpsPull.busy = false; }
+}
 const WH_LABEL = { TP: 'Kho thành phẩm - hàng hóa', NVL: 'Kho nguyên vật liệu' };
 const TYPE_LABEL = { N: 'Nhập', X: 'Xuất', D: 'Điều chỉnh' };
 const TYPE_PREFIX = { N: 'PNK', X: 'PXK', D: 'DCK' };
@@ -2090,6 +2130,7 @@ async function viewDrivers(main) {
         <td>${x.active ? '<span class="badge ok">Đang dùng</span>' : '<span class="badge warn">Đã khóa</span>'}</td>
         <td>${GIAO_APP ? '' : `<button class="btn sm danger" data-del="${esc(x.id)}">Xóa</button>`}</td></tr>`).join('')}</tbody></table></div>`
       : '<p class="muted">Chưa có tài khoản giao hàng nào.</p>'}
+      ${GPS_HERE ? '<div class="card" style="margin-top:16px" id="g-gps"><h3>🛰 GPS An Tâm – đọc GPS điện thoại người giao</h3><p class="muted">Đang tải…</p></div>' : ''}
       ${GIAO_LINKED ? '' : `<div class="card" style="margin-top:16px"><h3>Kết quả giao hàng theo ngày</h3>
         <div class="toolbar"><label class="field">Ngày<input type="date" id="g-date" value="${res.date}"></label>
         <label class="field">Người giao<select id="g-who">${options([['', 'Tất cả']].concat((S.meta.drivers || []).map(x => [x.id, x.name || x.nick])), res.who)}</select></label>
@@ -2098,18 +2139,21 @@ async function viewDrivers(main) {
         <p class="hint">Ảnh do người giao chụp lúc giao (có ghi giờ, mã khách trên ảnh); "vị trí lúc giao" là định vị điện thoại khi bấm Đã giao. Bấm ảnh để xem lớn.</p></div>
         <div class="card" style="margin-top:16px"><h3>🛰 Hành trình giao hàng</h3>
         <div id="g-jr"><p class="muted">Đang tải…</p></div>
-        <p class="hint">Người giao bấm <b>🛰 Bật chia sẻ hành trình</b> trên web giao hàng (giữ web mở trong lúc đi giao) – đường đi GPS hiện ở đây, tự cập nhật mỗi phút.
+        <p class="hint">${GPS_HERE ? 'Người giao mở <b>trang GPS An Tâm</b> (link riêng ở mục 🛰 GPS An Tâm phía trên) và bấm Bật GPS – đường đi GPS hiện ở đây khi chủ trang mở mục này (đọc lại mỗi phút).'
+          : 'Người giao bấm <b>🛰 Bật chia sẻ hành trình</b> trên web giao hàng (giữ web mở trong lúc đi giao) – đường đi GPS hiện ở đây, tự cập nhật mỗi phút.'}
         Điện thoại không cho trang đọc định vị thì người giao gửi <b>link Chia sẻ vị trí của Google Maps</b> (nút 🔗 Vị trí trực tiếp), và đường đi được vẽ theo thứ tự các khách đã giao
         (vị trí lúc giao, hoặc vị trí khách đã lưu). Số trong vòng tròn = thứ tự giao: xanh đã giao, đỏ không giao được.</p></div>`}`;
     if (!GIAO_LINKED) {
       $('#g-date').onchange = () => { res.date = $('#g-date').value; loadRes(); };
       $('#g-who').onchange = () => { res.who = $('#g-who').value; drawRes(); drawJourney(); };
       $('#g-reload').onclick = () => loadRes();
-      loadRes();
+      const tick = async () => { if (GPS_HERE) { await gpsPull(); gpsStatus(); } loadRes(true); };
+      loadRes(); if (GPS_HERE) gpsPull().then(r => { gpsStatus(); if (r && r.added) loadRes(true); });
       clearInterval(viewDrivers.timer);
-      viewDrivers.timer = setInterval(() => { if (!$('#g-jr')) return clearInterval(viewDrivers.timer); if (!document.hidden && !$('.modal')) loadRes(true); }, 60000);
+      viewDrivers.timer = setInterval(() => { if (!$('#g-jr')) return clearInterval(viewDrivers.timer); if (!document.hidden && !$('.modal')) tick(); }, 60000);
     }
     if (!GIAO_APP) $('#g-add').onclick = () => edit(null);
+    if (GPS_HERE) drawGps();
     $('#g-open').onclick = () => openGiaoHang();
     if (!GIAO_APP) $$('tr[data-id]', main).forEach(tr => tr.onclick = e => { if (!e.target.closest('button')) edit(S.meta.drivers.find(x => x.id === tr.dataset.id)); });
     $$('[data-del]', main).forEach(b => b.onclick = async () => {
@@ -2120,6 +2164,58 @@ async function viewDrivers(main) {
     $$('[data-copy]', main).forEach(btn => btn.onclick = async () => {
       try { await navigator.clipboard.writeText(btn.dataset.copy); toast('Đã sao chép ' + btn.dataset.copy); }
       catch (e) { toast('Hãy tự bôi đen và sao chép: ' + btn.dataset.copy); }
+    });
+  }
+  function gpsStatus() {
+    const el = $('#gps-st'); if (!el) return;
+    const L = gpsPull.last;
+    el.className = 'small ' + (L && L.err && !L.wait ? 'neg' : 'muted');
+    el.textContent = !L ? 'Chưa đọc GPS lần nào trong lúc mở trang.' : L.err ? L.err
+      : `Đọc GPS lúc ${new Date(L.at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' })}${L.total ? ` · đã thêm ${L.total} điểm từ lúc mở trang` : ''} – tự đọc lại mỗi phút.`;
+  }
+  // GPS An Tâm: trang claude.ai không đọc được GPS điện thoại → người giao mở trang GPS riêng (Google Apps Script) bằng link có mã của mình
+  async function drawGps() {
+    const box = $('#g-gps');
+    const g = await guard(() => api('GET', '/gps'));
+    if (!box || !document.body.contains(box) || !g) return;
+    const list = (S.meta.drivers || []).filter(x => x.active).sort((a, b) => a.nick.localeCompare(b.nick));
+    box.innerHTML = `<h3>🛰 GPS An Tâm – đọc GPS điện thoại người giao</h3>
+      <p class="small" style="margin-top:0">Trang trên claude.ai không được đọc GPS điện thoại, nên mỗi người giao mở thêm <b>trang GPS An Tâm</b> bằng link riêng của mình,
+      bấm <b>▶ Bật GPS</b> và để trang mở trong lúc đi giao. Điểm GPS ghi vào Google Sheet "GPS An Tâm"; khi <b>chủ trang</b> mở mục này, trang đọc Sheet qua
+      Google Drive mỗi phút và vẽ vào <b>🛰 Hành trình giao hàng</b> bên dưới (Sheet giữ điểm GPS 24 giờ, nên mở trang lúc nào cũng đủ đường đi).
+      Người giao cũng thấy nút <b>🛰 Mở GPS An Tâm</b> ngay trên web giao hàng sau khi đăng nhập.</p>
+      <div class="toolbar" style="align-items:center"><button class="btn" id="gps-pull">↻ Đọc GPS ngay</button><span class="small" id="gps-st"></span></div>
+      <div class="toolbar"><label class="field grow">Link trang GPS (link "Ứng dụng web" …/exec của Apps Script)<input id="gps-url" value="${esc(g.url)}" placeholder="https://script.google.com/macros/s/…/exec"></label>
+      <button class="btn" id="gps-url-save">Lưu link</button></div>
+      ${g.url ? `<div class="table-wrap"><table class="data"><thead><tr><th>Người giao</th><th>Link GPS riêng</th><th></th></tr></thead><tbody>
+        ${list.map(x => { const L = g.links[x.id]; return `<tr><td><b>${esc(x.nick)}</b> ${esc(x.name)}</td>
+          <td class="small">${L ? `<code style="word-break:break-all">${esc(L.link)}</code><div class="muted">tạo lúc ${esc(L.at)}</div>` : '<span class="muted">chưa có</span>'}</td>
+          <td class="nowrap">${L ? `<button class="btn sm" data-gcopy="${esc(L.link)}">Sao chép</button> ` : ''}<button class="btn sm ${L ? '' : 'primary'}" data-glink="${esc(x.id)}">${L ? 'Đổi link' : 'Tạo link'}</button>
+          ${L ? ` <button class="btn sm danger" data-gunlink="${esc(x.id)}">Bỏ link</button>` : ''}</td></tr>`; }).join('') || '<tr><td colspan="3" class="muted">Chưa có tài khoản giao hàng đang dùng.</td></tr>'}
+        </tbody></table></div><p class="hint">Mỗi người 1 link; bấm <b>Đổi link</b> khi lỡ gửi nhầm người – link cũ hết hiệu lực. Gửi link qua Zalo cho đúng người giao.</p>`
+      : '<div class="callout small">Chưa có link trang GPS. Làm theo hướng dẫn cài trang GPS An Tâm (Google Sheet "GPS An Tâm" → Apps Script → Triển khai ứng dụng web) rồi dán link …/exec vào ô trên.</div>'}`;
+    gpsStatus();
+    $('#gps-pull', box).onclick = async () => {
+      const b = $('#gps-pull', box); b.disabled = true; $('#gps-st', box).textContent = 'Đang đọc Sheet GPS…';
+      const r = await gpsPull(true); b.disabled = false; gpsStatus();
+      if (r && !r.err) { toast(r.added ? `Đã thêm ${r.added} điểm GPS vào hành trình` : 'Đã đọc GPS – không có điểm mới'); loadRes(true); }
+    };
+    $('#gps-url-save', box).onclick = () => guard(async () => {
+      const url = $('#gps-url', box).value.trim().replace(/[?#].*$/, '');
+      await api('POST', '/gps/url', { url }); toast('Đã lưu link trang GPS'); drawGps();
+    });
+    $$('[data-glink]', box).forEach(b => b.onclick = async () => {
+      const r = await guard(() => api('POST', '/gps/link', { id: b.dataset.glink }));
+      if (!r) return;
+      try { await navigator.clipboard.writeText(r.link); toast('Đã tạo và sao chép link GPS'); } catch (e) { toast('Đã tạo link GPS'); }
+      drawGps();
+    });
+    $$('[data-gunlink]', box).forEach(b => b.onclick = async () => {
+      if (!(await ask('Bỏ link GPS của người này? Trang GPS đang mở trên điện thoại họ sẽ không còn được ghi vào hành trình.'))) return;
+      if (await guard(() => api('POST', '/gps/unlink', { id: b.dataset.gunlink }))) { toast('Đã bỏ link'); drawGps(); }
+    });
+    $$('[data-gcopy]', box).forEach(b => b.onclick = async () => {
+      try { await navigator.clipboard.writeText(b.dataset.gcopy); toast('Đã sao chép link GPS'); } catch (e) { toast('Hãy tự bôi đen và sao chép link'); }
     });
   }
   function edit(x) {

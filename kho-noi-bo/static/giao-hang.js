@@ -569,8 +569,12 @@ const GiaoHang = (() => {
       <li>Chọn thời gian <b>Cho đến khi bạn tắt</b> → chọn <b>Sao chép</b> (hoặc Chia sẻ qua đường liên kết)</li><li>Quay lại đây, dán link vào ô dưới – web tự gửi cho kho</li></ol>`;
     return `<section class="gh-card gh-trk ${trk.on ? 'on' : ''}" id="gh-trk">
       <div class="gh-trk-head"><h3>🛰 Chia sẻ hành trình</h3><span class="gh-trk-st" id="gh-trk-st">${esc(trkStatusText())}</span></div>
+      ${I.gps && !trk.on ? `<a class="gh-btn primary big" href="${esc(I.gps)}" target="_blank" rel="noopener">🛰 Mở GPS An Tâm (đọc GPS điện thoại)</a>
+        <p class="gh-muted gh-small">Trang GPS riêng của bạn: bấm <b>▶ Bật GPS</b>, điện thoại hỏi quyền <b>Vị trí</b> → <b>Cho phép</b>. Để trang đó mở trong lúc đi giao
+        (màn hình sáng) – kho thấy đường đi của bạn. Vẫn bấm <b>Đã giao</b> ở trang này như bình thường.</p>` : ''}
       ${trk.on ? `<button class="gh-btn danger" data-trk="stop">■ Dừng chia sẻ</button>
         <p class="gh-muted gh-small">Giữ web này mở trên điện thoại trong lúc giao (nên để màn hình sáng) – kho thấy đường đi và vị trí của bạn.</p>`
+      : st.gpsBlocked && I.gps ? ''
       : st.gpsBlocked ? `<p class="gh-muted gh-small">Trang này chưa đọc được định vị điện thoại. Gửi <b>link Chia sẻ vị trí</b> của Google Maps để kho thấy bạn đang ở đâu;
         đường đi trong ngày ghi theo thứ tự các khách bạn bấm <b>Đã giao</b>. <button class="gh-linkbtn" data-trk="start">Thử bật GPS lại</button></p>`
       : `<button class="gh-btn primary" data-trk="start">▶ Bật chia sẻ hành trình</button>

@@ -1,0 +1,134 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+<base target="_top">
+<meta charset="utf-8">
+<style>
+  :root { --brand: #13804b; --bad: #c4320a; --ink: #1d2939; --muted: #667085; --line: #d0d5dd; --soft: #f5f7f6; }
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 16px/1.45 system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; color: var(--ink); background: #fff; }
+  header { background: var(--brand); color: #fff; padding: 16px; }
+  header b { font-size: 19px; display: block; }
+  header span { font-size: 13px; opacity: .9; }
+  main { padding: 16px; max-width: 520px; margin: 0 auto; }
+  .card { border: 1px solid var(--line); border-radius: 14px; padding: 14px; margin-bottom: 14px; }
+  .st { font-weight: 700; display: flex; align-items: center; gap: 8px; }
+  .dot { width: 11px; height: 11px; border-radius: 50%; background: #98a2b3; flex: none; }
+  .on .dot { background: var(--brand); box-shadow: 0 0 0 5px rgba(19,128,75,.18); }
+  .row { display: flex; justify-content: space-between; gap: 10px; font-size: 14px; padding: 4px 0; }
+  .row span { color: var(--muted); }
+  button { font: inherit; width: 100%; border: 0; border-radius: 14px; padding: 17px; font-size: 18px; font-weight: 700; color: #fff; cursor: pointer; }
+  .start { background: var(--brand); } .stop { background: var(--bad); }
+  .note { font-size: 13.5px; color: var(--muted); background: var(--soft); border-radius: 12px; padding: 12px; }
+  .note b { color: var(--ink); }
+  .err { color: var(--bad); font-size: 14px; margin: 10px 0 0; }
+</style>
+</head>
+<body>
+<header><b>🛰 GPS An Tâm</b><span id="who"></span></header>
+<main id="app"></main>
+<script>
+  /* Người giao mở link riêng (…/exec?t=mã&n=tên) → bấm Bật GPS → để trang mở trong lúc đi giao.
+     Ghi 1 điểm khi đi được ≥ 30 m (cách điểm trước ≥ 20 giây) hoặc đứng yên mỗi 5 phút; gửi về mỗi phút; mất mạng thì giữ lại gửi sau. */
+  const CFG = <?!= cfg ?>;
+  const KEY = 'gpsAT.' + CFG.t;
+  const S = { on: false, watch: null, buf: [], last: null, fix: null, err: '', sentAt: 0, sending: false, lock: null, day: '', n: 0, km: 0, timer: null };
+  const $ = id => document.getElementById(id);
+  const z = n => String(n).padStart(2, '0');
+  const hm = ms => { const d = new Date(ms); return z(d.getHours()) + ':' + z(d.getMinutes()); };
+  const today = () => { const d = new Date(); return d.getFullYear() + '-' + z(d.getMonth() + 1) + '-' + z(d.getDate()); };
+  function load() { try { return JSON.parse(localStorage.getItem(KEY)) || {}; } catch (e) { return {}; } }
+  function keep() { try { localStorage.setItem(KEY, JSON.stringify({ on: S.on, buf: S.buf.slice(-3000), day: S.day, n: S.n, km: S.km, last: S.last })); } catch (e) { /* bỏ qua */ } }
+  function meters(a, b) {
+    const R = 6371000, r = x => x * Math.PI / 180;
+    const h = Math.sin(r(b[1] - a[1]) / 2) ** 2 + Math.cos(r(a[1])) * Math.cos(r(b[1])) * Math.sin(r(b[2] - a[2]) / 2) ** 2;
+    return 2 * R * Math.asin(Math.sqrt(h));
+  }
+  function call(body) {
+    return new Promise((ok, bad) => google.script.run.withSuccessHandler(ok).withFailureHandler(bad).save(body));
+  }
+
+  function draw() {
+    $('who').textContent = (CFG.n || 'Người giao') + ' · ' + new Date().toLocaleDateString('vi-VN', { weekday: 'long', day: '2-digit', month: '2-digit' });
+    if (!CFG.t) {
+      $('app').innerHTML = '<div class="card"><b>Link GPS chưa đúng.</b><p class="note">Nhờ kho gửi lại link GPS riêng của bạn (Giao hàng An Tâm › Người giao &amp; kết quả giao › 🛰 GPS An Tâm).</p></div>';
+      return;
+    }
+    const f = S.fix;
+    $('app').innerHTML = `<div class="card ${S.on ? 'on' : ''}">
+        <div class="st"><span class="dot"></span>${S.on ? (f ? 'Đang gửi vị trí' : 'Đang bật GPS, chờ vị trí…') : 'GPS đang tắt'}</div>
+        <div class="row"><span>Vị trí mới nhất</span><b>${f ? hm(f.ts) + ' · ±' + Math.round(f.acc || 0) + ' m' : '—'}</b></div>
+        <div class="row"><span>Đã ghi hôm nay</span><b>${S.n} điểm · ${(S.km).toLocaleString('vi-VN', { maximumFractionDigits: 1 })} km</b></div>
+        <div class="row"><span>Gửi lên lần cuối</span><b>${S.sentAt ? hm(S.sentAt) : '—'}${S.buf.length ? ' · ' + S.buf.length + ' điểm chờ gửi' : ''}</b></div>
+      </div>
+      ${S.on ? '<button class="stop" id="btn">■ Tắt GPS (giao xong)</button>' : '<button class="start" id="btn">▶ Bật GPS</button>'}
+      ${S.err ? `<p class="err">${S.err}</p>` : ''}
+      <p class="note" style="margin-top:14px">📱 <b>Giữ trang này mở và màn hình sáng</b> trong lúc đi giao – tắt màn hình hoặc chuyển hẳn sang app khác lâu thì điện thoại ngừng đọc GPS.
+        Bấm <b>Đã giao</b> ở trang Giao hàng An Tâm như bình thường rồi quay lại trang này.<br>Mất sóng: vị trí được giữ lại và tự gửi khi có mạng.</p>`;
+    $('btn').onclick = () => (S.on ? stop() : start());
+  }
+
+  function start() {
+    S.err = '';
+    if (!navigator.geolocation) { S.err = 'Trình duyệt này không đọc được GPS – hãy mở link bằng Chrome (Android) hoặc Safari (iPhone).'; return draw(); }
+    S.on = true; S.last = null; keep();
+    S.watch = navigator.geolocation.watchPosition(onFix, onErr, { enableHighAccuracy: true, maximumAge: 10000, timeout: 60000 });
+    clearInterval(S.timer); S.timer = setInterval(flush, 60000);
+    awake(); flush({ on: true }); draw();
+  }
+  function stop() {
+    S.on = false;
+    if (S.watch != null) navigator.geolocation.clearWatch(S.watch);
+    S.watch = null; clearInterval(S.timer); S.timer = null;
+    if (S.lock) { S.lock.release().catch(() => {}); S.lock = null; }
+    keep(); flush({ on: false }); draw();
+  }
+  function onFix(pos) {
+    if (!S.on) return;
+    const c = pos.coords, ts = Date.now();
+    S.fix = { lat: c.latitude, lng: c.longitude, acc: c.accuracy, ts }; S.err = '';
+    if (S.day !== today()) { S.day = today(); S.n = 0; S.km = 0; S.last = null; }
+    const p = [Math.round(ts / 1000), Math.round(c.latitude * 1e5) / 1e5, Math.round(c.longitude * 1e5) / 1e5, Math.round(c.accuracy || 0)];
+    const L = S.last;
+    if (L && c.accuracy > 150) return draw(); // tín hiệu yếu: bỏ qua
+    if (!L || (p[0] - L[0] >= 20 && meters(L, p) >= Math.max(30, c.accuracy || 0)) || p[0] - L[0] >= 300 || p[0] < L[0]) {
+      if (L && p[0] > L[0]) { const m = meters(L, p); if (m < 20000) S.km += m / 1000; }
+      S.buf.push(p); S.last = p; S.n++; keep();
+      if (S.buf.length >= 30) flush();
+    }
+    draw();
+  }
+  function onErr(e) {
+    if (e.code === 1) {
+      S.err = 'Điện thoại chưa cho trang đọc vị trí. Bật <b>Vị trí (GPS)</b> của điện thoại, rồi cho phép: Chrome – bấm biểu tượng bên trái thanh địa chỉ › Quyền › Vị trí › Cho phép; iPhone – Cài đặt › Quyền riêng tư › Dịch vụ định vị › Safari › Khi dùng ứng dụng. Xong bấm Bật GPS lại.';
+      stop();
+    } else { S.err = 'Chưa bắt được tín hiệu GPS – ra chỗ thoáng, trang vẫn đang chờ.'; draw(); }
+  }
+  async function flush(extra) {
+    if (S.sending || !CFG.t || (!S.buf.length && !extra)) return;
+    const pts = S.buf.splice(0, 600);
+    S.sending = true;
+    try {
+      await call(Object.assign({ t: CFG.t, n: CFG.n, pts }, extra || {}));
+      S.sentAt = Date.now(); if (/gửi được/.test(S.err)) S.err = '';
+    } catch (e) {
+      S.buf = pts.concat(S.buf).slice(-3000);
+      S.err = 'Chưa gửi được vị trí (mất mạng?) – trang sẽ tự gửi lại.' + (e && /Link GPS/.test(e.message) ? ' ' + e.message : '');
+    } finally { S.sending = false; keep(); draw(); }
+  }
+  async function awake() {
+    if (!S.on || S.lock || document.hidden || !('wakeLock' in navigator)) return;
+    try { S.lock = await navigator.wakeLock.request('screen'); S.lock.addEventListener('release', () => { S.lock = null; }); } catch (e) { S.lock = null; }
+  }
+  document.addEventListener('visibilitychange', () => { if (!S.on) return; if (document.hidden) flush(); else { awake(); flush(); } });
+  window.addEventListener('pagehide', () => { if (S.on) flush(); });
+
+  const was = load();
+  S.buf = Array.isArray(was.buf) ? was.buf : [];
+  if (was.day === today()) { S.day = was.day; S.n = was.n || 0; S.km = was.km || 0; S.last = was.last || null; }
+  draw();
+  if (was.on && CFG.t) start(); // mở lại trang lúc đang bật: tiếp tục
+  else if (S.buf.length) flush();
+</script>
+</body>
+</html>

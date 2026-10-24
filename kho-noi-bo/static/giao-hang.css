@@ -39,6 +39,7 @@ body.gh-mode #app { display: none !important; }
 .gh-btn.danger { background: var(--gh-bad); border-color: var(--gh-bad); color: #fff; font-weight: 600; }
 .gh-btn.ghost { background: transparent; border-color: transparent; color: var(--gh-muted); }
 .gh-btn.big { width: 100%; min-height: 48px; font-size: 16px; }
+a.gh-btn { display: flex; align-items: center; justify-content: center; text-align: center; text-decoration: none; box-sizing: border-box; }
 
 /* đăng nhập */
 .gh-login { padding: 40px 20px; max-width: 400px; margin: 0 auto; text-align: center; }
