@@ -381,20 +381,28 @@ const Backend = (() => {
   }
   // Duyệt phiếu điều chỉnh (giống server.py): me = [id, tài khoản] đang đăng nhập; null khi chưa dùng tài khoản nhân viên
   const APPROVAL_COLS = ['status', 'created_by', 'approved_by', 'approved_at', 'review_note', 'created_by_id'];
-  const lockedFor = (v, me) => v.type === 'D' && !v.status && me && !me[1].admin;
+  // Phân quyền tài khoản nhân viên kho: perm = danh sách quyền; chưa có thì theo vai trò cũ
+  // (Quản lý = tất cả; nhân viên = tất cả trừ duyệt phiếu điều chỉnh và quản lý tài khoản)
+  const STAFF_PERMS = ['khoTP', 'khoNVL', 'pN', 'pX', 'pD', 'xoa', 'duyet', 'phieu', 'baocao', 'kiemke', 'bangiao', 'kehoach', 'phantuyen', 'taixe', 'hang', 'tuyen', 'caidat', 'lichsu', 'taikhoan'];
+  const STAFF_NV = STAFF_PERMS.filter(k => k !== 'duyet' && k !== 'taikhoan');
+  const staffPerms = a => new Set(Array.isArray(a && a.perm) ? a.perm.filter(k => STAFF_PERMS.includes(k)) : a && a.admin ? STAFF_PERMS : STAFF_NV);
+  const may = (me, k) => !me || staffPerms(me[1]).has(k);
+  function must(me, k, what) { if (!may(me, k)) throw new ApiError(403, `Tài khoản của bạn chưa được cấp quyền ${what} – nhờ Quản lý phân quyền ở mục Tài khoản nhân viên.`); }
+  const DOC_PERM = { stocktake: ['kiemke', 'lưu biên bản kiểm kê'], handover: ['bangiao', 'lưu biên bản bàn giao'], routing: ['phantuyen', 'lưu phân tuyến giao hàng'] };
+  const lockedFor = (v, me) => v.type === 'D' && !v.status && me && !may(me, 'duyet');
   function approvalOf(old, type, me) {
     const cur = Object.fromEntries(APPROVAL_COLS.map(k => [k, (old && old[k]) || '']));
-    if (old && lockedFor(old, me)) throw new ApiError(403, `Phiếu điều chỉnh ${old.no} đã được duyệt – chỉ Quản lý sửa / xóa được`);
+    if (old && lockedFor(old, me)) throw new ApiError(403, `Phiếu điều chỉnh ${old.no} đã được duyệt – chỉ người có quyền duyệt phiếu sửa / xóa được`);
     if (!old) Object.assign(cur, { created_by: st.who || '', created_by_id: me ? me[0] : '' });
     if (type !== 'D' || !me) return Object.assign(cur, { status: '', review_note: '' });
-    if (me[1].admin) {
-      if (!old) Object.assign(cur, { approved_by: st.who || '', approved_at: nowStr() }); // Quản lý tự lập: duyệt luôn
+    if (may(me, 'duyet')) {
+      if (!old) Object.assign(cur, { approved_by: st.who || '', approved_at: nowStr() }); // người có quyền duyệt tự lập: duyệt luôn
       return cur;
     }
     return Object.assign(cur, { status: 'pending', approved_by: '', approved_at: '' }); // nhân viên lập / sửa: gửi (lại) Quản lý duyệt
   }
   async function reviewVoucher(id, ok, note, me) {
-    if (!me || !me[1].admin) throw new ApiError(403, 'Chỉ tài khoản Quản lý mới duyệt phiếu điều chỉnh');
+    if (!me || !may(me, 'duyet')) throw new ApiError(403, 'Tài khoản của bạn chưa được cấp quyền duyệt phiếu điều chỉnh');
     const v = voucherFull(id);
     if (v.type !== 'D') throw new ApiError(400, 'Chỉ phiếu điều chỉnh cần duyệt');
     if (ok && !v.status) throw new ApiError(400, `Phiếu ${v.no} đã được duyệt`);
@@ -480,7 +488,7 @@ const Backend = (() => {
   }
   async function deleteVoucher(id, me) {
     const v = voucherFull(id);
-    if (lockedFor(v, me)) throw new ApiError(403, `Phiếu điều chỉnh ${v.no} đã được duyệt – chỉ Quản lý sửa / xóa được`);
+    if (lockedFor(v, me)) throw new ApiError(403, `Phiếu điều chỉnh ${v.no} đã được duyệt – chỉ người có quyền duyệt phiếu sửa / xóa được`);
     await mergeInto(ref.day(v.wh, v.date), { v: { [id]: null } }, { date: v.date });
     applyLocalVoucher(v.wh, v.date, id, null);
     await log('Xóa phiếu', v.no, { 'trước': logSnap(v), id }, v.wh);
@@ -1067,7 +1075,7 @@ const Backend = (() => {
   async function staffApi(method, action, body, token) {
     const accounts = Object.fromEntries(live(settings().staff_accounts));
     const me = staffMe(token, accounts);
-    const pub = (id, a) => ({ id, user: a.user || '', name: a.name || '', admin: !!a.admin, active: a.active !== false });
+    const pub = (id, a) => ({ id, user: a.user || '', name: a.name || '', admin: staffPerms(a).has('taikhoan'), active: a.active !== false, perm: [...staffPerms(a)], custom: Array.isArray(a.perm) });
     const put = async (id, rec) => {
       await mergeInto(ref.settings(), { s: { staff_accounts: { [id]: rec } } }, { s: {} });
       st.settings = deepMerge(clone(st.settings || {}), { staff_accounts: { [id]: rec } });
@@ -1098,7 +1106,7 @@ const Backend = (() => {
     }
     // tạo / sửa / xóa: tài khoản Quản lý; lần đầu (chưa có tài khoản nào) ai cũng tạo được tài khoản Quản lý đầu tiên
     const n = Object.keys(accounts).length;
-    if (n && !(me && me[1].admin)) throw new ApiError(403, 'Chỉ tài khoản Quản lý mới tạo / sửa / xóa tài khoản');
+    if (n && !(me && may(me, 'taikhoan'))) throw new ApiError(403, 'Chỉ tài khoản có quyền quản lý tài khoản mới tạo / sửa / xóa / phân quyền tài khoản');
     if (method === 'POST') {
       const id = text(body.id) || newId('s');
       const user = normNick(body.user);
@@ -1106,16 +1114,21 @@ const Backend = (() => {
       if (Object.entries(accounts).some(([k, a]) => normNick(a.user) === user && k !== id)) throw new ApiError(409, `Tên đăng nhập ${user} đã có người dùng`);
       const old = accounts[id] || {};
       const rec = { user, name: text(body.name) || user, admin: !!body.admin || !n, active: body.active !== false, salt: old.salt || '', pw: old.pw || '' };
+      // phân quyền: danh sách quyền tích chọn; tài khoản đầu tiên có tất cả
+      if (Array.isArray(body.perm)) rec.perm = body.perm.map(text).filter(k => STAFF_PERMS.includes(k));
+      else if (Array.isArray(old.perm)) rec.perm = old.perm;
+      if (!n) rec.perm = STAFF_PERMS.slice();
+      if (rec.perm) rec.admin = rec.perm.includes('taikhoan');
       const pw = text(body.password);
       if (pw) {
         if (pw.length < 4 || pw.length > 40) throw new ApiError(400, 'Mật khẩu 4–40 ký tự');
         rec.salt = randHex(8); rec.pw = await pinHash(rec.salt, pw);
       }
       if (!rec.pw) throw new ApiError(400, 'Cần đặt mật khẩu cho tài khoản mới');
-      if (me && id === me[0] && (!rec.admin || !rec.active)) throw new ApiError(400, 'Không tự bỏ quyền Quản lý hoặc tự khóa tài khoản đang đăng nhập');
+      if (me && id === me[0] && (!staffPerms(rec).has('taikhoan') || !rec.active)) throw new ApiError(400, 'Không tự bỏ quyền quản lý tài khoản hoặc tự khóa tài khoản đang đăng nhập');
       await put(id, rec);
       if (!n) st.who = rec.name; // tài khoản đầu tiên: người tạo chính là người này
-      await log('Lưu tài khoản nhân viên', user, pw && old.pw ? 'đổi mật khẩu' : '');
+      await log('Lưu tài khoản nhân viên', user, [pw && old.pw ? 'đổi mật khẩu' : '', 'quyền: ' + [...staffPerms(rec)].join(', ')].filter(Boolean).join(' · '));
       const out = { account: pub(id, rec) };
       if (!n) out.token = tokenOf(id, rec); // tài khoản đầu tiên: đăng nhập luôn
       return out;
@@ -1191,10 +1204,13 @@ const Backend = (() => {
     // đã có tài khoản nhân viên: người chưa đăng nhập được coi như nhân viên thường (phiếu điều chỉnh phải chờ duyệt)
     const hasStaff = live(settings().staff_accounts).length > 0;
     const me = hasStaff ? (staffMe(opts.token || '') || ['', {}]) : null;
+    // phân quyền (khi web kho dùng tài khoản nhân viên): ghi vào kho nào cần quyền kho đó
+    if (me && method !== 'GET' && q.auto !== '1' && ['vouchers', 'products', 'routes', 'plans', 'docs', 'review'].includes(res)) must(me, 'kho' + wh, 'làm việc với ' + (wh === 'TP' ? 'kho thành phẩm' : 'kho nguyên vật liệu'));
     if (res === 'giao-sync') return giaoSync(method, q, body || {}, arg);
     if (res === 'dh-inbox') return dhInbox(method, body || {});
     if (res === 'drivers') {
       if (method === 'GET') return Object.entries(drivers()).map(([k, d]) => publicDriver(k, d));
+      must(me, 'taixe', 'quản lý tài khoản giao hàng');
       if (method === 'POST') return saveDriver(body || {});
       if (method === 'DELETE' && arg) {
         const d = drivers()[arg];
@@ -1230,6 +1246,7 @@ const Backend = (() => {
       };
     }
     if (res === 'settings' && method === 'PUT') {
+      must(me, 'caidat', 'sửa cài đặt');
       const cur = settings();
       const next = clone(st.settings || {});
       for (const [k, v] of Object.entries(body || {})) {
@@ -1246,6 +1263,7 @@ const Backend = (() => {
     }
 
     if (res === 'products') {
+      if (method !== 'GET') must(me, 'hang', 'sửa danh mục mặt hàng');
       if (method === 'POST') {
         const d = body || {};
         const code = text(d.code).toUpperCase().replace(/\s/g, '');
@@ -1298,6 +1316,7 @@ const Backend = (() => {
     }
 
     if (res === 'routes') {
+      if (method !== 'GET') must(me, 'tuyen', 'sửa tuyến / nơi nhận');
       if (method === 'POST') {
         const d = body || {};
         const name = text(d.name), code = text(d.code).replace(/\s/g, '');
@@ -1323,6 +1342,8 @@ const Backend = (() => {
       return { no: nextNumber(wh, q.type || 'N', validDate(q.date), q.route_code || '', q.exclude || null) };
     }
     if (res === 'vouchers') {
+      if (method === 'POST' || method === 'PUT') must(me, 'p' + text((body || {}).type), 'lập / sửa phiếu ' + (TYPE_LABEL[text((body || {}).type)] || '').toLowerCase());
+      if (method === 'DELETE') must(me, 'xoa', 'xóa phiếu');
       if (method === 'GET' && arg === 'full') {
         let ids;
         if (q.ids) ids = q.ids.split(',').filter(Boolean);
@@ -1377,6 +1398,7 @@ const Backend = (() => {
     }
 
     if (res === 'plans') {
+      if (method !== 'GET') must(me, 'kehoach', 'sửa kế hoạch mua');
       if (method === 'GET') return planRows(wh, q.from, q.to);
       if (method === 'POST') {
         const d = body || {};
@@ -1403,6 +1425,11 @@ const Backend = (() => {
     }
 
     if (res === 'docs') {
+      if (method !== 'GET') {
+        let kind = text((body || {}).kind);
+        if (!kind && arg) for (const w of WAREHOUSES) { const d = (st.docs[w] || {})[arg]; if (d) kind = d.kind; }
+        const dp = DOC_PERM[kind]; if (dp && !(q.auto === '1' && kind === 'routing')) must(me, dp[0], dp[1]);
+      }
       if (method === 'GET' && arg) {
         for (const w of WAREHOUSES) { const d = (st.docs[w] || {})[arg]; if (d) return Object.assign({ id: arg, wh: w }, clone(d)); }
         throw new ApiError(404, 'Không tìm thấy');
@@ -1433,6 +1460,7 @@ const Backend = (() => {
     }
 
     if (res === 'log' && method === 'GET') {
+      must(me, 'lichsu', 'xem lịch sử thao tác');
       if (VIEW) return [];
       const snap = await ref.logs().orderBy('date', 'desc').limit(31).get();
       const out = [];
@@ -1441,6 +1469,7 @@ const Backend = (() => {
     }
 
     if (res === 'import-backup' && method === 'POST') {
+      must(me, 'caidat', 'nhập dữ liệu');
       const snap = body || {};
       if (snap.format !== 'kho-antam-backup' || !snap.warehouses) throw new ApiError(400, "File không đúng: hãy dùng file 'Tải dữ liệu' (.json) của web Kho An Tâm");
       const summary = {};

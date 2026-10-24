@@ -1289,8 +1289,11 @@ def get_staff(con):
 
 
 def public_staff(sid, a):
-    return {"id": sid, "user": a.get("user", ""), "name": a.get("name", ""), "admin": bool(a.get("admin")),
-            "active": a.get("active", True) is not False}
+    out = {"id": sid, "user": a.get("user", ""), "name": a.get("name", ""), "admin": bool(a.get("admin")),
+           "active": a.get("active", True) is not False}
+    if isinstance(a.get("perm"), list):  # phân quyền từng tài khoản (giao diện tự kiểm tra; chưa có thì theo admin)
+        out["perm"] = a["perm"]
+    return out
 
 
 def _staff_sign(con, sid, a, exp):
@@ -1361,6 +1364,10 @@ def staff_api(con, method, action, body, token, who_fallback):
         old = accounts.get(sid) or {}
         rec = {"user": user, "name": text(body.get("name")) or user, "admin": bool(body.get("admin")) or not accounts,
                "active": body.get("active", True) is not False, "salt": old.get("salt", ""), "pw": old.get("pw", "")}
+        perm = body.get("perm") if isinstance(body.get("perm"), list) else old.get("perm")
+        if isinstance(perm, list) and accounts:
+            rec["perm"] = [text(x) for x in perm if text(x)]
+            rec["admin"] = "taikhoan" in rec["perm"]
         pw = text(body.get("password"))
         if pw:
             if not 4 <= len(pw) <= 40:

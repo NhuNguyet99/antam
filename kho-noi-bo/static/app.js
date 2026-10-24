@@ -18,6 +18,31 @@ const GIAO_LINKED = ONLINE && !VIEW && !GIAO_APP && !!GIAO_URL;
 const WH_LABEL = { TP: 'Kho thành phẩm - hàng hóa', NVL: 'Kho nguyên vật liệu' };
 const TYPE_LABEL = { N: 'Nhập', X: 'Xuất', D: 'Điều chỉnh' };
 const TYPE_PREFIX = { N: 'PNK', X: 'PXK', D: 'DCK' };
+// PHÂN QUYỀN tài khoản nhân viên kho (giống online/backend.js): mỗi tài khoản 1 danh sách quyền; chưa phân quyền thì theo vai trò cũ
+const KHO_PERMS = [
+  ['Kho được làm việc', [['khoTP', 'Kho thành phẩm – hàng hóa'], ['khoNVL', 'Kho nguyên vật liệu']]],
+  ['Phiếu nhập – xuất', [['pN', 'Lập / sửa phiếu nhập'], ['pX', 'Lập / sửa phiếu xuất'], ['pD', 'Lập / sửa phiếu điều chỉnh'], ['xoa', 'Xóa phiếu'], ['duyet', 'Duyệt phiếu điều chỉnh']]],
+  ['Xem & báo cáo', [['phieu', 'Danh sách phiếu, sổ nhập – xuất'], ['baocao', 'Nhập – Xuất – Tồn, thẻ kho']]],
+  ['Biên bản & kế hoạch', [['kiemke', 'Kiểm kê kho'], ['bangiao', 'Bàn giao kho'], ['kehoach', 'Kế hoạch mua (kho NVL)']]],
+  ['Giao hàng', [['phantuyen', 'Phân tuyến giao hàng'], ['taixe', 'Tài khoản giao hàng']]],
+  ['Danh mục & hệ thống', [['hang', 'Mặt hàng'], ['tuyen', 'Tuyến / nơi nhận'], ['caidat', 'Cài đặt & dữ liệu'], ['lichsu', 'Lịch sử thao tác'], ['taikhoan', 'Quản lý tài khoản & phân quyền']]],
+];
+const KHO_PERM_KEYS = KHO_PERMS.flatMap(([, l]) => l.map(x => x[0]));
+const KHO_PERM_LAB = Object.fromEntries(KHO_PERMS.flatMap(([, l]) => l));
+const KHO_ROLES = [['ql', 'Quản lý', KHO_PERM_KEYS], ['nv', 'Nhân viên kho', KHO_PERM_KEYS.filter(k => k !== 'duyet' && k !== 'taikhoan')],
+  ['tk', 'Thủ kho', ['khoTP', 'khoNVL', 'pN', 'pX', 'pD', 'xoa', 'phieu', 'baocao', 'kiemke', 'bangiao', 'kehoach', 'hang']], ['xem', 'Chỉ xem', ['khoTP', 'khoNVL', 'phieu', 'baocao']]];
+const permsOf = a => new Set(Array.isArray(a && a.perm) ? a.perm : a && a.admin ? KHO_PERM_KEYS : KHO_ROLES[1][2]);
+const can = k => !S.account || permsOf(S.account).has(k);
+const roleOfPerms = set => { const r = KHO_ROLES.find(([, , l]) => l.length === set.size && l.every(k => set.has(k))); return r ? r[1] : 'Tùy chỉnh'; };
+// mục trên menu → quyền cần có (một trong các quyền)
+const ROUTE_PERM = { 'phieu/moi': ['pN', 'pX', 'pD'], phieu: ['phieu', 'pN', 'pX', 'pD'], 'so-nx': ['phieu'], 'phan-tuyen': ['phantuyen'], 'kh-ngay': ['kehoach'], 'kh-tuan': ['kehoach'],
+  'kh-thang': ['kehoach'], nxt: ['baocao'], 'the-kho': ['baocao'], 'kiem-ke': ['kiemke'], 'ban-giao': ['bangiao'], hang: ['hang'], tuyen: ['tuyen'], 'giao-hang-tk': ['taixe'],
+  'cai-dat': ['caidat'], 'lich-su': ['lichsu'] };
+const routeOk = path => { const key = /^phieu\/moi/.test(path) ? 'phieu/moi' : path.split('/')[0]; const need = ROUTE_PERM[key]; return !need || need.some(can); };
+function applyPerms() {
+  $$('#nav a[data-route]').forEach(a => { a.hidden = !routeOk(a.dataset.route); });
+  $$('#wh-switch button').forEach(b => { b.hidden = !can('kho' + b.dataset.wh); });
+}
 const HANDOVER_REASONS = ['Bàn giao ca', 'Bàn giao thủ kho (nghỉ phép/nghỉ việc)', 'Bàn giao cuối ngày', 'Chuyển kho', 'Khác'];
 const ITEM_STATUS = ['Tốt', 'Hư hỏng', 'Móp/rách bao bì', 'Cận hạn sử dụng', 'Hết hạn'];
 
@@ -410,11 +435,14 @@ function parseHash() {
 async function render() {
   const { path, q } = parseHash();
   document.body.classList.remove('nav-open');
+  applyPerms();
+  if (S.account && !can('kho' + S.wh)) { const other = S.wh === 'TP' ? 'NVL' : 'TP'; if (can('kho' + other)) return switchWh(other); }
   $$('#nav a').forEach(a => {
     const r = a.dataset.route;
     a.classList.toggle('active', r === '' ? path === '' : (path === r || (path.startsWith(r + '/') && r !== 'phieu') || (r === 'phieu' && /^phieu\/(?!moi$)[\w-]+$/.test(path))));
   });
   const main = $('#main');
+  if (!routeOk(path)) { main.innerHTML = '<div class="callout warn">Tài khoản của bạn chưa được cấp quyền vào mục này – nhờ Quản lý phân quyền ở mục <b>Tài khoản nhân viên</b>.</div>'; return; }
   main.innerHTML = '<p class="muted">Đang tải…</p>';
   for (const [re, fn] of ROUTES) {
     const m = path.match(re);
@@ -487,8 +515,8 @@ async function viewDashboard(main) {
   const empty = !S.meta.products.length;
   const pend = S.account ? (await guard(() => api('GET', '/pending'))) || {} : {};
   main.innerHTML = `
-    ${pend.count ? `<div class="callout warn">⏳ <b>${pend.count} phiếu điều chỉnh ${S.account.admin ? 'chờ bạn duyệt' : 'đang chờ Quản lý duyệt'}</b> – chưa tính vào tồn kho.
-      <a class="btn sm ${S.account.admin ? 'primary' : ''}" href="#/phieu?status=pending">${S.account.admin ? 'Xem và duyệt' : 'Xem'}</a></div>` : ''}
+    ${pend.count ? `<div class="callout warn">⏳ <b>${pend.count} phiếu điều chỉnh ${can('duyet') ? 'chờ bạn duyệt' : 'đang chờ Quản lý duyệt'}</b> – chưa tính vào tồn kho.
+      <a class="btn sm ${can('duyet') ? 'primary' : ''}" href="#/phieu?status=pending">${can('duyet') ? 'Xem và duyệt' : 'Xem'}</a></div>` : ''}
     ${pend.rejected ? `<div class="callout warn">✖ <b>${pend.rejected} phiếu điều chỉnh bị từ chối</b> – người lập sửa lại rồi Lưu để gửi duyệt lại, hoặc xóa phiếu.
       <a class="btn sm" href="#/phieu?status=rejected">Xem</a></div>` : ''}
     ${empty ? `<div class="callout"><b>Bắt đầu với ${esc(S.meta.warehouse.name)}:</b> chưa có danh mục hàng. Vào <a href="#/cai-dat">Cài đặt &amp; dữ liệu</a> để
@@ -564,7 +592,7 @@ async function viewVoucherForm(main, m, q) {
       : { from: 'Bên giao (kho/bộ phận)', to: 'Bên nhận (kho/bộ phận)', giver: 'Người giao', receiver: 'Người nhận' };
   }
   // Duyệt phiếu điều chỉnh: chỉ khi web kho dùng tài khoản nhân viên
-  const isAdmin = !!(S.account && S.account.admin);
+  const isAdmin = !!(S.account && can('duyet')); // người có quyền duyệt phiếu điều chỉnh
   const locked = () => !!(editing && S.account && !isAdmin && v.type === 'D' && v.saved_type === 'D' && !v.status);
   v.saved_type = v.type;
   function approvalBox() {
@@ -598,8 +626,10 @@ async function viewVoucherForm(main, m, q) {
   function draw() {
     setTitle(editing ? `${VIEW ? 'Phiếu' : 'Sửa phiếu'} ${v.no}` : `Lập phiếu ${TYPE_LABEL[v.type].toLowerCase()} kho`);
     const L = labels();
-    main.innerHTML = `${approvalBox()}
-      <div class="toolbar"><div class="tabs" id="type-tabs">${['N', 'X', 'D'].map(t => `<button data-t="${t}" class="${v.type === t ? 'on' : ''}">${TYPE_PREFIX[t]} · ${TYPE_LABEL[t]}</button>`).join('')}</div>
+    if (!editing && !can('p' + v.type)) { const t = ['N', 'X', 'D'].find(x => can('p' + x)); if (t) v.type = t; }
+    const canSave = can('p' + v.type);
+    main.innerHTML = `${approvalBox()}${canSave ? '' : `<div class="callout">Chế độ xem – tài khoản của bạn chưa được cấp quyền lập / sửa phiếu ${TYPE_LABEL[v.type].toLowerCase()}.</div>`}
+      <div class="toolbar"><div class="tabs" id="type-tabs">${['N', 'X', 'D'].filter(t => can('p' + t) || t === v.type).map(t => `<button data-t="${t}" class="${v.type === t ? 'on' : ''}">${TYPE_PREFIX[t]} · ${TYPE_LABEL[t]}</button>`).join('')}</div>
         <div class="grow"></div>${editing ? `<span class="muted small">Tạo: ${esc(v.created_at || '')} · Sửa: ${esc(v.updated_at || '')}</span>` : ''}</div>
       <div class="card"><div class="grid c4">
         <label class="field">Ngày<input type="date" id="f-date" value="${esc(v.date)}"></label>
@@ -624,11 +654,11 @@ async function viewVoucherForm(main, m, q) {
         <span class="hint">&nbsp;Mẹo: gõ vài chữ của tên hàng (không dấu) rồi Enter; bấm Enter ở ô số lượng dòng cuối để thêm dòng mới.</span></div>
       </div>
       <div class="form-actions">
-        ${locked() ? '' : `<button class="btn primary" id="btn-save">💾 ${S.account && !isAdmin && v.type === 'D' ? 'Lưu &amp; gửi duyệt' : 'Lưu phiếu'}</button>
+        ${locked() || !canSave ? '' : `<button class="btn primary" id="btn-save">💾 ${S.account && !isAdmin && v.type === 'D' ? 'Lưu &amp; gửi duyệt' : 'Lưu phiếu'}</button>
         <button class="btn primary" id="btn-save-print">💾 Lưu &amp; In</button>`}
         ${editing ? '<button class="btn" id="btn-print">🖨 In phiếu</button>' : ''}
         <a class="btn" href="#/phieu/moi?type=${v.type}">+ Phiếu mới</a>
-        ${editing ? `<button class="btn" id="btn-copy">Sao chép thành phiếu mới</button>${locked() ? '' : '<button class="btn danger" id="btn-del">Xóa phiếu</button>'}` : ''}
+        ${editing ? `${canSave ? '<button class="btn" id="btn-copy">Sao chép thành phiếu mới</button>' : ''}${locked() || !can('xoa') ? '' : '<button class="btn danger" id="btn-del">Xóa phiếu</button>'}` : ''}
         <a class="btn ghost" href="#/phieu">← Danh sách phiếu</a>
       </div>`;
     bindHeader();
@@ -852,7 +882,7 @@ async function viewVoucherList(main, m, q = {}) {
         <td>${esc(v.route || v.to_party)}</td><td>${esc(v.reason)}</td><td class="num">${v.line_count}</td><td class="num">${fmt(v.total_qty)}</td>
         <td class="small">${esc(v.giver)}${v.receiver ? ' → ' + esc(v.receiver) : ''}</td>
         <td class="nowrap"><button class="btn sm" data-print="${v.id}">In</button></td></tr>`).join('')}
-      </tbody></table></div><p class="hint">${list.length} phiếu${f.status ? (f.status === 'pending' ? ' chờ duyệt (mọi ngày)' : ' bị từ chối (mọi ngày)') : ''}. Bấm vào dòng để xem${f.status === 'pending' && S.account && S.account.admin ? ' và duyệt' : ' / sửa'}.${S.account ? ' Phiếu chờ duyệt / bị từ chối chưa tính vào tồn kho.' : ''}</p>`
+      </tbody></table></div><p class="hint">${list.length} phiếu${f.status ? (f.status === 'pending' ? ' chờ duyệt (mọi ngày)' : ' bị từ chối (mọi ngày)') : ''}. Bấm vào dòng để xem${f.status === 'pending' && S.account && can('duyet') ? ' và duyệt' : ' / sửa'}.${S.account ? ' Phiếu chờ duyệt / bị từ chối chưa tính vào tồn kho.' : ''}</p>`
       : `<p class="muted">${f.status === 'pending' ? 'Không có phiếu điều chỉnh nào chờ duyệt.' : f.status === 'rejected' ? 'Không có phiếu bị từ chối.' : 'Không có phiếu nào trong khoảng này.'}</p>`;
     $$('#v-list tr[data-id]').forEach(tr => tr.onclick = e => {
       if (e.target.closest('input,button')) return;
@@ -2993,7 +3023,8 @@ async function pullDhInbox1() {
           // trang giao hàng: lưu như một bảng phân tuyến nhận từ kho (giữ tài khoản người giao, danh mục tuyến của trang)
           await api('POST', '/giao-sync', { format: 'antam-giao-sync', version: 1, at: text0(x.stamp), date: x.date, src: 'dong-hang:' + x.id, doc: { date: x.date, title: body.title, data: body.data } });
         } else {
-          const res = docId ? await api('PUT', '/docs/' + encodeURIComponent(docId) + '?wh=TP', body) : await api('POST', '/docs?wh=TP', body);
+          // tự nhận đơn từ web Đóng hàng: không phụ thuộc quyền của người đang mở trang
+          const res = docId ? await api('PUT', '/docs/' + encodeURIComponent(docId) + '?wh=TP&auto=1', body) : await api('POST', '/docs?wh=TP&auto=1', body);
           docId = res.id;
         }
         if (GIAO_LINKED) await api('POST', '/giao-sync/out?id=' + encodeURIComponent(docId)).catch(e => console.warn('giaoout', e));
@@ -3104,7 +3135,8 @@ function showStaffLogin(msg) {
 function accountMenu() {
   const { root, close } = openModal({
     title: '👤 ' + (S.account.name || S.account.user),
-    body: `<p class="small" style="margin-top:0">Tên đăng nhập: <b>${esc(S.account.user)}</b>${S.account.admin ? ' · <span class="badge ok">Quản lý</span>' : ''}</p>
+    body: `<p class="small" style="margin-top:0">Tên đăng nhập: <b>${esc(S.account.user)}</b> · <span class="badge ${S.account.admin ? 'ok' : ''}">${esc(roleOfPerms(permsOf(S.account)))}</span></p>
+      <p class="small muted">Quyền: ${[...permsOf(S.account)].map(k => esc(KHO_PERM_LAB[k] || k)).join(' · ')}</p>
       <div class="grid c2"><label class="field">Mật khẩu hiện tại<input id="ac-old" type="password" autocomplete="current-password"></label>
       <label class="field">Mật khẩu mới (4–40 ký tự)<input id="ac-new" type="password" autocomplete="new-password"></label></div>
       <div class="toolbar" style="margin-top:12px"><button class="btn" id="ac-pw">Đổi mật khẩu</button><button class="btn danger" id="ac-out">Đăng xuất</button></div>`,
@@ -3121,17 +3153,19 @@ function accountMenu() {
 async function viewStaff(main) {
   setTitle('Tài khoản nhân viên');
   let list = (await api('GET', '/staff')) || [];
-  const canEdit = !list.length || (S.account && S.account.admin);
+  const canEdit = !list.length || (S.account && can('taikhoan'));
   function draw() {
     list.sort((a, b) => (b.active - a.active) || (b.admin - a.admin) || a.user.localeCompare(b.user));
     main.innerHTML = `${canEdit ? '<div class="toolbar"><button class="btn primary" id="sa-add">+ Thêm tài khoản</button></div>' : ''}
       <div class="callout">Mỗi nhân viên kho đăng nhập bằng <b>tên đăng nhập + mật khẩu</b> riêng; phiếu, phân tuyến và <b>Lịch sử thao tác</b> ghi đúng tên người đăng nhập.
       ${list.length ? '' : '<br><b>Chưa có tài khoản nào</b> – tạo tài khoản đầu tiên (tự là <b>Quản lý</b>). Từ lúc đó mọi người vào web kho đều phải đăng nhập.'}
-      Chỉ tài khoản <b>Quản lý</b> được thêm / sửa / khóa / xóa tài khoản và đặt lại mật khẩu; ai cũng tự đổi được mật khẩu của mình (bấm tên ở góc trên phải).
+      Bấm vào tài khoản để <b>phân quyền</b>: chọn vai trò làm mẫu (Quản lý, Nhân viên kho, Thủ kho, Chỉ xem) rồi tích thêm / bỏ từng quyền – mục và nút không được cấp sẽ ẩn với người đó.
+      Chỉ tài khoản có quyền <b>Quản lý tài khoản</b> được thêm / sửa / khóa / xóa / phân quyền; ai cũng tự đổi được mật khẩu của mình (bấm tên ở góc trên phải).
       ${ONLINE ? '<br><span class="small">Bản online: đăng nhập giữ đúng tên người làm trên web; quyền xem / sửa trang vẫn do nút <i>Share</i> của claude.ai quyết định.</span>' : ''}</div>
-      ${list.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Tên đăng nhập</th><th>Họ tên</th><th>Quyền</th><th>Trạng thái</th><th></th></tr></thead><tbody>
+      ${list.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Tên đăng nhập</th><th>Họ tên</th><th>Vai trò</th><th>Quyền được cấp</th><th>Trạng thái</th><th></th></tr></thead><tbody>
       ${list.map(a => `<tr class="${canEdit ? 'clickable' : ''}" data-id="${esc(a.id)}" ${a.active ? '' : 'style="opacity:.55"'}><td><b>${esc(a.user)}</b>${S.account && S.account.id === a.id ? ' <span class="small muted">(bạn)</span>' : ''}</td><td>${esc(a.name)}</td>
-        <td>${a.admin ? '<span class="badge ok">Quản lý</span>' : 'Nhân viên'}</td><td>${a.active ? '<span class="badge ok">Đang dùng</span>' : '<span class="badge warn">Đã khóa</span>'}</td>
+        <td><span class="badge ${a.admin ? 'ok' : ''}">${esc(roleOfPerms(permsOf(a)))}</span></td>
+        <td class="small" style="max-width:420px">${permsOf(a).size === KHO_PERM_KEYS.length ? 'Tất cả' : [...permsOf(a)].map(k => esc(KHO_PERM_LAB[k] || k)).join(' · ') || '<span class="muted">(chưa có quyền nào)</span>'}</td><td>${a.active ? '<span class="badge ok">Đang dùng</span>' : '<span class="badge warn">Đã khóa</span>'}</td>
         <td>${canEdit && !(S.account && S.account.id === a.id) ? `<button class="btn sm danger" data-del="${esc(a.id)}">Xóa</button>` : ''}</td></tr>`).join('')}</tbody></table></div>` : ''}`;
     if (!canEdit) return;
     $('#sa-add').onclick = () => edit(null);
@@ -3143,29 +3177,38 @@ async function viewStaff(main) {
     });
   }
   function edit(a) {
-    const v = a || { id: '', user: '', name: '', admin: !list.length, active: true };
-    const first = !list.length;
-    openModal({
-      title: a ? 'Sửa tài khoản ' + a.user : (first ? 'Tạo tài khoản Quản lý đầu tiên' : 'Thêm tài khoản'),
+    const v = a || { id: '', user: '', name: '', admin: !list.length, active: true, perm: !list.length ? KHO_PERM_KEYS : KHO_ROLES[1][2] };
+    const first = !list.length, P = permsOf(v);
+    const m = openModal({
+      title: a ? 'Sửa tài khoản ' + a.user : (first ? 'Tạo tài khoản Quản lý đầu tiên' : 'Thêm tài khoản'), wide: true,
       body: `<div class="grid c2">
         <label class="field">Tên đăng nhập (không dấu, viết liền, vd <i>thukho.lan</i>)<input id="sa-user" value="${esc(v.user)}" autocapitalize="none"></label>
         <label class="field">Họ tên (ghi trên phiếu, lịch sử)<input id="sa-name" value="${esc(v.name)}"></label>
         <label class="field">${a ? 'Mật khẩu mới (để trống = giữ mật khẩu cũ)' : 'Mật khẩu (4–40 ký tự)'}<input id="sa-pw" type="password" autocomplete="new-password"></label>
         <div class="field" style="justify-content:flex-end;gap:8px">
-          <label class="check"><input type="checkbox" id="sa-admin" ${v.admin ? 'checked' : ''} ${first ? 'disabled' : ''}> Quản lý (quản lý tài khoản)</label>
           <label class="check"><input type="checkbox" id="sa-active" ${v.active ? 'checked' : ''} ${first ? 'disabled' : ''}> Đang dùng (bỏ chọn để khóa)</label></div></div>
+        <div style="margin-top:12px"><div class="toolbar" style="align-items:center"><b>Phân quyền</b>
+          <label class="field" style="flex-direction:row;align-items:center;gap:6px">Mẫu<select id="sa-role" ${first ? 'disabled' : ''}><option value="">— chọn mẫu —</option>${KHO_ROLES.map(([k, l]) => `<option value="${k}">${l}</option>`).join('')}</select></label>
+          <span class="small muted" id="sa-pst"></span></div>
+          <div class="perm-grid">${KHO_PERMS.map(([g, l]) => `<fieldset><legend>${esc(g)}</legend>${l.map(([k, t]) => `<label class="check"><input type="checkbox" data-perm="${k}" ${P.has(k) ? 'checked' : ''} ${first ? 'disabled' : ''}> ${esc(t)}</label>`).join('')}</fieldset>`).join('')}</div></div>
         ${first ? '<p class="hint">Sau khi tạo, bạn được đăng nhập luôn bằng tài khoản này; những người khác phải đăng nhập.</p>' : ''}`,
       onSave: async root => {
+        const perm = $$('[data-perm]', root).filter(i => i.checked).map(i => i.dataset.perm);
+        if (!first && !perm.some(k => k.startsWith('kho'))) throw new Error('Cần cấp ít nhất 1 kho (thành phẩm hoặc nguyên vật liệu) cho tài khoản');
         const res = await api('POST', '/staff', { id: v.id, user: $('#sa-user', root).value, name: $('#sa-name', root).value, password: $('#sa-pw', root).value,
-          admin: $('#sa-admin', root).checked, active: $('#sa-active', root).checked });
+          admin: perm.includes('taikhoan'), perm, active: $('#sa-active', root).checked });
         if (res.token) {
           S.staffToken = res.token; store('staffToken', res.token); store('staffUser', res.account.user);
           S.account = res.account; S.user = res.account.name; $('#user-btn').textContent = '👤 ' + S.user;
         }
         if (S.account && res.account.id === S.account.id) { S.account = res.account; S.user = res.account.name; $('#user-btn').textContent = '👤 ' + S.user; }
-        toast('Đã lưu tài khoản'); list = await api('GET', '/staff'); draw(); return true;
+        toast('Đã lưu tài khoản & phân quyền'); list = await api('GET', '/staff'); draw(); applyPerms(); return true;
       },
     });
+    const root = m.root, boxes = () => $$('[data-perm]', root);
+    const st = () => { $('#sa-pst', root).textContent = '(' + roleOfPerms(new Set(boxes().filter(i => i.checked).map(i => i.dataset.perm))) + ')'; };
+    $('#sa-role', root).onchange = e => { const r = KHO_ROLES.find(x => x[0] === e.target.value); if (r) boxes().forEach(i => { i.checked = r[2].includes(i.dataset.perm); }); st(); };
+    boxes().forEach(i => i.onchange = st); st();
   }
   draw();
 }

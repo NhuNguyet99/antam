@@ -266,3 +266,13 @@ chi tiết: phiếu sửa hiện **Trước khi sửa / Sau khi sửa** (ngày, 
 ghi chú – dòng thay đổi tô màu) và bảng mặt hàng với SL trước, SL sau, chênh lệch, Thêm / Bỏ / Đổi; nút *Mở phiếu hiện tại*.
 Từ bản này mỗi lần lập / sửa / xóa phiếu ghi đủ nội dung phiếu vào lịch sử (`detail` = {trước, sau, id}, mỗi bên {ngày, dòng, v});
 thao tác ghi trước đó chỉ xem được ngày và số lượng từng mã hàng.
+
+## Phân quyền tài khoản nhân viên kho
+
+Mục **Tài khoản nhân viên** › bấm vào tài khoản: chọn **mẫu** (Quản lý, Nhân viên kho, Thủ kho, Chỉ xem) rồi tích thêm / bỏ từng quyền:
+kho được làm việc (thành phẩm / nguyên vật liệu); lập / sửa phiếu nhập, xuất, điều chỉnh; xóa phiếu; duyệt phiếu điều chỉnh; danh sách
+phiếu & sổ nhập – xuất; NXT & thẻ kho; kiểm kê; bàn giao; kế hoạch mua; phân tuyến giao hàng; tài khoản giao hàng; mặt hàng; tuyến /
+nơi nhận; cài đặt & dữ liệu; lịch sử thao tác; quản lý tài khoản & phân quyền. Mục menu, kho, loại phiếu và nút không được cấp thì ẩn;
+bản online chặn luôn khi lưu (online/backend.js `must`). Lưu ở `staff_accounts.<id>.perm`; tài khoản chưa phân quyền giữ như cũ
+(Quản lý = tất cả, nhân viên = tất cả trừ duyệt phiếu và quản lý tài khoản). Tự nhận đơn từ web Đóng hàng không phụ thuộc quyền người
+đang mở trang. Bản chạy máy (server.py) lưu và trả `perm`, giao diện tự ẩn theo quyền.

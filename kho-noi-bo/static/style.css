@@ -286,3 +286,9 @@ body.locked #sidebar, body.locked #topbar, body.locked #ro-banner { display: non
 
 /* ---------- lịch sử thao tác: chi tiết phiếu sửa */
 .data tr.lg-ch td { background: var(--warn-bg); }
+
+/* ---------- phân quyền tài khoản nhân viên */
+#nav a[hidden], #wh-switch button[hidden] { display: none !important; }
+.perm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px 14px; margin-top: 8px; }
+.perm-grid fieldset { border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 10px 8px; margin: 0; display: grid; gap: 4px; }
+.perm-grid legend { font-size: 12px; font-weight: 700; color: var(--muted); padding: 0 4px; }
