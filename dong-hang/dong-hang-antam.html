@@ -72,6 +72,10 @@ a { color: var(--accent); }
 .gh-grp > .hd { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 8px 12px; background: var(--line-2); }
 .gh-grp > .hd .gh-bar { flex: 1; min-width: 120px; max-width: 260px; }
 .gh-grp table { width: 100%; }
+.gh-phs { display: inline-flex; flex-wrap: wrap; gap: 4px; align-items: center; vertical-align: middle; cursor: zoom-in; margin-left: 4px; }
+.gh-ph { width: 44px; height: 44px; object-fit: cover; border-radius: 6px; border: 1px solid var(--line); background: var(--line-2); }
+.gh-big { display: grid; gap: 10px; }
+.gh-big img { max-width: 100%; max-height: 75vh; display: block; margin: 0 auto; border-radius: 8px; }
 .gh-st { display: inline-block; border-radius: 999px; padding: 1px 9px; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .gh-st.ok { background: var(--good-soft); color: var(--good); } .gh-st.fail { background: var(--bad-soft); color: var(--bad); } .gh-st.wait { background: var(--line-2); color: var(--muted); }
 .tnlab { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); cursor: pointer; font-size: 12px; white-space: nowrap; color: var(--muted); }
@@ -1052,12 +1056,14 @@ $('#me-btn').onclick = () => (S.acc || hasAcc() ? accMenu() : modal({
 /* ================================================================ THEO DÕI GIAO HÀNG
    Kết quả giao do người giao bấm ở trang Giao hàng An Tâm (kho/TP/giao/<ngày>) được tác vụ tự động chép sang đây mỗi giờ:
    giaokq/<ngày> {date, d: {mã khách (CRM): {status 'ok'|'fail', note, at, driver, route, name, photos, gps}}}, giaokq/index {s, at}.
+   Ảnh giao hàng (photos 'a:<mã ảnh bên Giao>') được chép sang kho ảnh của trang này: giaoanh/<ngày> {m: {mã ảnh bên Giao: url ảnh ở đây}}.
    Ghép với đơn Đơn hàng ngày + Tuyến kebab 123 của ngày theo mã CRM (hoặc mã đầu tên khách). */
-S.gh = { kq: {}, subs: {}, t1: {}, idx: null, f: Object.assign({ st: '', rt: '', q: '' }, store('ghF') || {}) };
+S.gh = { kq: {}, anh: {}, subs: {}, t1: {}, idx: null, f: Object.assign({ st: '', rt: '', q: '' }, store('ghF') || {}) };
 function ghWatch(d) {
   if (!S.db) return;
   if (!S.gh.subs.idx) S.gh.subs.idx = S.db.doc('giaokq/index').onSnapshot(sn => { S.gh.idx = (sn.exists && sn.data()) || {}; if (S.view === 'gh') render(); }, () => {});
   if (!S.gh.subs[d]) S.gh.subs[d] = S.db.doc('giaokq/' + d).onSnapshot(sn => { S.gh.kq[d] = ((sn.exists && sn.data()) || {}).d || {}; if (S.view === 'gh' && S.date === d) render(); }, () => { S.gh.kq[d] = {}; });
+  if (!S.gh.subs['a' + d]) S.gh.subs['a' + d] = S.db.doc('giaoanh/' + d).onSnapshot(sn => { S.gh.anh[d] = ((sn.exists && sn.data()) || {}).m || {}; if (S.view === 'gh' && S.date === d) render(); }, () => { S.gh.anh[d] = {}; });
   if (!(d in S.gh.t1)) { S.gh.t1[d] = null; S.db.doc('t123/' + d).get().then(sn => { S.gh.t1[d] = ((sn.exists && sn.data()) || {}); if (S.view === 'gh' && S.date === d) render(); }, () => { S.gh.t1[d] = {}; }); }
 }
 // danh sách điểm giao của ngày: [{grp, grpName, drv, crm, name, phone, k (kết quả giao)|null, src}]
@@ -1092,11 +1098,18 @@ function ghGroups(list) {
   for (const x of list) { if (!m.has(x.grp)) m.set(x.grp, { grp: x.grp, name: x.grpName, ord: x.ord, rows: [] }); m.get(x.grp).rows.push(x); }
   return [...m.values()].sort((a, b) => a.ord - b.ord || a.name.localeCompare(b.name, 'vi'));
 }
-function ghRowsHtml(rows, printing) {
+// url ảnh đã chép sang trang này (theo mã ảnh bên Giao hàng)
+const ghPhotoUrls = (k, d) => (k.photos || []).map(r => (S.gh.anh[d] || {})[String(r).replace(/^a:/, '')]).filter(u => typeof u === 'string' && /^(\/_blob\/|https:\/\/)/.test(u));
+function ghPhotosHtml(x, d) {
+  const k = x.k || {}, n = (k.photos || []).length; if (!n) return '';
+  const us = ghPhotoUrls(k, d);
+  return `<span class="gh-phs" data-ph="${esc(x.crm)}">${us.map((u, i) => `<img class="gh-ph" src="${esc(u)}" alt="Ảnh giao hàng ${i + 1}" loading="lazy">`).join('')}${us.length < n ? `<span class="muted small">📷 ${n - us.length} ảnh đang chép…</span>` : ''}</span>`;
+}
+function ghRowsHtml(rows, printing, d) {
   return rows.map((x, i) => { const st = ghStatus(x), k = x.k || {};
     return `<tr><td class="n">${i + 1}</td><td class="mono">${esc(x.crm || '')}</td><td>${esc(x.name)}${x.tn ? ' <span class="pill dp">⚡ trong ngày</span>' : ''}</td>${printing ? '' : `<td class="mono small">${esc(x.phone)}</td>`}
       <td><span class="gh-st ${st}">${GH_ST[st]}</span>${k.at ? ` <span class="small muted">${esc(String(k.at).slice(11, 16))}</span>` : ''}</td>
-      <td class="small">${esc(k.note || '')}${(k.photos || []).length ? ` <span class="muted">📷 ${k.photos.length} ảnh</span>` : ''}</td>${printing ? '' : `<td class="small">${esc(x.k && x.k.driver ? driverName(x.k.driver) || '' : '')}</td>`}</tr>`; }).join('');
+      <td class="small">${esc(k.note || '')}${printing ? ((k.photos || []).length ? ` <span class="muted">📷 ${k.photos.length} ảnh</span>` : '') : ghPhotosHtml(x, d)}</td>${printing ? '' : `<td class="small">${esc(x.k && x.k.driver ? driverName(x.k.driver) || '' : '')}</td>`}</tr>`; }).join('');
 }
 function viewTrack(main) {
   const d = S.date, f = S.gh.f;
@@ -1114,7 +1127,7 @@ function viewTrack(main) {
         <span class="date-big">${vn(d)}</span><span class="dow">${dow(d)}</span><span class="grow"></span>
         <button class="btn sm" id="g-print">🖨 In theo dõi giao hàng</button></div>
       <p class="hint" style="margin:0">Kết quả do người giao bấm <b>Đã giao / Không giao được</b> trên trang Giao hàng An Tâm, tự chuyển sang đây <b>mỗi giờ</b>
-        ${idx.at ? `(lần cập nhật gần nhất: <b>${esc(String(idx.at).replace('T', ' ').slice(0, 16))}</b>)` : ''}. Ảnh giao hàng và vị trí xem ở trang Giao hàng An Tâm.</p>
+        ${idx.at ? `(lần cập nhật gần nhất: <b>${esc(String(idx.at).replace('T', ' ').slice(0, 16))}</b>)` : ''}. Bấm ảnh nhỏ để xem ảnh giao hàng lớn (ảnh chép sang cùng lúc với kết quả); vị trí lúc giao xem ở trang Giao hàng An Tâm.</p>
       <div class="gh-stats"><div><div class="v">${fmt(n)}</div><div class="k">Điểm giao (khách có đơn)</div></div>
         <div class="ok"><div class="v">${fmt(ok)}</div><div class="k">Đã giao</div></div><div class="bad"><div class="v">${fmt(bad)}</div><div class="k">Không giao được</div></div>
         <div class="wait"><div class="v">${fmt(n - ok - bad)}</div><div class="k">Chưa giao</div></div>
@@ -1129,7 +1142,7 @@ function viewTrack(main) {
       : !n ? '<div class="card empty"><div class="big">Ngày này chưa có đơn nào</div></div>'
       : groups.length ? groups.map(g => { const gn = g.rows.length, go = g.rows.filter(x => ghStatus(x) === 'ok').length, gb = g.rows.filter(x => ghStatus(x) === 'fail').length, drv = driverName(g.rows[0].drv);
         return `<section class="gh-grp"><div class="hd"><b>${esc(g.name)}</b>${drv ? `<span class="small">👤 ${esc(drv)}</span>` : ''}<span class="small"><b>${go}/${gn}</b> đã giao${gb ? ` · <span style="color:var(--bad)">${gb} không giao được</span>` : ''}</span>${ghBar(gn, go, gb)}</div>
-          <div class="tw"><table><thead><tr><th class="n">STT</th><th>CRM</th><th>Khách hàng</th><th>SĐT</th><th>Trạng thái</th><th>Ghi chú giao</th><th>Người giao</th></tr></thead><tbody>${ghRowsHtml(g.rows)}</tbody></table></div></section>`; }).join('')
+          <div class="tw"><table><thead><tr><th class="n">STT</th><th>CRM</th><th>Khách hàng</th><th>SĐT</th><th>Trạng thái</th><th>Ghi chú giao</th><th>Người giao</th></tr></thead><tbody>${ghRowsHtml(g.rows, false, d)}</tbody></table></div></section>`; }).join('')
       : '<div class="card empty"><div class="big">Không có điểm giao nào khớp bộ lọc</div></div>'}</div>`;
   const go = v => { S.date = v; watchDay(v); render(); };
   $('#g-prev').onclick = () => go(addDays(d, -1)); $('#g-next').onclick = () => go(addDays(d, 1)); $('#g-today').onclick = () => go(today());
@@ -1137,6 +1150,13 @@ function viewTrack(main) {
   const save = () => store('ghF', f);
   let t; $('#g-q').oninput = e => { clearTimeout(t); t = setTimeout(() => { f.q = e.target.value; save(); render(); const q = $('#g-q'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }, 250); };
   $('#g-st').onchange = e => { f.st = e.target.value; save(); render(); };
+  $$('[data-ph]', main).forEach(el => el.onclick = () => {
+    const x = all.find(y => y.crm === el.dataset.ph); if (!x) return;
+    const us = ghPhotoUrls(x.k || {}, d); if (!us.length) return;
+    modal({ title: `Ảnh giao hàng – ${x.crm} ${x.name}`.slice(0, 120), wide: true,
+      body: `<p class="hint" style="margin:0 0 8px">${GH_ST[ghStatus(x)]}${x.k && x.k.at ? ' lúc ' + esc(String(x.k.at).slice(11, 16)) + ' ngày ' + esc(vn(String(x.k.at).slice(0, 10))) : ''}${x.k && x.k.driver && driverName(x.k.driver) ? ' · ' + esc(driverName(x.k.driver)) : ''}${x.k && x.k.note ? ' · ' + esc(x.k.note) : ''}</p>
+        <div class="gh-big">${us.map((u, i) => `<img src="${esc(u)}" alt="Ảnh giao hàng ${i + 1}">`).join('')}</div>` });
+  });
   $('#g-rt').onchange = e => { f.rt = e.target.value; save(); render(); };
   $('#g-print').onclick = () => guard(() => {
     const note = [f.st ? 'Trạng thái: ' + GH_ST[f.st] : '', f.rt ? 'Tuyến: ' + (allG.find(g => g.grp === f.rt) || {}).name : '', f.q ? `Tìm "${f.q}"` : ''].filter(Boolean).join(' · ');
