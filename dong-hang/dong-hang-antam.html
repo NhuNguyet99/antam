@@ -61,6 +61,19 @@ a { color: var(--accent); }
 .perm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px 16px; margin-top: 4px; }
 .perm-grid fieldset { border: 1px solid var(--line); border-radius: var(--r); padding: 6px 10px 8px; margin: 0; display: grid; gap: 4px; }
 .perm-grid legend { font-size: 12px; font-weight: 700; color: var(--ink-2); padding: 0 4px; }
+.gh-stats { display: grid; grid-template-columns: repeat(auto-fit, minmax(130px, 1fr)); gap: 8px; }
+.gh-stats > div { border: 1px solid var(--line); border-radius: var(--r); padding: 8px 12px; background: var(--panel); }
+.gh-stats .v { font-family: var(--f-num); font-size: 24px; font-weight: 700; }
+.gh-stats .k { font-size: 12px; color: var(--ink-2); }
+.gh-stats .ok .v { color: var(--good); } .gh-stats .bad .v { color: var(--bad); } .gh-stats .wait .v { color: var(--muted); }
+.gh-bar { height: 8px; border-radius: 999px; background: var(--line-2); overflow: hidden; display: flex; }
+.gh-bar i { display: block; height: 100%; } .gh-bar .ok { background: var(--good); } .gh-bar .bad { background: var(--bad); }
+.gh-grp { border: 1px solid var(--line); border-radius: var(--r); background: var(--panel); overflow: hidden; }
+.gh-grp > .hd { display: flex; flex-wrap: wrap; align-items: center; gap: 6px 14px; padding: 8px 12px; background: var(--line-2); }
+.gh-grp > .hd .gh-bar { flex: 1; min-width: 120px; max-width: 260px; }
+.gh-grp table { width: 100%; }
+.gh-st { display: inline-block; border-radius: 999px; padding: 1px 9px; font-size: 12px; font-weight: 700; white-space: nowrap; }
+.gh-st.ok { background: var(--good-soft); color: var(--good); } .gh-st.fail { background: var(--bad-soft); color: var(--bad); } .gh-st.wait { background: var(--line-2); color: var(--muted); }
 .tnlab { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); cursor: pointer; font-size: 12px; white-space: nowrap; color: var(--muted); }
 .tnlab input { margin: 0; }
 .tnlab.on { background: var(--warn-soft); border-color: var(--warn); color: var(--warn); font-weight: 700; }
@@ -424,6 +437,7 @@ tr.hit > td:first-child { box-shadow: inset 4px 0 0 var(--hit-bar); }
     <button data-v="t123" class="p-t123">Tuyến kebab 123</button>
     <button data-v="in" class="p-in">Định mức đóng hàng</button>
     <button data-v="khach" class="p-khach">Khách hàng</button>
+    <button data-v="gh" class="p-gh">Theo dõi giao hàng</button>
     <button data-v="tk" class="p-tk">Thống kê</button>
     <button data-v="cd" class="p-cd">Định mức &amp; cài đặt</button>
     <button data-v="nhap" class="p-nhap">Nhập từ sheet</button>
@@ -668,6 +682,7 @@ function refresh(fromDay) {
     const a = document.activeElement;
     if (S.view === 'don' && a && a.closest && a.closest('#orders, #d-report')) { if (fromDay) updateDayTotals(); return; }
     if (S.view === 'cd' && $('#main [data-dirty="1"]')) return;
+    if (S.view === 'gh' && a && a.id === 'g-q') return; // đang gõ ô tìm
     render();
   }, 60);
 }
@@ -1034,6 +1049,105 @@ $('#me-btn').onclick = () => (S.acc || hasAcc() ? accMenu() : modal({
   onOk: r => { S.me = $('#me-in', r).value.trim(); store('me', S.me); $('#me-name').textContent = S.me || 'Đặt tên'; return true; },
 }));
 
+/* ================================================================ THEO DÕI GIAO HÀNG
+   Kết quả giao do người giao bấm ở trang Giao hàng An Tâm (kho/TP/giao/<ngày>) được tác vụ tự động chép sang đây mỗi giờ:
+   giaokq/<ngày> {date, d: {mã khách (CRM): {status 'ok'|'fail', note, at, driver, route, name, photos, gps}}}, giaokq/index {s, at}.
+   Ghép với đơn Đơn hàng ngày + Tuyến kebab 123 của ngày theo mã CRM (hoặc mã đầu tên khách). */
+S.gh = { kq: {}, subs: {}, t1: {}, idx: null, f: Object.assign({ st: '', rt: '', q: '' }, store('ghF') || {}) };
+function ghWatch(d) {
+  if (!S.db) return;
+  if (!S.gh.subs.idx) S.gh.subs.idx = S.db.doc('giaokq/index').onSnapshot(sn => { S.gh.idx = (sn.exists && sn.data()) || {}; if (S.view === 'gh') render(); }, () => {});
+  if (!S.gh.subs[d]) S.gh.subs[d] = S.db.doc('giaokq/' + d).onSnapshot(sn => { S.gh.kq[d] = ((sn.exists && sn.data()) || {}).d || {}; if (S.view === 'gh' && S.date === d) render(); }, () => { S.gh.kq[d] = {}; });
+  if (!(d in S.gh.t1)) { S.gh.t1[d] = null; S.db.doc('t123/' + d).get().then(sn => { S.gh.t1[d] = ((sn.exists && sn.data()) || {}); if (S.view === 'gh' && S.date === d) render(); }, () => { S.gh.t1[d] = {}; }); }
+}
+// danh sách điểm giao của ngày: [{grp, grpName, drv, crm, name, phone, k (kết quả giao)|null, src}]
+function ghStops(d) {
+  const kq = S.gh.kq[d] || {}, used = new Set(), out = [];
+  const byKey = {}; for (const [k, v] of live(kq)) byKey[keyOf(k)] = [k, v];
+  const take = (...codes) => { for (const c of codes) { const h = c && byKey[keyOf(c)]; if (h && !used.has(h[0])) { used.add(h[0]); return h[1]; } } return null; };
+  if (S.day && S.day.date === d) {
+    const as = S.day.assign || {};
+    for (const { o, c } of dayOrders(S.day.r)) {
+      const rt = routeOf(o, c)[0] || '';
+      out.push({ grp: 'd:' + rt, grpName: rt ? routeLabel(rt) : '⚠ Chưa chia tuyến', ord: routeIdx(rt), drv: rt ? driverFor(rt, as)[0] : '', crm: c.crm || leadCode(c.name), name: c.name, phone: c.phone || '', tn: isTn(o), k: take(c.crm, leadCode(c.name)) });
+    }
+  }
+  const t1 = S.gh.t1[d];
+  if (t1 && t1.r) {
+    for (const [cid, o] of live(t1.r)) {
+      const c = S.t1.cust[cid]; if (!c || t1Status(o) !== 'HOẠT ĐỘNG') continue;
+      const g = t1G(c);
+      out.push({ grp: 't:' + g, grpName: 'Tuyến kebab 123 · ' + (T1_LAB[g] || g), ord: 500 + Object.keys(T1_LAB).indexOf(g), drv: t1DriverFor(g, t1.assign)[0], crm: c.crm || leadCode(c.name), name: c.name, phone: c.phone || '', k: take(c.crm, leadCode(c.name)) });
+    }
+  }
+  // kết quả giao không khớp đơn nào trên web này (kho thêm tay, khách khác mã…)
+  for (const [k, v] of live(kq)) if (!used.has(k)) out.push({ grp: 'x:' + (v.route || ''), grpName: 'Khác · ' + (v.route || 'không rõ tuyến'), ord: 900, drv: v.driver || '', crm: k, name: v.name || '', phone: '', k: v, other: true });
+  return out;
+}
+const ghStatus = x => (x.k ? (x.k.status === 'ok' ? 'ok' : 'fail') : 'wait');
+const GH_ST = { ok: 'Đã giao', fail: 'Không giao được', wait: 'Chưa giao' };
+function ghBar(n, ok, bad) { return `<div class="gh-bar" title="${ok}/${n} đã giao${bad ? ', ' + bad + ' không giao được' : ''}"><i class="ok" style="width:${n ? ok * 100 / n : 0}%"></i><i class="bad" style="width:${n ? bad * 100 / n : 0}%"></i></div>`; }
+function ghGroups(list) {
+  const m = new Map();
+  for (const x of list) { if (!m.has(x.grp)) m.set(x.grp, { grp: x.grp, name: x.grpName, ord: x.ord, rows: [] }); m.get(x.grp).rows.push(x); }
+  return [...m.values()].sort((a, b) => a.ord - b.ord || a.name.localeCompare(b.name, 'vi'));
+}
+function ghRowsHtml(rows, printing) {
+  return rows.map((x, i) => { const st = ghStatus(x), k = x.k || {};
+    return `<tr><td class="n">${i + 1}</td><td class="mono">${esc(x.crm || '')}</td><td>${esc(x.name)}${x.tn ? ' <span class="pill dp">⚡ trong ngày</span>' : ''}</td>${printing ? '' : `<td class="mono small">${esc(x.phone)}</td>`}
+      <td><span class="gh-st ${st}">${GH_ST[st]}</span>${k.at ? ` <span class="small muted">${esc(String(k.at).slice(11, 16))}</span>` : ''}</td>
+      <td class="small">${esc(k.note || '')}${(k.photos || []).length ? ` <span class="muted">📷 ${k.photos.length} ảnh</span>` : ''}</td>${printing ? '' : `<td class="small">${esc(x.k && x.k.driver ? driverName(x.k.driver) || '' : '')}</td>`}</tr>`; }).join('');
+}
+function viewTrack(main) {
+  const d = S.date, f = S.gh.f;
+  ghWatch(d);
+  const all = ghStops(d), loading = !(d in S.gh.kq);
+  const n = all.length, ok = all.filter(x => ghStatus(x) === 'ok').length, bad = all.filter(x => ghStatus(x) === 'fail').length;
+  const qn = norm(f.q);
+  const list = all.filter(x => (!f.st || ghStatus(x) === f.st) && (!f.rt || x.grp === f.rt) && (!qn || [x.crm, x.name, x.phone, (x.k || {}).note].some(v => norm(v).includes(qn))));
+  const groups = ghGroups(list), allG = ghGroups(all), idx = S.gh.idx || {};
+  main.innerHTML = `<div class="card" style="display:grid;gap:12px">
+      <div class="daybar">
+        <button class="btn sm" id="g-prev" aria-label="Ngày trước">◀</button>
+        <input type="date" class="in" id="g-date" value="${d}" style="border:1px solid var(--line);border-radius:6px;padding:5px 8px;background:var(--input)">
+        <button class="btn sm" id="g-next" aria-label="Ngày sau">▶</button><button class="btn sm" id="g-today">Hôm nay</button>
+        <span class="date-big">${vn(d)}</span><span class="dow">${dow(d)}</span><span class="grow"></span>
+        <button class="btn sm" id="g-print">🖨 In theo dõi giao hàng</button></div>
+      <p class="hint" style="margin:0">Kết quả do người giao bấm <b>Đã giao / Không giao được</b> trên trang Giao hàng An Tâm, tự chuyển sang đây <b>mỗi giờ</b>
+        ${idx.at ? `(lần cập nhật gần nhất: <b>${esc(String(idx.at).replace('T', ' ').slice(0, 16))}</b>)` : ''}. Ảnh giao hàng và vị trí xem ở trang Giao hàng An Tâm.</p>
+      <div class="gh-stats"><div><div class="v">${fmt(n)}</div><div class="k">Điểm giao (khách có đơn)</div></div>
+        <div class="ok"><div class="v">${fmt(ok)}</div><div class="k">Đã giao</div></div><div class="bad"><div class="v">${fmt(bad)}</div><div class="k">Không giao được</div></div>
+        <div class="wait"><div class="v">${fmt(n - ok - bad)}</div><div class="k">Chưa giao</div></div>
+        <div><div class="v">${n ? Math.round(ok * 100 / n) : 0}%</div><div class="k">Hoàn thành</div></div></div>
+      ${ghBar(n, ok, bad)}
+      <div class="row">
+        <label class="field grow" style="min-width:200px">Tìm (CRM, tên khách, SĐT, ghi chú)<input id="g-q" value="${esc(f.q)}"></label>
+        <label class="field">Trạng thái<select id="g-st"><option value="">Tất cả</option>${Object.entries(GH_ST).map(([k, l]) => `<option value="${k}" ${f.st === k ? 'selected' : ''}>${l}</option>`).join('')}</select></label>
+        <label class="field">Tuyến<select id="g-rt"><option value="">Tất cả tuyến</option>${allG.map(g => `<option value="${esc(g.grp)}" ${f.rt === g.grp ? 'selected' : ''}>${esc(g.name)} (${g.rows.length})</option>`).join('')}</select></label>
+      </div></div>
+    <div id="g-list" style="display:grid;gap:12px;margin-top:12px">${loading ? '<div class="card empty"><div class="big">Đang tải kết quả giao…</div></div>'
+      : !n ? '<div class="card empty"><div class="big">Ngày này chưa có đơn nào</div></div>'
+      : groups.length ? groups.map(g => { const gn = g.rows.length, go = g.rows.filter(x => ghStatus(x) === 'ok').length, gb = g.rows.filter(x => ghStatus(x) === 'fail').length, drv = driverName(g.rows[0].drv);
+        return `<section class="gh-grp"><div class="hd"><b>${esc(g.name)}</b>${drv ? `<span class="small">👤 ${esc(drv)}</span>` : ''}<span class="small"><b>${go}/${gn}</b> đã giao${gb ? ` · <span style="color:var(--bad)">${gb} không giao được</span>` : ''}</span>${ghBar(gn, go, gb)}</div>
+          <div class="tw"><table><thead><tr><th class="n">STT</th><th>CRM</th><th>Khách hàng</th><th>SĐT</th><th>Trạng thái</th><th>Ghi chú giao</th><th>Người giao</th></tr></thead><tbody>${ghRowsHtml(g.rows)}</tbody></table></div></section>`; }).join('')
+      : '<div class="card empty"><div class="big">Không có điểm giao nào khớp bộ lọc</div></div>'}</div>`;
+  const go = v => { S.date = v; watchDay(v); render(); };
+  $('#g-prev').onclick = () => go(addDays(d, -1)); $('#g-next').onclick = () => go(addDays(d, 1)); $('#g-today').onclick = () => go(today());
+  $('#g-date').onchange = e => { if (e.target.value) go(e.target.value); };
+  const save = () => store('ghF', f);
+  let t; $('#g-q').oninput = e => { clearTimeout(t); t = setTimeout(() => { f.q = e.target.value; save(); render(); const q = $('#g-q'); if (q) { q.focus(); q.setSelectionRange(q.value.length, q.value.length); } }, 250); };
+  $('#g-st').onchange = e => { f.st = e.target.value; save(); render(); };
+  $('#g-rt').onchange = e => { f.rt = e.target.value; save(); render(); };
+  $('#g-print').onclick = () => guard(() => {
+    const note = [f.st ? 'Trạng thái: ' + GH_ST[f.st] : '', f.rt ? 'Tuyến: ' + (allG.find(g => g.grp === f.rt) || {}).name : '', f.q ? `Tìm "${f.q}"` : ''].filter(Boolean).join(' · ');
+    const lo = list.filter(x => ghStatus(x) === 'ok').length, lb = list.filter(x => ghStatus(x) === 'fail').length;
+    const body = `<h2 style="margin:0 0 4px">THEO DÕI GIAO HÀNG ${vn(d)}</h2><p style="margin:0 0 10px">${note ? esc(note) + ' · ' : ''}${list.length} điểm giao · ${lo} đã giao · ${lb} không giao được · ${list.length - lo - lb} chưa giao${idx.at ? ' · cập nhật ' + esc(String(idx.at).replace('T', ' ').slice(0, 16)) : ''}</p>`
+      + groups.map(g => { const gn = g.rows.length, gd = g.rows.filter(x => ghStatus(x) === 'ok').length, drv = driverName(g.rows[0].drv);
+        return `<h4 class="pgh">${esc(g.name)}${drv ? ' · Người giao: ' + esc(drv) : ''} · ${gd}/${gn} đã giao</h4><table class="t1p"><thead><tr><th class="n">STT</th><th>CRM</th><th>Khách hàng</th><th>Trạng thái</th><th>Ghi chú giao</th></tr></thead><tbody>${ghRowsHtml(g.rows, true)}</tbody></table>`; }).join('');
+    return directPrint(`Theo dõi giao hàng ${vn(d)}`, body, `theo-doi-giao-hang-${d}.html`, false);
+  });
+}
+
 /* ================================================================ TÀI KHOẢN NHÂN VIÊN
    cfg/tk {a: {id: {user, name, role: 'ql' | 'dp' | 'nhap', active, salt, pw, at, by}|null}}. Chưa có tài khoản nào thì web dùng như cũ.
    Có tài khoản: ai mở web cũng phải đăng nhập bằng nick + mật khẩu (kể cả chủ trang); tên tài khoản ghi vào cột Người tạo đơn.
@@ -1045,17 +1159,17 @@ $('#me-btn').onclick = () => (S.acc || hasAcc() ? accMenu() : modal({
 const PERMS = [
   ['Nhập liệu', [['don', 'Đơn hàng ngày – xem'], ['donNhap', 'Đơn hàng ngày – nhập / sửa đơn'], ['t123', 'Tuyến kebab 123 – xem'], ['t123Nhap', 'Tuyến kebab 123 – nhập / sửa đơn'],
     ['in', 'Định mức đóng hàng – xem & in'],
-    ['khach', 'Khách hàng – thêm / sửa thông tin'], ['tk', 'Thống kê']]],
+    ['khach', 'Khách hàng – thêm / sửa thông tin'], ['gh', 'Theo dõi giao hàng'], ['tk', 'Thống kê']]],
   ['Điều phối', [['tuyen', 'Đổi tuyến của đơn / khách'], ['quytac', 'Sửa quy tắc chia tuyến'], ['nguoigiao', 'Chọn người giao từng tuyến'], ['gui', 'Gửi ngay sang Giao hàng & Kho']]],
   ['Quản lý', [['xoa', 'Xóa khách'], ['misa', 'Cập nhật khách từ MISA'], ['gia', 'Sửa giá Tuyến 123'], ['nhap', 'Nhập từ sheet (Đơn hàng, Tuyến 123)'],
     ['cd', 'Định mức & cài đặt'], ['acc', 'Quản lý tài khoản & phân quyền']]],
 ];
 const PERM_KEYS = PERMS.flatMap(([, l]) => l.map(x => x[0]));
 const PERM_LAB = Object.fromEntries(PERMS.flatMap(([, l]) => l));
-const VIEWS = ['don', 't123', 'in', 'khach', 'tk', 'cd', 'nhap', 'acc'];
+const VIEWS = ['don', 't123', 'in', 'khach', 'gh', 'tk', 'cd', 'nhap', 'acc'];
 // Điều phối: chỉ xem đơn (không nhập / sửa số lượng), được chia tuyến, chọn người giao, gửi ngay
-const PRESET = { nhap: ['don', 'donNhap', 't123', 't123Nhap', 'in', 'khach', 'tk'], dp: ['don', 't123', 'in', 'khach', 'tk', 'tuyen', 'quytac', 'nguoigiao', 'gui'], ql: PERM_KEYS };
-const PERM_V = 2; // bản 1: 'don' / 't123' gồm cả nhập đơn
+const PRESET = { nhap: ['don', 'donNhap', 't123', 't123Nhap', 'in', 'khach', 'gh', 'tk'], dp: ['don', 't123', 'in', 'khach', 'gh', 'tk', 'tuyen', 'quytac', 'nguoigiao', 'gui'], ql: PERM_KEYS };
+const PERM_V = 3; // bản 1: 'don' / 't123' gồm cả nhập đơn; bản 2: chưa có 'gh' (theo dõi giao hàng – cấp cho mọi người)
 document.head.insertAdjacentHTML('beforeend', `<style>${PERM_KEYS.map(k => `body.no-p-${k} .p-${k}`).join(',')} { display: none !important; }</style>`);
 const SESSION_DAYS = 30;
 const newSess = (id, pw) => ({ id, sig: pw.slice(0, 24), iat: Date.now(), exp: Date.now() + SESSION_DAYS * 864e5 });
@@ -1071,6 +1185,7 @@ function permsOf(a) {
   if (!Array.isArray(a && a.perm)) return new Set(PRESET[roleOf(a)]);
   const p = new Set(a.perm.filter(k => PERM_KEYS.includes(k)));
   if ((a.pv || 1) < 2) { if (p.has('don')) p.add('donNhap'); if (p.has('t123')) p.add('t123Nhap'); }
+  if ((a.pv || 1) < 3) p.add('gh');
   return p;
 }
 const custom = a => { const p = permsOf(a), d = new Set(PRESET[roleOf(a)]); return p.size !== d.size || [...p].some(k => !d.has(k)); };
@@ -1270,7 +1385,7 @@ function render() {
     S.view = v; store('view', v);
   }
   $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === S.view));
-  const views = { don: viewDay, t123: viewT123, in: viewPrint, khach: viewCust, tk: viewStats, nhap: viewImport, cd: viewSettings, acc: viewAccounts };
+  const views = { don: viewDay, t123: viewT123, in: viewPrint, khach: viewCust, gh: viewTrack, tk: viewStats, nhap: viewImport, cd: viewSettings, acc: viewAccounts };
   (views[S.view] || viewDay)(main);
   $$('[data-goto]', main).forEach(b => b.onclick = () => setView(b.dataset.goto));
 }

@@ -45,6 +45,11 @@ Web riêng (trang claude.ai, một file `dong-hang-antam.html`) thay cho Google 
   (tuyến / khu vực / thanh toán), khổ ngang / dọc, mỗi nhóm một trang, dòng ký tên.
   Bản in có bảng **Tổng theo tuyến giao – số lượng từng sản phẩm** (đơn, số lượng từng sản phẩm, bao bì) và
   dưới danh sách mỗi tuyến / nhóm là bảng **TỔNG** của nhóm đó (số lượng từng sản phẩm, bao bì). Lựa chọn nhớ trên máy (`dh_prDon`, `dh_prT1`).
+- **Theo dõi giao hàng**: kết quả người giao bấm *Đã giao / Không giao được* ở trang Giao hàng An Tâm (`kho/TP/giao/<ngày>`)
+  được tác vụ tự động chép sang `giaokq/<ngày>` (+ `giaokq/index` {s, at}) mỗi giờ. Mục này ghép với đơn Đơn hàng ngày và Tuyến
+  kebab 123 theo mã CRM (hoặc mã đầu tên): số điểm giao, đã giao, không giao được, chưa giao, % hoàn thành; từng tuyến kèm người giao
+  và thanh tiến độ; lọc trạng thái / tuyến / tìm; kết quả không khớp đơn nào nằm ở nhóm *Khác*; nút **🖨 In theo dõi giao hàng**.
+  Ảnh và vị trí lúc giao xem ở trang Giao hàng An Tâm. Quyền *Theo dõi giao hàng* (mọi vai trò có sẵn).
 - **⚡ Đơn đi trong ngày** (Đơn hàng ngày): đơn phát sinh và giao ngay trong ngày. Đánh dấu bằng ô **⚡ Trong ngày** trên từng dòng
   (hoặc trong chi tiết đơn ⋯); khi nhập nhiều đơn loại này bấm **⚡ Nhập đơn đi trong ngày: BẬT** – đơn mới gõ số lượng tự được đánh dấu
   (nhớ trên máy, bấm lại để tắt). Chip **⚡ Đi trong ngày N** cạnh chip tuyến (hoặc dòng lọc cột) lọc riêng các đơn này và báo cáo
