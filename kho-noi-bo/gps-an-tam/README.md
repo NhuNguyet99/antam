@@ -18,12 +18,13 @@ Giao hàng An Tâm: POST /gps/sync → kho/TP/hanhtrinh/<ngày>-<mã người gi
 |---|---|
 | `Code.gs` | Apps Script của Sheet "GPS An Tâm" – mở trang (`doGet`), ghi điểm GPS (`save`) |
 | `gps.html` | Apps Script – trang GPS người giao mở trên điện thoại (Bật / Tắt GPS) |
+| `GPS-An-Tam.gs` | Bản 1 file để dán (tự tạo từ 2 file trên: `GPS_HTML` = nội dung gps.html) |
 
 ## Cài một lần
 
 1. Mở Google Sheet **GPS An Tâm** trong Google Drive (đã tạo sẵn: `1icIATdG_hZxIv3MCkEJh1Gv3Bk0Uv_mCMiAO90OOF80`).
-2. **Tiện ích mở rộng › Apps Script**. Xóa hết code mẫu trong `Code.gs`, dán toàn bộ `Code.gs`.
-3. Bấm **＋ › HTML**, đặt tên đúng `gps` (thành `gps.html`), dán toàn bộ `gps.html`. Bấm 💾 Lưu.
+2. **Tiện ích mở rộng › Apps Script**. Xóa hết code mẫu trong `Code.gs`, dán toàn bộ **`GPS-An-Tam.gs`** (bản 1 file: Code.gs + gps.html gộp sẵn).
+3. Bấm 💾 Lưu. (Cách 2 file vẫn được: dán `Code.gs`, rồi **＋ › HTML** tên `gps` dán `gps.html`.)
 4. **Triển khai › Tùy chọn triển khai mới** › bánh răng chọn **Ứng dụng web**:
    - Thực thi dưới dạng: **Tôi**
    - Người có quyền truy cập: **Bất kỳ ai**

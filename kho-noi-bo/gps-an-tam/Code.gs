@@ -15,7 +15,8 @@ const HEAD = ['ma', 'ten', 'cap_nhat', 'bat', 'diem']; // bat: 1 = đang bật G
 
 function doGet(e) {
   const p = (e && e.parameter) || {};
-  const t = HtmlService.createTemplateFromFile('gps');
+  // bản 1 file (GPS-An-Tam.gs) có sẵn GPS_HTML; bản 2 file dùng gps.html
+  const t = typeof GPS_HTML === 'string' ? HtmlService.createTemplate(GPS_HTML) : HtmlService.createTemplateFromFile('gps');
   t.cfg = JSON.stringify({ t: cleanTok(p.t), n: String(p.n || '').slice(0, 60) }).replace(/</g, '\\u003c');
   return t.evaluate().setTitle('GPS An Tâm')
     .addMetaTag('viewport', 'width=device-width, initial-scale=1, viewport-fit=cover');
