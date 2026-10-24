@@ -58,6 +58,13 @@ a { color: var(--accent); }
 .tabs { display: flex; gap: 2px; flex-wrap: wrap; flex: 1; min-width: 0; }
 .tabs button { border: 0; background: none; padding: 7px 11px; border-radius: 999px; cursor: pointer; color: var(--ink-2); font-weight: 500; white-space: nowrap; }
 .tabs button:hover { background: var(--hover); }
+body.role-nhap .ql-only { display: none !important; }
+body.locked #tabs, body.locked #me-btn, body.locked #sync { visibility: hidden; }
+.login { max-width: 380px; margin: 8vh auto; display: grid; gap: 12px; }
+.login h2 { margin: 0; }
+.login .err { color: var(--bad); min-height: 1.2em; margin: 0; font-size: 13.5px; }
+.pill.ql { background: var(--accent-soft); color: var(--accent); }
+.pill.nhap { background: var(--line-2); color: var(--ink-2); }
 .tabs button.on { background: var(--accent); color: var(--accent-ink); }
 .me-btn { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 5px 12px; cursor: pointer; color: var(--ink-2); white-space: nowrap; }
 .sync { font-size: 12px; color: var(--muted); white-space: nowrap; }
@@ -407,8 +414,9 @@ tr.hit > td:first-child { box-shadow: inset 4px 0 0 var(--hit-bar); }
     <button data-v="in">Định mức đóng hàng</button>
     <button data-v="khach">Khách hàng</button>
     <button data-v="tk">Thống kê</button>
-    <button data-v="cd">Định mức &amp; cài đặt</button>
-    <button data-v="nhap">Nhập từ sheet</button>
+    <button data-v="cd" class="ql-only">Định mức &amp; cài đặt</button>
+    <button data-v="nhap" class="ql-only">Nhập từ sheet</button>
+    <button data-v="acc" class="ql-only">Tài khoản</button>
   </nav>
   <span class="sync" id="sync"></span>
   <button class="me-btn" id="me-btn" title="Tên ghi vào cột Người tạo đơn">👤 <span id="me-name">…</span></button>
@@ -521,6 +529,7 @@ const SIZE_LABEL = { 22: '22 cm', 25: '25 cm', 28: '28 cm', 31: '31 cm', K: 'Keb
 const S = {
   db: null, user: null, myId: '', me: store('me') || '', view: store('view') || 'don', date: today(),
   cfg: JSON.parse(JSON.stringify(DEFAULT_CFG)), cust: {}, shards: {}, day: null, dayUnsub: null,
+  tk: {}, tkLoaded: false, isOwner: null, acc: null,
   loaded: { cfg: false, cust: 0 }, filter: Object.assign({ q: '', area: '', mode: 'co', allCols: false }, store('filter') || {}),
 };
 const SHARDS = 8;
@@ -586,11 +595,15 @@ async function boot() {
   // tên người dùng: lấy sau, không chặn việc tải trang
   window.claude.use('user').then(async user => {
     S.user = user; if (!user) return;
+    S.isOwner = await Promise.race([Promise.resolve(user.isOwner()).catch(() => false), sleep(8000).then(() => false)]) === true; applyAuth();
     const me = await user.me(); S.myId = (me && me.id) || '';
-    if (!S.me && me && me.name) { S.me = me.name; $('#me-name').textContent = S.me; }
+    if (!S.me && !S.acc && me && me.name) { S.me = me.name; $('#me-name').textContent = S.me; }
     const can = await user.can('data.write').catch(() => null);
     if (can === false) { S.readOnly = true; toast('Bạn đang chỉ có quyền xem – nhờ chủ trang mời bằng email với quyền Editor để nhập liệu.', true); }
-  }).catch(e => console.warn('user', e));
+  }).catch(e => console.warn('user', e)).finally(() => { if (S.isOwner == null) { S.isOwner = false; applyAuth(); } });
+  // tài khoản nhân viên nhập liệu
+  db.doc('cfg/tk').onSnapshot(sn => { S.tk = Object.fromEntries(live(((sn.exists && sn.data()) || {}).a)); S.tkLoaded = true; applyAuth(); },
+    e => { console.warn('tk', e); S.tkLoaded = true; applyAuth(); });
   $('#me-name').textContent = S.me || 'Đặt tên';
   // cài đặt: dùng mặc định ngay, có bản đã lưu thì thay
   S.loaded.cfg = true;
@@ -916,6 +929,7 @@ function drawRtChips() {
   $('#rt-cfg', el).onclick = editRoutes; $('#rt-drv', el).onclick = editDrivers;
 }
 function editRoutes() {
+  if (!qlOnly('sửa quy tắc chia tuyến')) return;
   let list = routes().map(r => Object.assign({}, r));
   const m = modal({
     title: 'Tuyến giao hàng & quy tắc chia tự động', ok: 'Lưu', wide: true,
@@ -998,16 +1012,172 @@ function setView(v) {
   render(); window.scrollTo(0, 0);
 }
 $$('#tabs button').forEach(b => b.onclick = () => setView(b.dataset.v));
-$('#me-btn').onclick = () => modal({
+$('#me-btn').onclick = () => (S.acc || hasAcc() ? accMenu() : modal({
   title: 'Tên của bạn', ok: 'Lưu',
   body: `<label class="field">Tên ghi vào cột "Người tạo đơn" khi bạn nhập đơn trên máy này<input id="me-in" value="${esc(S.me)}" maxlength="60"></label>`,
   onOk: r => { S.me = $('#me-in', r).value.trim(); store('me', S.me); $('#me-name').textContent = S.me || 'Đặt tên'; return true; },
-});
+}));
+
+/* ================================================================ TÀI KHOẢN NHÂN VIÊN
+   cfg/tk {a: {id: {user, name, role: 'ql' | 'nhap', active, salt, pw, at, by}|null}}. Chưa có tài khoản nào thì web dùng như cũ.
+   Có tài khoản: ai mở web cũng phải đăng nhập (trừ chủ trang); tên tài khoản ghi vào cột Người tạo đơn.
+   Quyền Nhập liệu: Đơn hàng ngày, Tuyến 123, Định mức đóng hàng, Khách hàng (thêm / sửa), Thống kê.
+   Quyền Quản lý: thêm Định mức & cài đặt, Nhập từ sheet, Tài khoản, quy tắc chia tuyến, giá Tuyến 123, xóa khách, cập nhật từ MISA. */
+const QL_VIEWS = ['cd', 'nhap', 'acc'];
+const SESSION_DAYS = 30;
+const hasAcc = () => Object.values(S.tk).some(a => a && a.active !== false);
+const authReady = () => S.tkLoaded && (S.isOwner != null || !hasAcc());
+const needLogin = () => hasAcc() && !S.acc && !S.isOwner;
+const isQL = () => !hasAcc() || S.isOwner || !!(S.acc && S.acc.role === 'ql');
+function qlOnly(what) { if (isQL()) return true; toast(`Chỉ tài khoản Quản lý mới ${what}.`, true); return false; }
+const normUser = v => noAcc(String(v || '')).toLowerCase().replace(/[^a-z0-9._-]/g, '');
+const hex = buf => Array.from(new Uint8Array(buf)).map(b => b.toString(16).padStart(2, '0')).join('');
+// mật khẩu băm PBKDF2 (dữ liệu trang ai được mời cũng đọc được – không lưu mật khẩu gốc)
+async function pwHash(salt, pw) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(pw)), 'PBKDF2', false, ['deriveBits']);
+  return hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: new TextEncoder().encode(salt), iterations: 120000, hash: 'SHA-256' }, key, 256));
+}
+function applyAuth() {
+  const ss = store('tk'), a = ss && S.tk[ss.id];
+  const ok = a && a.active !== false && a.pw && ss.sig === a.pw.slice(0, 24) && ss.exp > Date.now();
+  if (ss && S.tkLoaded && !ok) { store('tk', null); if (S.acc) toast('Phiên đăng nhập đã hết hạn hoặc tài khoản đã đổi mật khẩu / bị khóa – hãy đăng nhập lại.', true); }
+  S.acc = ok ? Object.assign({ id: ss.id }, a) : null;
+  if (S.acc) S.me = S.acc.name || S.acc.user;
+  $('#me-name').textContent = S.acc ? S.me : S.me || 'Đặt tên';
+  if (S.loaded.cfg && S.loaded.cust) render();
+}
+function drawLogin(main) {
+  if ($('#lg-form', main)) return; // dữ liệu cập nhật trong lúc đang gõ: giữ nguyên ô đăng nhập
+  main.innerHTML = `<form class="card login" id="lg-form" autocomplete="on">
+      <h2>Đăng nhập Đóng hàng An Tâm</h2>
+      <p class="hint" style="margin:0">Mỗi nhân viên nhập liệu dùng tài khoản riêng do quản lý cấp.</p>
+      <label class="field">Tên đăng nhập<input id="lg-user" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" value="${esc(store('lastUser') || '')}" required></label>
+      <label class="field">Mật khẩu<input id="lg-pw" name="password" type="password" autocomplete="current-password" required></label>
+      <button class="btn pri" type="submit">Đăng nhập</button>
+      <p class="err" id="lg-err"></p>
+      <p class="hint" style="margin:0">Quên mật khẩu: nhờ quản lý đặt lại ở mục Tài khoản.</p></form>`;
+  const u = $('#lg-user'), pw = $('#lg-pw');
+  (u.value ? pw : u).focus();
+  $('#lg-form').onsubmit = async e => {
+    e.preventDefault();
+    const btn = $('#lg-form button[type=submit]'); btn.disabled = true; btn.textContent = 'Đang đăng nhập…';
+    const name = normUser(u.value), hit = Object.entries(S.tk).find(([, a]) => a && a.active !== false && normUser(a.user) === name);
+    const ok = hit && (await pwHash(hit[1].salt, pw.value)) === hit[1].pw;
+    if (!ok) { await sleep(600); $('#lg-err').textContent = 'Sai tên đăng nhập hoặc mật khẩu'; btn.disabled = false; btn.textContent = 'Đăng nhập'; pw.select(); return; }
+    store('tk', { id: hit[0], sig: hit[1].pw.slice(0, 24), exp: Date.now() + SESSION_DAYS * 864e5 }); store('lastUser', hit[1].user);
+    applyAuth(); toast('Xin chào ' + (hit[1].name || hit[1].user));
+  };
+}
+function logout() { store('tk', null); S.acc = null; S.me = store('me') || ''; applyAuth(); render(); }
+function accMenu() {
+  const a = S.acc;
+  const m = modal({
+    title: a ? 'Tài khoản của bạn' : 'Chủ trang',
+    body: a ? `<p style="margin:0 0 10px"><b>${esc(a.name || a.user)}</b> · ${esc(a.user)} · <span class="pill ${a.role === 'ql' ? 'ql' : 'nhap'}">${a.role === 'ql' ? 'Quản lý' : 'Nhập liệu'}</span></p>
+        <p class="hint" style="margin:0 0 12px">Tên này được ghi vào cột <b>Người tạo đơn</b>.</p>
+        <div class="row"><button class="btn" id="am-pw">Đổi mật khẩu</button><button class="btn danger" id="am-out">Đăng xuất</button></div>`
+      : `<p style="margin:0 0 10px">Bạn là <b>chủ trang</b> – dùng web không cần đăng nhập và quản lý được tài khoản.</p>
+        <label class="field">Tên ghi vào cột "Người tạo đơn"<input id="me-in" value="${esc(S.me)}" maxlength="60"></label>
+        <div class="row" style="margin-top:10px"><button class="btn" id="am-acc">Quản lý tài khoản</button></div>`,
+    ok: a ? undefined : 'Lưu',
+    onOk: a ? undefined : r => { S.me = $('#me-in', r).value.trim(); store('me', S.me); $('#me-name').textContent = S.me || 'Đặt tên'; return true; },
+  });
+  if (a) {
+    $('#am-out', m.root).onclick = () => { m.close(); logout(); };
+    $('#am-pw', m.root).onclick = () => { m.close(); changePw(); };
+  } else $('#am-acc', m.root).onclick = () => { m.close(); setView('acc'); };
+}
+function changePw() {
+  const a = S.acc; if (!a) return;
+  modal({
+    title: 'Đổi mật khẩu', ok: 'Đổi mật khẩu',
+    body: `<div class="fgrid"><label class="field wide">Mật khẩu hiện tại<input id="cp-old" type="password" autocomplete="current-password"></label>
+      <label class="field wide">Mật khẩu mới (ít nhất 4 ký tự)<input id="cp-new" type="password" autocomplete="new-password"></label></div>`,
+    onOk: async r => {
+      const cur = S.tk[a.id];
+      if (!cur || (await pwHash(cur.salt, $('#cp-old', r).value)) !== cur.pw) throw new Error('Mật khẩu hiện tại không đúng');
+      const np = $('#cp-new', r).value; if (np.length < 4) throw new Error('Mật khẩu mới cần ít nhất 4 ký tự');
+      const salt = rid('s'), pw = await pwHash(salt, np);
+      await mergeInto('cfg/tk', { a: { [a.id]: Object.assign({}, cur, { salt, pw, at: nowStr() }) } }, { a: {} });
+      store('tk', { id: a.id, sig: pw.slice(0, 24), exp: Date.now() + SESSION_DAYS * 864e5 });
+      S.tk[a.id] = Object.assign({}, cur, { salt, pw }); applyAuth(); toast('Đã đổi mật khẩu'); return true;
+    },
+  });
+}
+function viewAccounts(main) {
+  if (!isQL()) { main.innerHTML = '<div class="card empty"><div class="big">Chỉ quản lý mới xem được mục này</div></div>'; return; }
+  const list = Object.entries(S.tk).filter(([, a]) => a).map(([id, a]) => Object.assign({ id }, a))
+    .sort((x, y) => (y.active !== false) - (x.active !== false) || (x.role === 'ql' ? 0 : 1) - (y.role === 'ql' ? 0 : 1) || String(x.name).localeCompare(String(y.name), 'vi'));
+  const first = !hasAcc();
+  main.innerHTML = `<div class="card" style="display:grid;gap:12px">
+      <div class="row"><h2 style="margin:0">Tài khoản nhân viên nhập liệu</h2><span class="grow"></span>
+        ${first && !S.isOwner ? '' : '<button class="btn pri" id="ac-add">+ Thêm tài khoản</button>'}</div>
+      <p class="hint" style="margin:0">Mỗi nhân viên 1 tài khoản (tên đăng nhập + mật khẩu). Khi đã có tài khoản, ai mở web cũng phải <b>đăng nhập</b>
+        (chủ trang thì không cần); tên tài khoản tự ghi vào cột <b>Người tạo đơn</b>.
+        <b>Nhập liệu</b>: nhập đơn, Tuyến 123, khách hàng (thêm / sửa), xem định mức, thống kê, in. <b>Quản lý</b>: thêm cài đặt, nhập từ sheet,
+        quy tắc chia tuyến, giá Tuyến 123, xóa khách, cập nhật từ MISA và mục Tài khoản này.</p>
+      <p class="hint" style="margin:0">Nhân viên vẫn cần được chủ trang mời vào trang (nút <b>Share</b>, mời bằng email, quyền <b>Editor</b>) mới mở được web;
+        tài khoản ở đây để biết ai nhập và giới hạn chức năng.</p>
+      ${first && !S.isOwner ? '<p class="muted">Chưa có tài khoản nào – chủ trang mở web để tạo tài khoản đầu tiên.</p>' : ''}
+      ${list.length ? `<div class="tw"><table><thead><tr><th>Họ tên</th><th>Tên đăng nhập</th><th>Quyền</th><th>Trạng thái</th><th>Cập nhật</th><th></th></tr></thead><tbody>
+        ${list.map(a => `<tr data-id="${esc(a.id)}" ${a.active === false ? 'style="opacity:.55"' : ''}><td><b>${esc(a.name)}</b>${S.acc && S.acc.id === a.id ? ' <span class="small muted">(bạn)</span>' : ''}</td>
+          <td class="mono">${esc(a.user)}</td><td><span class="pill ${a.role === 'ql' ? 'ql' : 'nhap'}">${a.role === 'ql' ? 'Quản lý' : 'Nhập liệu'}</span></td>
+          <td>${a.active === false ? '<span class="pill off">Đã khóa</span>' : 'Đang dùng'}</td><td class="small muted">${esc(a.at || '')}</td>
+          <td class="nowrap"><button class="btn sm" data-ed>Sửa</button> <button class="btn sm danger" data-del>Xóa</button></td></tr>`).join('')}</tbody></table></div>`
+      : first && !S.isOwner ? '' : '<p class="muted">Chưa có tài khoản nào. Bấm <b>+ Thêm tài khoản</b> – nên tạo 1 tài khoản Quản lý trước.</p>'}</div>`;
+  const add = $('#ac-add'); if (add) add.onclick = () => editAccount(null);
+  $$('tr[data-id]', main).forEach(tr => {
+    const id = tr.dataset.id;
+    $('[data-ed]', tr).onclick = () => editAccount(id);
+    $('[data-del]', tr).onclick = async () => {
+      const a = S.tk[id];
+      if (S.acc && S.acc.id === id) return toast('Không xóa được tài khoản đang đăng nhập', true);
+      if (!(await confirmBox(`Xóa tài khoản "${a.user}" (${a.name})? Người này sẽ không đăng nhập được nữa; đơn đã nhập vẫn giữ tên người tạo.`, 'Xóa', true))) return;
+      await guard(async () => { await mergeInto('cfg/tk', { a: { [id]: null } }, { a: {} }); delete S.tk[id]; toast('Đã xóa tài khoản'); render(); });
+    };
+  });
+}
+function editAccount(id) {
+  const a = id ? Object.assign({}, S.tk[id]) : { user: '', name: '', role: hasAcc() ? 'nhap' : 'ql', active: true };
+  modal({
+    title: id ? 'Sửa tài khoản ' + a.user : 'Thêm tài khoản nhân viên', ok: 'Lưu',
+    body: `<div class="fgrid">
+      <label class="field">Họ tên (ghi vào cột Người tạo đơn)<input id="ea-name" value="${esc(a.name || '')}" maxlength="60"></label>
+      <label class="field">Tên đăng nhập (không dấu, viết liền, VD <i>lan.nh</i>)<input id="ea-user" value="${esc(a.user || '')}" autocapitalize="none" spellcheck="false" maxlength="40"></label>
+      <label class="field">${id ? 'Mật khẩu mới (để trống = giữ mật khẩu cũ)' : 'Mật khẩu (ít nhất 4 ký tự)'}<input id="ea-pw" type="text" autocomplete="new-password" maxlength="60"></label>
+      <label class="field">Quyền<select id="ea-role"><option value="nhap" ${a.role !== 'ql' ? 'selected' : ''}>Nhập liệu</option><option value="ql" ${a.role === 'ql' ? 'selected' : ''}>Quản lý</option></select></label>
+      <label class="field">Trạng thái<select id="ea-act"><option value="1">Đang dùng</option><option value="" ${a.active === false ? 'selected' : ''}>Khóa (không đăng nhập được)</option></select></label>
+    </div>`,
+    onOk: async r => {
+      const v = k => $(k, r).value.trim();
+      const user = normUser(v('#ea-user')), name = v('#ea-name'), pwIn = $('#ea-pw', r).value, role = v('#ea-role'), active = !!v('#ea-act');
+      if (!name) throw new Error('Cần nhập họ tên');
+      if (user.length < 2) throw new Error('Tên đăng nhập cần ít nhất 2 ký tự (chữ không dấu, số, dấu chấm, gạch)');
+      if (Object.entries(S.tk).some(([k, x]) => x && k !== id && normUser(x.user) === user)) throw new Error('Tên đăng nhập "' + user + '" đã có');
+      if (!id && pwIn.length < 4) throw new Error('Mật khẩu cần ít nhất 4 ký tự');
+      if (id && pwIn && pwIn.length < 4) throw new Error('Mật khẩu cần ít nhất 4 ký tự');
+      if (S.acc && S.acc.id === id && (role !== 'ql' || !active)) throw new Error('Không tự hạ quyền hoặc tự khóa tài khoản đang đăng nhập');
+      const rec = Object.assign({}, a, { user, name, role, active, at: nowStr(), by: S.me || '' });
+      if (pwIn) { rec.salt = rid('s'); rec.pw = await pwHash(rec.salt, pwIn); }
+      const nid = id || rid('u');
+      await mergeInto('cfg/tk', { a: { [nid]: rec } }, { a: {} });
+      S.tk[nid] = rec;
+      if (S.acc && S.acc.id === nid && pwIn) store('tk', { id: nid, sig: rec.pw.slice(0, 24), exp: Date.now() + SESSION_DAYS * 864e5 });
+      toast(id ? 'Đã lưu tài khoản ' + user : `Đã tạo tài khoản ${user} – gửi tên đăng nhập và mật khẩu cho ${name}`);
+      applyAuth(); return true;
+    },
+  });
+}
 function render() {
-  $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === S.view));
   const main = $('#main');
   if (!S.loaded.cfg || !S.loaded.cust) return;
-  const views = { don: viewDay, t123: viewT123, in: viewPrint, khach: viewCust, tk: viewStats, nhap: viewImport, cd: viewSettings };
+  if (!authReady()) { main.innerHTML = '<div class="card empty"><div class="big">Đang kiểm tra tài khoản…</div></div>'; return; }
+  document.body.classList.toggle('locked', needLogin());
+  document.body.classList.toggle('role-nhap', !isQL());
+  if (needLogin()) return drawLogin(main);
+  if (!isQL() && QL_VIEWS.includes(S.view)) { S.view = 'don'; store('view', 'don'); }
+  $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === S.view));
+  const views = { don: viewDay, t123: viewT123, in: viewPrint, khach: viewCust, tk: viewStats, nhap: viewImport, cd: viewSettings, acc: viewAccounts };
   (views[S.view] || viewDay)(main);
   $$('[data-goto]', main).forEach(b => b.onclick = () => setView(b.dataset.goto));
 }
@@ -1533,7 +1703,7 @@ function editCustomer(id) {
       <label class="field">Tuyến giao<select id="ec-rt"><option value="">Tự chia (${esc(autoRouteOf(c)[0] || 'chưa khớp')})</option>${routes().map(r => `<option value="${esc(r.code)}" ${r.code === c.rt ? 'selected' : ''}>${esc(r.code)} – ${esc(r.name)}</option>`).join('')}</select></label>
       <label class="field">Giao dịch<select id="ec-off"><option value="">Đang giao dịch</option><option value="1" ${c.off ? 'selected' : ''}>Ngừng (ẩn khỏi danh sách)</option></select></label>
     </div><datalist id="dl-area">${areas().map(a => `<option value="${esc(a)}">`).join('')}</datalist>
-    ${id ? '<div style="margin-top:12px"><button class="btn danger sm" id="ec-del">Xóa khách</button></div>' : ''}`,
+    ${id && isQL() ? '<div style="margin-top:12px"><button class="btn danger sm" id="ec-del">Xóa khách</button></div>' : ''}`,
     onOk: async root => {
       const v = k => $(k, root).value.trim();
       Object.assign(c, { q: v('#ec-q'), crm: v('#ec-crm'), name: v('#ec-name'), phone: v('#ec-phone'), bill: num(v('#ec-bill')), note: v('#ec-note'), pk: v('#ec-pk'), rt: v('#ec-rt'), off: !!v('#ec-off') });
@@ -1702,6 +1872,7 @@ function misaName(old, ten, keep) {
   return [lead && !n.startsWith(norm(lead)) ? lead + ' - ' : '', ten, notes.length ? ' ' + notes.join(' ') : ''].join('');
 }
 function misaUpdate() {
+  if (!qlOnly('cập nhật khách từ MISA')) return;
   const st = { p: null, opt: Object.assign({ name: true, phone: true, area: false, nameMode: 'ten-dc', keep: true, d: true, t: true }, store('misaOpt') || {}), off: new Set() };
   const m = modal({
     title: 'Cập nhật khách hàng từ danh sách MISA', wide: true, ok: 'Cập nhật',
@@ -2717,6 +2888,7 @@ async function t1Send() {
   toast('Đã ghi vào dòng BÁNH TUYẾN của Đơn hàng ngày ' + vn(d));
 }
 function t1EditPrice() {
+  if (!qlOnly('sửa giá Tuyến 123')) return;
   const pr = t1Price();
   modal({
     title: 'Giá bán tuyến 123 (tính doanh thu)', ok: 'Lưu giá',
@@ -2743,7 +2915,7 @@ function t1EditCust(id) {
       <label class="field wide">Ghi chú giao hàng<input id="t1c-note" value="${esc(c.note || '')}"></label>
       <label class="field">Thứ tự (số nhỏ đứng trước)<input id="t1c-s" type="number" value="${esc(c.s || 0)}"></label>
     </div>
-    ${id ? '<div style="margin-top:12px"><button class="btn danger sm" id="t1c-del">Xóa khách khỏi tuyến</button></div>' : ''}`,
+    ${id && isQL() ? '<div style="margin-top:12px"><button class="btn danger sm" id="t1c-del">Xóa khách khỏi tuyến</button></div>' : ''}`,
     onOk: async root => {
       const v = k => $(k, root).value.trim();
       const rec = { g: v('#t1c-g'), sub: '', crm: v('#t1c-crm'), phone: v('#t1c-phone'), ht: $('#t1c-ht', root).checked, name: v('#t1c-name'), note: v('#t1c-note'), s: num(v('#t1c-s')) };
@@ -2800,6 +2972,7 @@ function parseT123(table) {
   const seen = new Set(); return rows.filter(r => { const k = r.g + '|' + keyOf(r.name); if (seen.has(k)) return false; seen.add(k); return true; });
 }
 function t1Import() {
+  if (!qlOnly('nhập danh sách Tuyến 123 từ sheet')) return;
   const m = modal({
     title: 'Cập nhật tuyến 123 từ Google Sheet', ok: 'Cập nhật', wide: true,
     body: `<ol class="steps"><li>Mở sheet <b>2-KHÁCH TUYẾN 123</b>, chọn tab ngày cần lấy.</li><li>Bấm một ô, <b>Ctrl+A</b> rồi <b>Ctrl+C</b>.</li><li>Bấm vào ô dưới và <b>Ctrl+V</b>.</li></ol>

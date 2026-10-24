@@ -54,6 +54,12 @@ Web riêng (trang claude.ai, một file `dong-hang-antam.html`) thay cho Google 
   kèm/không kèm chi tiết từng khách. Bấm **🖨 In** là mở thẳng hộp thoại in của trình duyệt (A4 ngang, nền trắng);
   trên claude.ai trang không tự mở được hộp thoại in nên web giữ sẵn bản in trong trang và hiện xem trước: bấm **Ctrl+P**
   (⌘+P) là in đúng bản đó (giống web Kho), không cần tải file. "⬇ Tải file in" để lưu / gửi bản in.
+- **Tài khoản** (chủ trang / Quản lý): mỗi nhân viên nhập liệu 1 tài khoản (họ tên, tên đăng nhập, mật khẩu, quyền
+  **Nhập liệu** hoặc **Quản lý**, khóa được). Khi đã có tài khoản, ai mở web cũng phải đăng nhập (chủ trang không cần); đăng nhập
+  nhớ 30 ngày trên máy; đổi mật khẩu / khóa / xóa tài khoản là phiên cũ hết hiệu lực. Tên tài khoản tự ghi vào cột Người tạo đơn.
+  Nhập liệu: Đơn hàng ngày, Tuyến 123, Định mức đóng hàng, Khách hàng (thêm / sửa), Thống kê, in. Quản lý thêm: Định mức & cài đặt,
+  Nhập từ sheet, Tài khoản, quy tắc chia tuyến, giá / nhập sheet Tuyến 123, xóa khách, cập nhật từ MISA. Lưu ở `cfg/tk`, mật khẩu
+  băm PBKDF2. Nhân viên vẫn phải được mời vào trang (Share, email, Editor); tài khoản để biết ai nhập và giới hạn chức năng.
 - **Khách hàng**: danh mục khách (khu vực, CRM, địa chỉ, SĐT, ghi chú/chành xe, đóng gói mặc định).
   **Sửa khách ngay trên bảng**: ở Đơn hàng ngày, Tuyến kebab 123 và danh mục Khách hàng, bấm vào tên khách / CRM / SĐT (danh mục:
   cả khu vực, ghi chú) → ô sửa nhỏ hiện cạnh dòng (tên – địa chỉ, CRM, SĐT, khu vực, ghi chú/chành xe). **Enter** hoặc bấm ra ngoài
