@@ -58,6 +58,11 @@ Web riêng (trang claude.ai, một file `dong-hang-antam.html`) thay cho Google 
   (nhớ trên máy, bấm lại để tắt). Chip **⚡ Đi trong ngày N** và **Đơn thường M** cạnh chip tuyến (hoặc dòng lọc cột) lọc riêng từng loại và báo cáo
   (TACOS, KEBAB, BILL, Tổng túi / cái, bao bì) tính riêng; kết hợp được với lọc tuyến. Bản in có điều kiện **Loại đơn** (đi trong ngày /
   đơn thường) và cột *⚡ Đi trong ngày*; đơn gửi sang Kho / Giao hàng có ghi chú "⚡ ĐI TRONG NGÀY". Lưu ở `ngay/<ngày>.r.<khách>.tn`.
+- **Khách lên 2 đơn trong ngày** (1 đơn thường + 1 đơn đi trong ngày): bấm ⋯ ở dòng khách → **➕ Khách lên thêm đơn đi trong
+  ngày** (hoặc nút **+⚡** cạnh ⋯ khi đang bật *Nhập đơn đi trong ngày*). Web tạo dòng riêng ngay dưới dòng khách, gắn nhãn
+  *⚡ Đơn thêm trong ngày*, đã đánh dấu đi trong ngày; nhập số lượng như đơn thường. Báo cáo, chip ⚡ / Đơn thường, bản in tính 2 đơn
+  riêng; gửi Kho / Giao hàng là 2 dòng, đơn thêm mang mã CRM đuôi `-TN` để kết quả giao không đè nhau. Xóa: ⋯ ở dòng đơn thêm →
+  *Xóa đơn thêm này*. Lưu ở `ngay/<ngày>.r["<mã khách>~tn"]`, thông tin khách lấy từ khách gốc.
 - **Lọc theo yêu cầu + In báo cáo** (cả Đơn hàng ngày và Tuyến kebab 123): lọc bằng ô tìm, chọn khu vực / tuyến và dòng
   "▼ Lọc theo cột" dưới tiêu đề bảng (CRM, hỗ trợ, tình trạng, từng sản phẩm có/trống, túi 50, túi lẻ, ghi chú…).
   Ở Đơn hàng ngày, khi lọc theo **tuyến** (bấm chip tuyến hoặc chọn ở cột Tuyến) thì báo cáo (TACOS, KEBAB, BILL, số đơn,

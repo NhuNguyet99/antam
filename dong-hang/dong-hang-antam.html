@@ -78,6 +78,8 @@ a { color: var(--accent); }
 .gh-big img { max-width: 100%; max-height: 75vh; display: block; margin: 0 auto; border-radius: 8px; }
 .gh-st { display: inline-block; border-radius: 999px; padding: 1px 9px; font-size: 12px; font-weight: 700; white-space: nowrap; }
 .gh-st.ok { background: var(--good-soft); color: var(--good); } .gh-st.fail { background: var(--bad-soft); color: var(--bad); } .gh-st.wait { background: var(--line-2); color: var(--muted); }
+tr[data-cid*="~"] td.cust { box-shadow: inset 3px 0 0 var(--warn); }
+.pill.xord { font-size: 11px; }
 .tnlab { display: inline-flex; align-items: center; gap: 4px; padding: 2px 8px; border-radius: 999px; border: 1px solid var(--line); cursor: pointer; font-size: 12px; white-space: nowrap; color: var(--muted); }
 .tnlab input { margin: 0; }
 .tnlab.on { background: var(--warn-soft); border-color: var(--warn); color: var(--warn); font-weight: 700; }
@@ -738,6 +740,18 @@ function packing(q, pk) {
 const LABEL_ORDER = ['tui', 'tuiK', 'dai', 'chung', 'nho', 'giay', 'cay']; // như sheet: thùng đại (đầy) trước, thùng lẻ sau
 const packLabel = r => LABEL_ORDER.filter(k => r[k]).map(k => `${r[k]} ${NEED.find(x => x[0] === k)[1]}`).join(' + ');
 function orderOf(cid) { return (S.day && S.day.r[cid]) || null; }
+// ĐƠN THỨ 2 TRONG NGÀY của cùng 1 khách (VD 1 đơn thường + 1 đơn đi trong ngày): lưu ở ngay/<ngày>.r["<mã khách>~tn"],
+// hiện thành 1 dòng riêng ngay dưới dòng của khách; thông tin khách lấy từ khách gốc
+const XSUF = '~tn';
+const baseId = k => String(k).split('~')[0];
+const isExtra = k => String(k).includes('~');
+function custOf(k) {
+  const c = S.cust[k]; if (c || !isExtra(k)) return c;
+  const b = S.cust[baseId(k)];
+  return b ? Object.assign({}, b, { id: k, _base: b.id, _extra: true }) : undefined;
+}
+// mã khách gửi sang Kho / Giao hàng: đơn thêm gắn đuôi -TN để kết quả giao 2 đơn không đè nhau
+const exportCrm = c => (c && c._extra ? ((c.crm || leadCode(c.name)) ? (c.crm || leadCode(c.name)) + '-TN' : '') : (c && c.crm) || '');
 function statusOf(o) { if (!o) return 'NGHỈ'; if (o.hd) return o.hd; return qtyTotal(o.q) > 0 ? 'HOẠT ĐỘNG' : 'NGHỈ'; }
 const hasOrder = o => !!o && statusOf(o) === 'HOẠT ĐỘNG';
 /* ================================================================ TỰ CHUYỂN SANG WEB KHO → GIAO HÀNG */
@@ -816,7 +830,7 @@ async function khoOut(kind, d) {
   } else {
     const as = (snap.exists ? snap.data() || {} : {}).assign || {};
     for (const x of dayOrders(r)) {
-      const code = routeOf(x.o, S.cust[x.cid] || x.c)[0]; if (!code || code in assign) continue;
+      const code = routeOf(x.o, custOf(x.cid) || x.c)[0]; if (!code || code in assign) continue;
       const [id, src] = driverFor(code, as);
       if (src === 'chọn' || id) assign[code] = id;
     }
@@ -915,7 +929,7 @@ function driverFor(code, assign) {
 function editDrivers() {
   if (!need('nguoigiao')) return;
   const d = S.date, a = (S.day && S.day.assign) || {}, cnt = {};
-  for (const { o, c, cid } of dayOrders(S.day ? S.day.r : {})) { const k = routeOf(o, S.cust[cid] || c)[0]; if (k) cnt[k] = (cnt[k] || 0) + 1; }
+  for (const { o, c, cid } of dayOrders(S.day ? S.day.r : {})) { const k = routeOf(o, custOf(cid) || c)[0]; if (k) cnt[k] = (cnt[k] || 0) + 1; }
   const codes = Object.keys(cnt).sort((x, y) => routeIdx(x) - routeIdx(y));
   const drv = S.drivers || [];
   const m = modal({
@@ -946,7 +960,7 @@ function editDrivers() {
 // số đơn từng tuyến trong ngày (nút bấm để lọc)
 function rtChipsHtml() {
   const cnt = {}, cur = colF().rt || '';
-  for (const { o, c, cid } of dayOrders(S.day ? S.day.r : {})) { const k = routeOf(o, S.cust[cid] || c)[0] || '-'; cnt[k] = (cnt[k] || 0) + 1; }
+  for (const { o, c, cid } of dayOrders(S.day ? S.day.r : {})) { const k = routeOf(o, custOf(cid) || c)[0] || '-'; cnt[k] = (cnt[k] || 0) + 1; }
   const chip = (k, label, n, title) => `<button class="rtchip${k === '-' ? ' none' : ''}${cur === k ? ' on' : ''}" data-rt="${esc(k)}" title="${esc(title)}">${esc(label)} <b>${n}</b></button>`;
   const keys = Object.keys(cnt).filter(k => k !== '-').sort((a, b) => routeIdx(a) - routeIdx(b) || a.localeCompare(b));
   const as = (S.day && S.day.assign) || {}, hasDrv = (S.drivers || []).length;
@@ -988,7 +1002,7 @@ function editRoutes() {
     body.innerHTML = list.map((r, i) => `<tr data-i="${i}"><td><input class="in" data-k="code" value="${esc(r.code)}" style="width:96px"></td><td><input class="in" data-k="name" value="${esc(r.name)}" style="width:100%;min-width:170px"></td>
       <td><input class="in" data-k="kw" value="${esc(r.kw)}" style="width:100%;min-width:280px"></td><td><button class="btn sm ghost" data-del aria-label="Xóa tuyến">✕</button></td></tr>`).join('');
     $$('[data-del]', body).forEach(b => b.onclick = () => { read(); list.splice(+b.closest('tr').dataset.i, 1); draw(); });
-    const none = dayOrders(S.day ? S.day.r : {}).filter(({ o, c, cid }) => !routeOf(o, S.cust[cid] || c)[0]).length;
+    const none = dayOrders(S.day ? S.day.r : {}).filter(({ o, c, cid }) => !routeOf(o, custOf(cid) || c)[0]).length;
     $('#rt-st', m.root).textContent = `${list.length} tuyến · hôm nay ${none} đơn chưa khớp tuyến`;
   };
   $('#rt-add', m.root).onclick = () => { read(); list.push({ code: '', name: '', kw: '' }); draw(); $('tr:last-child input', body).focus(); };
@@ -996,7 +1010,7 @@ function editRoutes() {
   draw();
 }
 function dayOrders(dayR) {
-  return live(dayR).filter(([cid, o]) => hasOrder(o)).map(([cid, o]) => ({ cid, o, c: S.cust[cid] || { id: cid, name: (o.snap && o.snap.name) || '(khách đã xóa)', q: (o.snap && o.snap.q) || '' } }));
+  return live(dayR).filter(([cid, o]) => hasOrder(o)).map(([cid, o]) => ({ cid, o, c: custOf(cid) || { id: cid, name: (o.snap && o.snap.name) || '(khách đã xóa)', q: (o.snap && o.snap.q) || '' } }));
 }
 // 4 cột tích thanh toán (mỗi đơn 1 lựa chọn, lưu vào o.tt như cột TÌNH TRẠNG của sheet)
 const PAYS = [['ctt', 'CTT', 'Chưa TT', 'Chưa thanh toán'], ['dtt', 'ĐTT', 'ĐÃ TT', 'Đã thanh toán'], ['ht', 'Hỗ trợ', 'HỖ TRỢ', 'Hỗ trợ'], ['tm', 'Tiền mặt', 'TIỀN MẶT', 'Tiền mặt']];
@@ -1076,7 +1090,7 @@ function ghStops(d) {
     const as = S.day.assign || {};
     for (const { o, c } of dayOrders(S.day.r)) {
       const rt = routeOf(o, c)[0] || '';
-      out.push({ grp: 'd:' + rt, grpName: rt ? routeLabel(rt) : '⚠ Chưa chia tuyến', ord: routeIdx(rt), drv: rt ? driverFor(rt, as)[0] : '', crm: c.crm || leadCode(c.name), name: c.name, phone: c.phone || '', tn: isTn(o), k: take(c.crm, leadCode(c.name)) });
+      out.push({ grp: 'd:' + rt, grpName: rt ? routeLabel(rt) : '⚠ Chưa chia tuyến', ord: routeIdx(rt), drv: rt ? driverFor(rt, as)[0] : '', crm: c._extra ? exportCrm(c) : c.crm || leadCode(c.name), name: c.name, phone: c.phone || '', tn: isTn(o), k: c._extra ? take(exportCrm(c)) : take(c.crm, leadCode(c.name)) });
     }
   }
   const t1 = S.gh.t1[d];
@@ -1646,7 +1660,7 @@ function dayFltText() {
 function dayPrint(d) {
   const r = S.day ? S.day.r : {}, note = dayFltText(), all = dayOrders(r);
   const ids = new Set(filteredRows().filter(c => hasOrder(orderOf(c.id))).map(c => c.id));
-  const rtOf = x => routeOf(x.o, S.cust[x.cid] || x.c)[0] || '-', payOf = x => payKey(x.o.tt) || 'none';
+  const rtOf = x => routeOf(x.o, custOf(x.cid) || x.c)[0] || '-', payOf = x => payKey(x.o.tt) || 'none';
   const count = f => { const m = {}; all.forEach(x => { const k = f(x); m[k] = (m[k] || 0) + 1; }); return m; };
   const nRt = count(rtOf), nPay = count(payOf), tnOf = x => (isTn(x.o) ? 'co' : 'khong'), nTn = count(tnOf), H = hideSet('hideDon');
   printModal({
@@ -1675,7 +1689,15 @@ function filteredRows() {
   let list = custList().filter(c => (!f.area || c.q === f.area) && matchCust(c, qn));
   if (!qn) list = f.mode === 'co' ? list.filter(c => hasOrder(orderOf(c.id))) : list.filter(c => !c.off || hasOrder(orderOf(c.id)));
   // đơn của khách đã xóa khỏi danh mục vẫn hiện
-  if (!qn && !f.area) for (const { cid, c } of dayOrders(S.day ? S.day.r : {})) if (!S.cust[cid]) list.push(c);
+  if (!qn && !f.area) for (const { cid, c } of dayOrders(S.day ? S.day.r : {})) if (!custOf(cid)) list.push(c);
+  // đơn thứ 2 trong ngày: dòng riêng ngay dưới dòng của khách (luôn hiện khi đã tạo)
+  const ex = live(S.day ? S.day.r : {}).filter(([k]) => isExtra(k)).map(([k]) => custOf(k)).filter(c => c && (!f.area || c.q === f.area) && matchCust(c, qn));
+  if (ex.length) {
+    const byBase = {}; ex.forEach(c => { (byBase[c._base] = byBase[c._base] || []).push(c); });
+    const out = []; for (const c of list) { out.push(c); if (byBase[c.id]) { out.push(...byBase[c.id]); delete byBase[c.id]; } }
+    for (const k in byBase) out.push(...byBase[k]);
+    list = out;
+  }
   return colFCount() ? list.filter(passCols) : list;
 }
 const fSel = (key, opts, cur, label) => `<select class="flt-sel${cur ? ' on' : ''}" data-f="${esc(key)}" aria-label="Lọc ${esc(label)}"><option value="">Tất cả</option>${opts.map(([v, n]) => `<option value="${esc(v)}" ${v === cur ? 'selected' : ''}>${esc(n)}</option>`).join('')}</select>`;
@@ -1772,7 +1794,7 @@ function rowHtml(c, ps, pay, H = new Set()) {
   const q = S.filter.q, on = k => !H.has(k);
   return `<tr data-cid="${esc(c.id)}" class="${hasOrder(o) ? 'has-order' : ''}${q ? ' hit' : ''}">
     ${on('crm') ? `<td class="stick s-crm cedit" data-cf="crm" title="${esc(c.crm || '')} – bấm để sửa">${c.crm ? hl(c.crm, q) : '–'}</td>` : ''}
-    <td class="cust stick cedit" data-cf="name" title="Bấm để sửa tên, địa chỉ, SĐT, ghi chú của khách"><b>${hl(c.name, q)}</b><div class="sub">${hl(c.phone || '', q)}${c.note ? ' · ' + hl(c.note, q) : ''}${q && c.q && matchCust({ q: c.q }, norm(q)) ? ' · ' + hl(c.q, q) : ''}</div></td>
+    <td class="cust stick cedit" data-cf="name" title="Bấm để sửa tên, địa chỉ, SĐT, ghi chú của khách">${c._extra ? '<span class="pill dp xord">⚡ Đơn thêm trong ngày</span> ' : ''}<b>${hl(c.name, q)}</b><div class="sub">${hl(c.phone || '', q)}${c.note ? ' · ' + hl(c.note, q) : ''}${q && c.q && matchCust({ q: c.q }, norm(q)) ? ' · ' + hl(c.q, q) : ''}</div></td>
     ${on('st') ? `<td><select class="in st-sel${st === 'HOẠT ĐỘNG' ? ' st-on' : ''}" data-k="hd"><option value="">${st === 'HOẠT ĐỘNG' ? 'HOẠT ĐỘNG' : 'NGHỈ'} (tự)</option><option ${o.hd === 'HOẠT ĐỘNG' ? 'selected' : ''}>HOẠT ĐỘNG</option><option ${o.hd === 'NGHỈ' ? 'selected' : ''}>NGHỈ</option></select></td>` : ''}
     ${on('tn') ? `<td class="tnc"><label class="tnlab${isTn(o) ? ' on' : ''}" title="Đơn đi trong ngày"><input type="checkbox" data-tn ${isTn(o) ? 'checked' : ''} aria-label="Đi trong ngày">⚡${isTn(o) ? ' Trong ngày' : ''}</label></td>` : ''}
     ${on('tt') ? `<td>${paySelect(o.tt)}</td>` : ''}
@@ -1780,7 +1802,23 @@ function rowHtml(c, ps, pay, H = new Set()) {
     ${ps.map((pr, i) => { const v = (o.q || {})[pr.id], g = groupOf(pr), st = !i || groupOf(ps[i - 1]) !== g; return `<td class="pc g-${g}${st ? ' gstart' : ''}"><input class="q ${num(v) > 0 ? 'has' : ''}" data-p="${esc(pr.id)}" inputmode="decimal" value="${v ? esc(v) : ''}" aria-label="${esc(prodLabel(pr))}" title="${esc(prodLabel(pr))}"></td>`; }).join('')}
     ${on('pk') ? `<td><select class="in" data-k="pk">${['TÚI ĐEN', 'THÙNG'].map(x => `<option ${norm(x) === norm(pk) ? 'selected' : ''}>${x}</option>`).join('')}</select></td>` : ''}
     ${on('pack') ? `<td class="pack" data-out="pack">${esc(packLabel(p))}</td>` : ''}
-    <td><button class="btn sm ghost" data-more title="Chi tiết đơn">⋯</button></td></tr>`;
+    <td class="nowrap"><button class="btn sm ghost" data-more title="Chi tiết đơn">⋯</button>${!c._extra && hasOrder(o) && !orderOf(baseId(c.id) + XSUF) && (S.tnMode || isTn(o) === false) && can('donNhap') && S.tnMode ? '<button class="btn sm ghost" data-xadd title="Khách lên thêm đơn đi trong ngày (dòng riêng)">+⚡</button>' : ''}</td></tr>`;
+}
+// tạo đơn thứ 2 (đi trong ngày) cho khách rồi đặt con trỏ vào ô số lượng đầu tiên của dòng mới
+function addExtraOrder(cid) {
+  const k = baseId(cid) + XSUF;
+  if (!orderOf(k)) patchRow(k, { tn: true });
+  drawTable();
+  setTimeout(() => { const i = $(`tr[data-cid="${CSS.escape(k)}"] input.q`); if (i) { i.scrollIntoView({ block: 'center' }); i.focus(); } }, 50);
+  toast('Đã thêm dòng đơn đi trong ngày cho khách – nhập số lượng ở dòng ⚡ ngay dưới');
+}
+async function removeExtraOrder(k) {
+  if (!isExtra(k)) return;
+  clearTimeout(rowTimers[k]); if (rowTimers[k]) { delete rowTimers[k]; pendingWrites--; } delete S.localRows[k];
+  delete S.day.r[k];
+  const d = S.date;
+  await mergeInto('ngay/' + d, { r: { [k]: null } }, { date: d });
+  khoOutLater('don', d); drawTable(); updateDayTotals(); toast('Đã xóa đơn thêm');
 }
 // ghi 1 dòng (gộp các lần gõ liên tiếp)
 S.localRows = {};
@@ -1789,7 +1827,7 @@ function patchRow(cid, patch) {
   if (!('rt' in patch && Object.keys(patch).length === 1) && !need('donNhap')) return;
   const prev = S.day.r[cid] || {};
   if (S.tnMode && patch.q && !(qtyTotal(prev.q) > 0) && prev.tn == null) patch.tn = true; // đang nhập đơn đi trong ngày
-  const c = S.cust[cid];
+  const c = custOf(cid);
   const cur = S.day.r[cid] = deepMerge(JSON.parse(JSON.stringify(S.day.r[cid] || {})), patch);
   if (!cur.tao && S.me && qtyTotal(cur.q) > 0) { cur.tao = S.me; patch.tao = S.me; }
   if (c) patch.snap = { name: c.name, q: c.q || '', crm: c.crm || '' };
@@ -1828,12 +1866,13 @@ function bindRows(el) {
     $$('select[data-k]', tr).forEach(sel => sel.onchange = () => {
       patchRow(cid, { [sel.dataset.k]: sel.value }); updateRow(tr, cid); updateDayTotals();
       if (sel.dataset.k !== 'rt') return;
-      const c = S.cust[cid];
-      if (c && (c.rt || '') !== sel.value) { c.rt = sel.value; guard(() => saveCustomer(c)); }
+      const c = S.cust[baseId(cid)];
+      if (c && !isExtra(cid) && (c.rt || '') !== sel.value) { c.rt = sel.value; guard(() => saveCustomer(c)); }
       if ((S.filter.by || 'tuyen') === 'tuyen' || colF().rt) drawTable(); else sel.classList.toggle('rt-none', !routeOf(orderOf(cid), c)[0]);
     });
 
     $('[data-more]', tr).onclick = () => editOrder(cid);
+    const xa = $('[data-xadd]', tr); if (xa) xa.onclick = () => addExtraOrder(cid);
     const tb = $('input[data-tn]', tr);
     if (tb) tb.onchange = () => {
       if (!can('donNhap')) { tb.checked = !tb.checked; return; }
@@ -1842,9 +1881,9 @@ function bindRows(el) {
       updateDayTotals(); if (colF().tn) drawTable();
     };
     $$('[data-cf]', tr).forEach(td => td.onclick = e => {
-      if (!S.cust[cid]) return;
+      if (!S.cust[baseId(cid)]) return;
       const sub = e.target.closest('.sub');
-      editCustInline(td, cid, sub ? 'phone' : td.dataset.cf, c => {
+      editCustInline(td, baseId(cid), sub ? 'phone' : td.dataset.cf, c => {
         const a = $('td.cust', tr), b = $('td.s-crm', tr);
         if (a) a.innerHTML = `<b>${esc(c.name)}</b><div class="sub">${esc(c.phone || '')}${c.note ? ' · ' + esc(c.note) : ''}</div>`;
         if (b) { b.textContent = c.crm || '–'; b.title = (c.crm || '') + ' – bấm để sửa'; }
@@ -1853,7 +1892,7 @@ function bindRows(el) {
   });
 }
 function updateRow(tr, cid) {
-  const o = orderOf(cid) || {}, c = S.cust[cid];
+  const o = orderOf(cid) || {}, c = custOf(cid);
   const po = $('[data-out=pack]', tr); if (po) po.textContent = packLabel(packing(o.q, packOf(o, c)));
   tr.classList.toggle('has-order', hasOrder(o));
   const sel = $('select[data-k=hd]', tr);
@@ -1909,10 +1948,11 @@ function people(field) {
   return [...s];
 }
 function editOrder(cid) {
-  const c = S.cust[cid] || { id: cid, name: '(khách đã xóa)' }, o = JSON.parse(JSON.stringify(orderOf(cid) || {}));
+  const c = custOf(cid) || { id: cid, name: '(khách đã xóa)' }, o = JSON.parse(JSON.stringify(orderOf(cid) || {}));
+  const xk = baseId(cid) + XSUF, hasX = !!orderOf(xk);
   const ps = S.cfg.products;
   const m = modal({
-    title: `Đơn ${vn(S.date)} – ${c.crm ? c.crm + ' · ' : ''}${c.name}`, wide: true, ok: 'Lưu đơn',
+    title: `${isExtra(cid) ? 'Đơn thêm (đi trong ngày)' : 'Đơn'} ${vn(S.date)} – ${c.crm ? c.crm + ' · ' : ''}${c.name}`, wide: true, ok: 'Lưu đơn',
     body: `<div style="display:grid;gap:14px">
       <p class="hint" style="margin:0">${esc(c.q || '')} · ${esc(c.phone || '')}${c.note ? ' · ' + esc(c.note) : ''}</p>
       <div class="qsecs">${groupRuns(ps).map(r => `<div class="qsec g-${r.g}"><h4>${esc(GROUPS[r.g].name)}</h4><div class="qgrid">${r.list.map(p => `<label title="${esc(p.name)}"><span>${esc(prodShort(p))}</span><input data-p="${esc(p.id)}" inputmode="decimal" value="${(o.q || {})[p.id] ? esc(o.q[p.id]) : ''}"></label>`).join('')}</div></div>`).join('')}</div>
@@ -1942,6 +1982,20 @@ function editOrder(cid) {
     $('#eo-pack', m.root).textContent = packLabel(packing(q, $('#eo-pk', m.root).value)) || '—';
   };
   $$('.qgrid input, #eo-pk', m.root).forEach(i => i.addEventListener('input', upd)); upd();
+  // khách lên 2 đơn trong ngày: tạo / xóa đơn thêm (đi trong ngày)
+  if (can('donNhap') && S.cust[baseId(cid)]) {
+    const box = document.createElement('div'); box.className = 'row'; box.style.marginTop = '12px';
+    box.innerHTML = isExtra(cid) ? '<button class="btn sm danger" type="button" id="eo-xdel">🗑 Xóa đơn thêm này</button><span class="hint">Đơn thêm của khách trong ngày – đơn chính vẫn giữ nguyên.</span>'
+      : hasX ? '<span class="hint">Khách này đã có <b>đơn thêm đi trong ngày</b> ở dòng ngay dưới.</span>'
+      : '<button class="btn sm" type="button" id="eo-xadd">➕ Khách lên thêm đơn đi trong ngày</button><span class="hint">Tạo đơn thứ 2 cho khách trong ngày này (dòng riêng, đánh dấu ⚡ đi trong ngày, báo cáo và gửi Kho / Giao hàng riêng).</span>';
+    $('.m-body', m.root).appendChild(box);
+    const add = $('#eo-xadd', m.root); if (add) add.onclick = () => { m.close(); addExtraOrder(cid); };
+    const del = $('#eo-xdel', m.root); if (del) del.onclick = async () => {
+      m.close();
+      if (qtyTotal(o.q) > 0 && !(await confirmBox('Xóa đơn thêm đi trong ngày này (đã có số lượng)?', 'Xóa', true))) return;
+      await guard(() => removeExtraOrder(cid));
+    };
+  }
   if (!can('donNhap')) { // chế độ xem: xem chi tiết đơn, không sửa
     $$('input, select, textarea', m.root).forEach(i => { i.disabled = true; });
     const ok = $('[data-ok]', m.root); if (ok) ok.remove();
@@ -2254,7 +2308,7 @@ const pTh = p => `<th class="n" title="${esc(p.name)}">${esc(prodLabel(p))}${per
 // bảng tổng theo tuyến: số đơn, số lượng từng sản phẩm (túi; kebab, cây thịt: cái), bao bì
 function rtSummaryHtml(r) {
   const by = {};
-  for (const x of dayOrders(r)) { const k = routeOf(x.o, S.cust[x.cid] || x.c)[0]; (by[k] = by[k] || {})[x.cid] = x.o; }
+  for (const x of dayOrders(r)) { const k = routeOf(x.o, custOf(x.cid) || x.c)[0]; (by[k] = by[k] || {})[x.cid] = x.o; }
   const keys = Object.keys(by).sort((a, b) => routeIdx(a) - routeIdx(b) || a.localeCompare(b));
   if (!keys.length) return '';
   const ps = usedProducts(r), all = dayTotals(r), needs = NEED.filter(([k]) => all.need[k] > 0);
@@ -2279,7 +2333,7 @@ function printDoc(d, r, tuyen, opt = {}) {
   const sec = Object.assign({ big: true, rept: true, need: true, rt: true, det: true, gsum: true }, opt.sec || {});
   if (opt.det === false) sec.det = false;
   const H = hideSet('hideDon'), C = opt.cols || new Set(DON_PRINT_COLS.map(([k]) => k).filter(k => !H.has(k))), hid = hiddenDonText();
-  const by = opt.by || (S.filter.by === 'area' ? 'area' : 'tuyen'), rk = x => routeOf(x.o, S.cust[x.cid] || x.c)[0];
+  const by = opt.by || (S.filter.by === 'area' ? 'area' : 'tuyen'), rk = x => routeOf(x.o, custOf(x.cid) || x.c)[0];
   const gOf = x => (by === 'tuyen' ? x.rt : by === 'pay' ? payKey(x.o.tt) || 'none' : x.c.q || '');
   const ar = by === 'area' ? areas() : [];
   const gIdx = g => (by === 'tuyen' ? routeIdx(g) : by === 'pay' ? (g === 'none' ? 99 : PAYS.findIndex(p => p[0] === g)) : ar.indexOf(g));
@@ -2477,9 +2531,9 @@ function sheetRows(d, r) {
 function routingRows(r) {
   const ps = S.cfg.products;
   const out = [['QUẬN', 'TUYẾN', 'CRM', 'KHÁCH HÀNG', 'SĐT', 'GHI CHÚ', 'BILL', 'NGƯỜI TẠO ĐƠN', 'TÀI XẾ', 'TRẠNG THÁI', 'TÌNH TRẠNG'].concat(ps.map(p => p.name))];
-  const list = dayOrders(r).map(x => Object.assign(x, { rt: routeOf(x.o, S.cust[x.cid] || x.c)[0] }));
+  const list = dayOrders(r).map(x => Object.assign(x, { rt: routeOf(x.o, custOf(x.cid) || x.c)[0] }));
   for (const { o, c, rt } of list.sort((a, b) => routeIdx(a.rt) - routeIdx(b.rt) || (a.c.s || 0) - (b.c.s || 0))) {
-    out.push([c.q, rt, c.crm, c.name, c.phone, [isTn(o) ? '⚡ ĐI TRONG NGÀY' : '', c.note, o.gc].filter(Boolean).join(' · '), o.bill == null ? (c.bill == null ? 1 : c.bill) : o.bill, o.tao, o.tx, 'HOẠT ĐỘNG', o.tt]
+    out.push([c.q, rt, exportCrm(c), c.name, c.phone, [isTn(o) ? '⚡ ĐI TRONG NGÀY' : '', c.note, o.gc].filter(Boolean).join(' · '), o.bill == null ? (c.bill == null ? 1 : c.bill) : o.bill, o.tao, o.tx, 'HOẠT ĐỘNG', o.tt]
       .concat(ps.map(p => (num((o.q || {})[p.id]) > 0 ? num(o.q[p.id]) : ''))));
   }
   return out;
