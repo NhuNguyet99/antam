@@ -7,17 +7,17 @@
 /* Bố cục: một cột, ô tìm trên cùng, các nhóm web dạng lưới thẻ bấm được; mỗi thẻ có nút chép link */
 :root {
   --bg: #f3f6f4; --panel: #ffffff; --ink: #18241f; --ink-2: #4b5c54; --muted: #7a8a83; --line: #dce4e0;
-  --accent: #0f6e5a; --accent-soft: #e1f1ec; --accent-ink: #ffffff; --warm: #b86a1d; --warm-soft: #f8ecdd;
+  --accent: #0f6e5a; --accent-soft: #e1f1ec; --accent-ink: #ffffff; --warm: #b86a1d; --warm-soft: #f8ecdd; --bad: #b4232c;
   --f-body: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --f-mono: "JetBrains Mono", ui-monospace, Menlo, Consolas, monospace;
   --r: 10px;
 }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
   --bg: #101714; --panel: #17211c; --ink: #e4ece8; --ink-2: #b2c1b9; --muted: #84968e; --line: #2a3832;
-  --accent: #43b796; --accent-soft: #183730; --accent-ink: #07130f; --warm: #e2a560; --warm-soft: #3a2a18; color-scheme: dark } }
+  --accent: #43b796; --accent-soft: #183730; --accent-ink: #07130f; --warm: #e2a560; --warm-soft: #3a2a18; --bad: #ff8a8f; color-scheme: dark } }
 :root[data-theme="dark"] {
   --bg: #101714; --panel: #17211c; --ink: #e4ece8; --ink-2: #b2c1b9; --muted: #84968e; --line: #2a3832;
-  --accent: #43b796; --accent-soft: #183730; --accent-ink: #07130f; --warm: #e2a560; --warm-soft: #3a2a18; color-scheme: dark }
+  --accent: #43b796; --accent-soft: #183730; --accent-ink: #07130f; --warm: #e2a560; --warm-soft: #3a2a18; --bad: #ff8a8f; color-scheme: dark }
 body { background: var(--bg); color: var(--ink); font-family: var(--f-body); font-size: 15px; line-height: 1.5;
   padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 20px 40px; }
 .wrap { max-width: 1040px; margin: 0 auto; display: grid; gap: 22px; }
@@ -50,6 +50,13 @@ h2 .n { font-family: var(--f-mono); font-size: 11px; color: var(--muted); letter
 .url { font-family: var(--f-mono); font-size: 11.5px; color: var(--muted); user-select: all; overflow-wrap: anywhere; min-width: 0; flex: 1 1 180px; }
 .tag { grid-column: 3; grid-row: 1; font-size: 11px; font-weight: 700; padding: 2px 8px; border-radius: 999px; background: var(--accent-soft); color: var(--accent); white-space: nowrap; }
 .empty { color: var(--muted); padding: 20px 0; }
+.edit-btn { font: inherit; font-size: 13.5px; font-weight: 600; padding: 8px 14px; border-radius: 8px; border: 1px solid var(--line); background: var(--panel); color: var(--ink); cursor: pointer; }
+.edit-btn.on { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); }
+.edit-note { font-size: 13px; color: var(--ink-2); background: var(--accent-soft); border-radius: var(--r); padding: 10px 14px; margin: 0; }
+.rm { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--bad); background: transparent; color: var(--bad); cursor: pointer; }
+.rm.sure { background: var(--bad); color: var(--panel); }
+.card.gone { opacity: .6; border-style: dashed; }
+.back { font: inherit; font-size: 13px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--accent); background: transparent; color: var(--accent); cursor: pointer; }
 .tip { font-size: 13px; color: var(--ink-2); background: var(--panel); border: 1px dashed var(--line); border-radius: var(--r); padding: 10px 14px; margin: 0; }
 @media (prefers-reduced-motion: no-preference) { .card { transition: border-color .15s, box-shadow .15s; } .card:hover { box-shadow: 0 4px 16px rgba(15, 110, 90, .08); } }
 </style>
@@ -59,7 +66,9 @@ h2 .n { font-family: var(--f-mono); font-size: 11px; color: var(--muted); letter
     <div class="logo" aria-hidden="true">AT</div>
     <div class="head-text"><h1>Cổng web An Tâm</h1>
       <p class="sub">Tất cả các trang làm việc, biểu mẫu và quy trình của Công ty An Tâm ở một chỗ. Bấm <b>Mở</b> để vào trang.</p></div>
+    <button class="edit-btn" id="edit" type="button" aria-pressed="false">✎ Sửa danh sách</button>
   </header>
+  <p class="edit-note" id="edit-note" hidden>Đang sửa danh sách: bấm <b>Bỏ khỏi cổng</b> ở trang không cần (bấm 2 lần để chắc chắn). Trang chỉ bị bỏ khỏi danh sách này, không bị xóa. Trang đã bỏ nằm ở cuối, bấm <b>Hiện lại</b> nếu cần. Xong bấm <b>✓ Xong</b>.</p>
   <label class="search" for="q"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" aria-hidden="true"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.5-3.5"/></svg>
     <input id="q" type="search" placeholder="Tìm trang… (VD: kho, giao, quy trình, phiếu)" autocomplete="off" aria-label="Tìm trang"></label>
   <div id="list"></div>
@@ -100,21 +109,47 @@ const GROUPS = [
 ];
 const esc = s => String(s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
 const norm = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
+// trang đã bỏ khỏi cổng: lưu chung (db "cong/main" {an: [mã trang]}), không có db thì lưu trên máy này
+let hidden = new Set(), editing = false, db = null, curQ = '';
+function card([id, name, desc, ico, tag, kind], gone) {
+  const url = BASE + id;
+  return `<article class="card${tag ? ' main' : ''}${kind ? ' ' + kind : ''}${gone ? ' gone' : ''}"><div class="ico" aria-hidden="true">${ico}</div>
+    <a class="name" href="${url}" target="_blank" rel="noopener">${esc(name)}</a>${tag ? `<span class="tag">${esc(tag)}</span>` : ''}
+    <p class="desc">${esc(desc)}</p>
+    <div class="acts">${gone ? `<button class="back" type="button" data-back="${id}">Hiện lại</button>`
+      : `<a class="open" href="${url}" target="_blank" rel="noopener">Mở</a><button class="copy" type="button" data-url="${url}">Chép link</button>${editing ? `<button class="rm" type="button" data-rm="${id}">Bỏ khỏi cổng</button>` : ''}`}<span class="url">${url}</span></div></article>`;
+}
 function draw(q) {
+  curQ = q;
   const t = norm(q).split(/\s+/).filter(Boolean);
   const hit = x => t.every(w => norm(x[1] + ' ' + x[2] + ' ' + x[0]).includes(w));
+  const goneList = GROUPS.flatMap(([, items]) => items).filter(x => hidden.has(x[0]));
   const html = GROUPS.map(([g, items]) => {
-    const list = items.filter(hit); if (!list.length) return '';
-    return `<section><h2>${esc(g)} <span class="n">${list.length}</span></h2><div class="grid">${list.map(([id, name, desc, ico, tag, kind]) => {
-      const url = BASE + id;
-      return `<article class="card${tag ? ' main' : ''}${kind ? ' ' + kind : ''}"><div class="ico" aria-hidden="true">${ico}</div>
-        <a class="name" href="${url}" target="_blank" rel="noopener">${esc(name)}</a>${tag ? `<span class="tag">${esc(tag)}</span>` : ''}
-        <p class="desc">${esc(desc)}</p>
-        <div class="acts"><a class="open" href="${url}" target="_blank" rel="noopener">Mở</a><button class="copy" type="button" data-url="${url}">Chép link</button><span class="url">${url}</span></div></article>`;
-    }).join('')}</div></section>`;
+    const list = items.filter(x => !hidden.has(x[0]) && hit(x)); if (!list.length) return '';
+    return `<section><h2>${esc(g)} <span class="n">${list.length}</span></h2><div class="grid">${list.map(x => card(x)).join('')}</div></section>`;
   }).join('');
-  document.getElementById('list').innerHTML = html || '<p class="empty">Không có trang nào khớp – thử từ khác.</p>';
+  const gone = editing && goneList.length ? `<section><h2>Đã bỏ khỏi cổng <span class="n">${goneList.length}</span></h2><div class="grid">${goneList.map(x => card(x, true)).join('')}</div></section>` : '';
+  document.getElementById('list').innerHTML = (html || '<p class="empty">Không có trang nào khớp – thử từ khác.</p>') + gone;
 }
+async function saveHidden() {
+  const an = [...hidden];
+  if (db) { try { await db.doc('cong/main').set({ an }); return; } catch (e) { console.warn(e); } }
+  try { localStorage.setItem('cong.an', JSON.stringify(an)); } catch (e) {}
+}
+document.getElementById('edit').addEventListener('click', () => {
+  editing = !editing;
+  const b = document.getElementById('edit');
+  b.textContent = editing ? '✓ Xong' : '✎ Sửa danh sách'; b.classList.toggle('on', editing); b.setAttribute('aria-pressed', editing);
+  document.getElementById('edit-note').hidden = !editing;
+  draw(curQ);
+});
+document.getElementById('list').addEventListener('click', async e => {
+  const rm = e.target.closest('[data-rm]'), back = e.target.closest('[data-back]');
+  if (rm) {
+    if (!rm.classList.contains('sure')) { rm.classList.add('sure'); rm.textContent = 'Bấm lần nữa để bỏ'; setTimeout(() => { if (rm.isConnected) { rm.classList.remove('sure'); rm.textContent = 'Bỏ khỏi cổng'; } }, 3000); return; }
+    hidden.add(rm.dataset.rm); draw(curQ); await saveHidden();
+  } else if (back) { hidden.delete(back.dataset.back); draw(curQ); await saveHidden(); }
+});
 document.getElementById('list').addEventListener('click', async e => {
   const b = e.target.closest('.copy'); if (!b) return;
   try { await navigator.clipboard.writeText(b.dataset.url); b.textContent = 'Đã chép'; }
@@ -123,6 +158,13 @@ document.getElementById('list').addEventListener('click', async e => {
 });
 const q = document.getElementById('q');
 let last = ''; try { last = localStorage.getItem('cong.q') || ''; } catch (e) {}
-q.value = last; draw(last);
+q.value = last;
+try { hidden = new Set(JSON.parse(localStorage.getItem('cong.an') || '[]')); } catch (e) {}
+draw(last);
+(window.claude ? window.claude.use('db') : Promise.resolve(null)).then(d => {
+  if (!d) return;
+  db = d;
+  db.doc('cong/main').onSnapshot(sn => { const v = sn.exists ? sn.data() : null; if (v && Array.isArray(v.an)) { hidden = new Set(v.an); draw(curQ); } }, err => console.warn(err));
+}).catch(() => {});
 q.addEventListener('input', () => { draw(q.value); try { localStorage.setItem('cong.q', q.value); } catch (e) {} });
 </script>
