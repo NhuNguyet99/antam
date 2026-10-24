@@ -23,21 +23,21 @@ const KHO_PERMS = [
   ['Kho được làm việc', [['khoTP', 'Kho thành phẩm – hàng hóa'], ['khoNVL', 'Kho nguyên vật liệu']]],
   ['Phiếu nhập – xuất', [['pN', 'Lập / sửa phiếu nhập'], ['pX', 'Lập / sửa phiếu xuất'], ['pD', 'Lập / sửa phiếu điều chỉnh'], ['xoa', 'Xóa phiếu'], ['duyet', 'Duyệt phiếu điều chỉnh']]],
   ['Xem & báo cáo', [['phieu', 'Danh sách phiếu, sổ nhập – xuất'], ['baocao', 'Nhập – Xuất – Tồn, thẻ kho']]],
-  ['Biên bản & kế hoạch', [['kiemke', 'Kiểm kê kho'], ['bangiao', 'Bàn giao kho'], ['kehoach', 'Kế hoạch mua (kho NVL)']]],
+  ['Biên bản & kế hoạch', [['kiemke', 'Kiểm kê kho'], ['bangiao', 'Bàn giao kho'], ['kehoach', 'Kế hoạch mua (kho NVL)'], ['sanxuat', 'Lệnh sản xuất & định mức NVL']]],
   ['Giao hàng', [['phantuyen', 'Phân tuyến giao hàng'], ['taixe', 'Tài khoản giao hàng']]],
   ['Danh mục & hệ thống', [['hang', 'Mặt hàng'], ['tuyen', 'Tuyến / nơi nhận'], ['caidat', 'Cài đặt & dữ liệu'], ['lichsu', 'Lịch sử thao tác'], ['taikhoan', 'Quản lý tài khoản & phân quyền']]],
 ];
 const KHO_PERM_KEYS = KHO_PERMS.flatMap(([, l]) => l.map(x => x[0]));
 const KHO_PERM_LAB = Object.fromEntries(KHO_PERMS.flatMap(([, l]) => l));
 const KHO_ROLES = [['ql', 'Quản lý', KHO_PERM_KEYS], ['nv', 'Nhân viên kho', KHO_PERM_KEYS.filter(k => k !== 'duyet' && k !== 'taikhoan')],
-  ['tk', 'Thủ kho', ['khoTP', 'khoNVL', 'pN', 'pX', 'pD', 'xoa', 'phieu', 'baocao', 'kiemke', 'bangiao', 'kehoach', 'hang']], ['xem', 'Chỉ xem', ['khoTP', 'khoNVL', 'phieu', 'baocao']]];
+  ['tk', 'Thủ kho', ['khoTP', 'khoNVL', 'pN', 'pX', 'pD', 'xoa', 'phieu', 'baocao', 'kiemke', 'bangiao', 'kehoach', 'sanxuat', 'hang']], ['xem', 'Chỉ xem', ['khoTP', 'khoNVL', 'phieu', 'baocao']]];
 const permsOf = a => new Set(Array.isArray(a && a.perm) ? a.perm : a && a.admin ? KHO_PERM_KEYS : KHO_ROLES[1][2]);
 const can = k => !S.account || permsOf(S.account).has(k);
 const roleOfPerms = set => { const r = KHO_ROLES.find(([, , l]) => l.length === set.size && l.every(k => set.has(k))); return r ? r[1] : 'Tùy chỉnh'; };
 // mục trên menu → quyền cần có (một trong các quyền)
 const ROUTE_PERM = { 'phieu/moi': ['pN', 'pX', 'pD'], phieu: ['phieu', 'pN', 'pX', 'pD'], 'so-nx': ['phieu'], 'phan-tuyen': ['phantuyen'], 'kh-ngay': ['kehoach'], 'kh-tuan': ['kehoach'],
   'kh-thang': ['kehoach'], nxt: ['baocao'], 'the-kho': ['baocao'], 'kiem-ke': ['kiemke'], 'ban-giao': ['bangiao'], hang: ['hang'], tuyen: ['tuyen'], 'giao-hang-tk': ['taixe'],
-  'cai-dat': ['caidat'], 'lich-su': ['lichsu'] };
+  'cai-dat': ['caidat'], 'lich-su': ['lichsu'], lsx: ['sanxuat'], 'dinh-muc': ['sanxuat'] };
 const routeOk = path => { const key = /^phieu\/moi/.test(path) ? 'phieu/moi' : path.split('/')[0]; const need = ROUTE_PERM[key]; return !need || need.some(can); };
 function applyPerms() {
   $$('#nav a[data-route]').forEach(a => { a.hidden = !routeOk(a.dataset.route); });
@@ -411,6 +411,9 @@ const ROUTES = [
   [/^kh-ngay$/, viewPlanDaily],
   [/^kh-tuan$/, viewPlanWeekly],
   [/^kh-thang$/, viewPlanMonthly],
+  [/^lsx$/, viewLsxList],
+  [/^lsx\/(moi|[\w-]+)$/, viewLsx],
+  [/^dinh-muc$/, viewBom],
   [/^hang$/, viewProducts],
   [/^tuyen$/, viewRoutes],
   [/^phan-tuyen$/, viewRoutingList],
@@ -497,7 +500,7 @@ async function switchWh(wh, keepPage) {
   toast('Đang làm việc: ' + S.meta.warehouse.name);
   if (keepPage) return;
   const { path } = parseHash();
-  const only = { 'tuyen': 'TP', 'phan-tuyen': 'TP', 'giao-hang-tk': 'TP', 'kh-ngay': 'NVL', 'kh-tuan': 'NVL', 'kh-thang': 'NVL' }[path.split('/')[0]];
+  const only = { 'tuyen': 'TP', 'phan-tuyen': 'TP', 'giao-hang-tk': 'TP', 'kh-ngay': 'NVL', 'kh-tuan': 'NVL', 'kh-thang': 'NVL', 'lsx': 'NVL', 'dinh-muc': 'NVL' }[path.split('/')[0]];
   if (/\/(?!moi$)[\w-]+$/.test(path) || (only && only !== wh)) go('#/', { force: true }); else render();
 }
 
@@ -528,7 +531,7 @@ async function viewDashboard(main) {
       <button class="btn" id="print-today">🖨 In tất cả phiếu hôm nay</button>
       <a class="btn" href="#/kiem-ke/moi">Kiểm kê</a>
       <a class="btn" href="#/ban-giao/moi">Bàn giao kho</a>
-      ${S.wh === 'NVL' ? '<a class="btn" href="#/kh-ngay">Kế hoạch mua hàng</a>' : ''}
+      ${S.wh === 'NVL' ? '<a class="btn primary" href="#/lsx/moi">+ Lệnh sản xuất (tự xuất NVL)</a><a class="btn" href="#/kh-ngay">Kế hoạch mua hàng</a>' : ''}
     </div>
     <div class="kpis">
       <div class="kpi"><div class="k-label">Phiếu nhập hôm nay</div><div class="k-val">${cnt.N}</div></div>
@@ -707,7 +710,8 @@ async function viewVoucherForm(main, m, q) {
       };
       if ($('#btn-del')) $('#btn-del').onclick = async () => {
         if (!(await ask(`Xóa phiếu ${v.no}? Thao tác này không hoàn tác được (vẫn ghi trong Lịch sử).`))) return;
-        if (await guard(() => api('DELETE', '/vouchers/' + editing))) { S.dirty = false; toast('Đã xóa phiếu ' + v.no); go('#/phieu'); }
+        const r = await guard(() => api('DELETE', '/vouchers/' + editing));
+        if (r) { S.dirty = false; toast('Đã xóa phiếu ' + v.no); lsxAutoToast(r.lsx_auto); go('#/phieu'); }
       };
       $('#btn-copy').onclick = () => {
         store('voucherDraft', { wh: S.wh, type: v.type, route: v.route, from_party: v.from_party, to_party: v.to_party, giver: v.giver,
@@ -824,6 +828,7 @@ async function viewVoucherForm(main, m, q) {
     S.dirty = false;
     store('lastVoucher_' + S.wh + '_' + v.type, { giver: v.giver, receiver: v.receiver });
     toast(res.status === 'pending' ? `Đã lưu phiếu ${res.no} – đang chờ Quản lý duyệt` : `Đã lưu phiếu ${res.no}`);
+    lsxAutoToast(res.lsx_auto);
     loadMeta();
     if (andPrint) printHtml(voucherDoc(res), 'portrait', res.no);
     if (!editing) go('#/phieu/' + res.id, { force: true });
@@ -2579,6 +2584,348 @@ async function viewPlanMonthly(main) {
       ${signBlock([['Người lập (Thủ kho)', S.user], ['Kế toán', ''], ['Giám đốc duyệt', '']])}</div>`, 'landscape');
   };
   await load();
+}
+
+/* ============================================================ Sản xuất: định mức NVL & lệnh sản xuất (kho NVL) */
+const LSX_WARN = { 'Thiếu': 'bad', 'Chưa có mã trong kho NVL': 'bad', 'Tồn âm': 'bad', 'Còn thiếu': 'bad', 'Còn thiếu – đủ tồn để xuất bổ sung': 'warn', 'Dưới tồn tối thiểu': 'warn' };
+const warnBadge = w => (w ? `<span class="badge ${LSX_WARN[w] || 'warn'}">${esc(w)}</span>` : '<span class="badge ok">Đủ</span>');
+function needNvlWh(main) {
+  if (S.wh === 'NVL') return false;
+  main.innerHTML = '<div class="callout">Định mức và lệnh sản xuất làm ở <b>Kho nguyên vật liệu</b>. <button class="btn primary sm" id="to-nvl">Chuyển sang kho NVL</button></div>';
+  $('#to-nvl').onclick = () => switchWh('NVL');
+  return true;
+}
+const bomCost = b => (b.lines || []).reduce((a, l) => a + (Number(l.q) || 0) * ((productByCode(l.c) || {}).price || 0), 0);
+
+async function viewBom(main) {
+  setTitle('Định mức nguyên vật liệu');
+  if (needNvlWh(main)) return;
+  let list = await api('GET', '/bom');
+  const tps = (await guard(() => api('GET', '/tp-products'))) || [];
+  const f = { q: '' };
+  main.innerHTML = `<div class="toolbar"><button class="btn primary" id="b-add">+ Thêm định mức</button><a class="btn" href="#/lsx/moi">+ Lệnh sản xuất</a>
+    <label class="field grow">Tìm thành phẩm / NVL<input id="b-q"></label></div>
+    <div class="callout small">Định mức = lượng nguyên vật liệu (theo <b>ĐVT trong kho NVL</b>) cho <b>1 đơn vị thành phẩm</b> (1 túi tacos, 1 cái bánh kebab, 1 kg nhân / sốt).
+    Lập <a href="#/lsx/moi">Lệnh sản xuất</a> thì web nhân định mức với số lượng, <b>tự lập phiếu xuất NVL</b> và cảnh báo NVL thiếu / dưới tồn tối thiểu.</div>
+    <div id="b-list"></div>`;
+  function draw() {
+    const rows = list.filter(b => !f.q || matches(f.q, [b.code, b.name].concat((b.lines || []).map(l => l.c + ' ' + ((productByCode(l.c) || {}).name || ''))).join(' ')));
+    const has = new Set(list.map(b => b.code));
+    const none = tps.filter(t => t.active && !has.has(t.code));
+    $('#b-list').innerHTML = `<div class="table-wrap"><table class="data"><thead><tr><th>Mã thành phẩm</th><th>Tên thành phẩm</th><th>ĐVT</th><th>Định mức cho 1 ĐVT thành phẩm</th>
+      <th class="num">Giá NVL / ĐVT (đ)</th><th>Ghi chú</th><th></th></tr></thead><tbody>
+      ${rows.map(b => `<tr class="clickable" data-code="${esc(b.code)}"><td class="nowrap"><b>${esc(b.code)}</b></td><td>${esc(b.name)}</td><td>${esc(b.unit)}</td>
+        <td class="small">${(b.lines || []).map(l => { const p = productByCode(l.c); return `${p ? esc(p.name) : `<span class="neg">${esc(l.c)} (không có mã)</span>`}: <b>${fmt(l.q, 6)}</b> ${esc(p ? p.unit : '')}`; }).join('<br>')}</td>
+        <td class="num">${money(bomCost(b))}</td><td class="small">${esc(b.note || '')}</td>
+        <td class="nowrap"><a class="btn sm primary" href="#/lsx/moi?code=${encodeURIComponent(b.code)}">Lập lệnh SX</a></td></tr>`).join('')}
+      </tbody></table></div><p class="hint">${rows.length} thành phẩm có định mức. Bấm dòng để sửa.${none.length ? ` Chưa có định mức: ${none.map(t => esc(t.code)).join(', ')}.` : ''}</p>`;
+    $$('#b-list tr[data-code]').forEach(tr => tr.onclick = e => { if (!e.target.closest('a,button')) edit(list.find(b => b.code === tr.dataset.code)); });
+  }
+  async function reload() { list = await api('GET', '/bom'); draw(); }
+  function edit(b) {
+    if (VIEW) return;
+    const x = b ? JSON.parse(JSON.stringify(b)) : { code: '', name: '', unit: '', lines: [], note: '' };
+    if (!x.lines.length) x.lines.push({ c: '', q: null });
+    const opts = tps.filter(t => t.active || t.code === x.code).map(t => [t.code, `${t.code} – ${t.name} (${t.unit})`]);
+    const { root, close } = openModal({
+      title: b ? 'Sửa định mức ' + b.code : 'Thêm định mức NVL', wide: true, saveText: '💾 Lưu định mức',
+      body: `<div class="grid c2"><label class="field">Thành phẩm (kho thành phẩm)<select id="bm-tp" ${b ? 'disabled' : ''}>${options(opts, x.code, '— Chọn thành phẩm —')}</select></label>
+        <label class="field">Ghi chú<input id="bm-note" value="${esc(x.note || '')}"></label></div>
+        <p class="hint" id="bm-unit"></p>
+        <div class="table-wrap" style="margin-top:8px;overflow:visible"><table class="data lines-table"><thead><tr><th>#</th><th style="min-width:280px">Nguyên vật liệu</th><th>ĐVT</th><th class="num" style="width:150px">Lượng cho 1 ĐVT TP</th><th class="num">Đơn giá</th><th class="num">Thành tiền</th><th></th></tr></thead>
+        <tbody id="bm-lines"></tbody><tfoot><tr><td></td><td colspan="4">Giá NVL cho 1 đơn vị thành phẩm</td><td class="num" id="bm-sum"></td><td></td></tr></tfoot></table></div>
+        <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" id="bm-add">+ Thêm NVL</button>${b ? '<button class="btn sm danger" id="bm-del">Xóa định mức này</button>' : ''}</div>`,
+      onSave: async () => {
+        const code = b ? b.code : $('#bm-tp', root).value;
+        if (!code) throw new Error('Chọn thành phẩm');
+        const tp = tps.find(t => t.code === code) || {};
+        if (x.lines.some(l => l.c && !(Number(l.q) > 0))) throw new Error('Có dòng NVL chưa nhập lượng');
+        const src = !b ? 'Thêm trên web' : b.src && !/sửa trên web/i.test(b.src) ? b.src + ' · đã sửa trên web' : b.src || 'Sửa trên web';
+        await api('POST', '/bom', { code, name: tp.name || x.name, unit: tp.unit || x.unit, note: $('#bm-note', root).value, src, lines: x.lines.filter(l => l.c).map(l => ({ c: l.c, q: l.q })) });
+        toast('Đã lưu định mức ' + code); await reload(); return true;
+      },
+    });
+    const showUnit = () => { const t = tps.find(y => y.code === (b ? b.code : $('#bm-tp', root).value)); $('#bm-unit', root).textContent = t ? `Định mức tính cho 1 ${t.unit || 'ĐVT'} ${t.name}.` : ''; };
+    $('#bm-tp', root).onchange = showUnit; showUnit();
+    const sum = () => { $('#bm-sum', root).textContent = money(x.lines.reduce((a, l) => a + (Number(l.q) || 0) * ((productByCode(l.c) || {}).price || 0), 0)); };
+    function lines() {
+      const tb = $('#bm-lines', root); tb.innerHTML = '';
+      x.lines.forEach((l, i) => {
+        const p = productByCode(l.c);
+        const tr = document.createElement('tr');
+        tr.innerHTML = `<td class="muted">${i + 1}</td><td class="c-prod"></td><td>${esc(p ? p.unit : '')}</td>
+          <td><input class="num" inputmode="decimal" value="${l.q === null || l.q === undefined ? '' : esc(fmt(l.q, 6))}"></td>
+          <td class="num">${p ? fmtBlank0(p.price) : ''}</td><td class="num" data-o="amt"></td><td><button class="btn sm ghost danger" title="Xóa dòng">✕</button></td>`;
+        tr.querySelector('.c-prod').appendChild(productCombo(l.c, prod => {
+          l.c = prod ? prod.code : ''; lines();
+          const qi = $$('#bm-lines tr', root)[i].querySelector('input.num'); if (qi) qi.focus();
+        }));
+        const qi = $('input.num', tr);
+        const upd = () => { const p2 = productByCode(l.c); $('[data-o=amt]', tr).textContent = p2 && l.q ? money(l.q * (p2.price || 0)) : ''; sum(); };
+        qi.oninput = () => { const n = parseNum(qi.value); l.q = n === null || isNaN(n) ? null : n; qi.style.borderColor = isNaN(n) ? 'var(--danger)' : ''; upd(); };
+        $('button', tr).onclick = () => { x.lines.splice(i, 1); if (!x.lines.length) x.lines.push({ c: '', q: null }); lines(); };
+        tb.appendChild(tr); upd();
+      });
+    }
+    $('#bm-add', root).onclick = () => { x.lines.push({ c: '', q: null }); lines(); };
+    const del = $('#bm-del', root);
+    if (del) del.onclick = async () => {
+      if (!(await ask(`Xóa định mức của ${b.code}? (lệnh sản xuất đã lập vẫn giữ)`))) return;
+      if (await guard(() => api('DELETE', '/bom/' + encodeURIComponent(b.code)))) { close(); toast('Đã xóa định mức'); reload(); }
+    };
+    lines();
+  }
+  $('#b-add').onclick = () => edit(null);
+  $('#b-q').oninput = debounce(() => { f.q = $('#b-q').value; draw(); }, 150);
+  draw();
+}
+
+// Kết quả tự lập lệnh sản xuất sau khi lưu / xóa phiếu nhập kho TP
+function lsxAutoToast(r) {
+  if (!r) return;
+  const p = [];
+  if ((r.created || []).length) p.push('tự lập ' + r.created.join(', '));
+  if ((r.updated || []).length) p.push('cập nhật ' + r.updated.join(', '));
+  if ((r.removed || []).length) p.push('xóa ' + r.removed.join(', '));
+  if (p.length) toast('Lệnh sản xuất: ' + p.join(' · ') + ' – đã trừ NVL theo định mức');
+  if ((r.errors || []).length) toast('Lệnh sản xuất tự lập bị lỗi: ' + r.errors.join('; '), true);
+}
+const checkBadge = x => (x.check ? `<span class="badge ok" title="${esc(x.check.at || '')}">✔ ${esc(x.check.by || 'Đã kiểm tra')}</span>`
+  : x.recheck ? '<span class="badge bad">Cần kiểm tra lại</span>' : '<span class="badge warn">Chờ kiểm tra</span>');
+
+async function viewLsxList(main) {
+  setTitle('Lệnh sản xuất');
+  if (needNvlWh(main)) return;
+  main.innerHTML = '<p class="muted">Đang đối chiếu phiếu nhập thành phẩm và cập nhật lệnh sản xuất tự lập…</p>';
+  const cfg = await api('GET', '/lsx-auto');
+  const sync = cfg.on ? await guard(() => api('POST', '/lsx-auto', {})) : null;
+  if (sync) lsxAutoToast(sync);
+  const list = await api('GET', '/lsx');
+  const f = Object.assign({ only: '' }, store('lsxFilter') || {});
+  const isAdmin = !S.account || can('duyet'); // người có quyền duyệt (Quản lý)
+  const nobom = sync ? Object.entries(sync.nobom || {}) : [];
+  main.innerHTML = `<div class="toolbar"><a class="btn primary" href="#/lsx/moi">+ Lệnh sản xuất lập tay</a><a class="btn" href="#/dinh-muc">Định mức NVL</a>
+      <label class="field">Xem<select id="lx-only">${options([['', 'Tất cả lệnh'], ['wait', 'Chờ kiểm tra / cần kiểm tra lại'], ['auto', 'Lệnh tự lập'], ['tay', 'Lệnh lập tay']], f.only)}</select></label>
+      <div class="grow"></div><button class="btn" id="lx-sync">↻ Đối chiếu lại phiếu nhập TP</button></div>
+    <div class="callout small">${cfg.on ? `<b>Tự lập lệnh sản xuất</b> từ ngày <b>${vnDate(cfg.from)}</b>: mỗi ngày, mỗi thành phẩm = tổng số lượng các <b>phiếu nhập kho thành phẩm từ Xưởng</b>
+      → web tự lập phiếu xuất NVL theo định mức (kho NVL <b>không lập tay</b> phiếu xuất NVL cho sản xuất nữa). Sửa / xóa phiếu nhập TP thì lệnh tự cập nhật.
+      <br>Người kiểm tra: <b>Quản lý</b>${(cfg.reviewers || []).length ? ' và <b>' + cfg.reviewers.map(esc).join(', ') + '</b>' : ''} – mở lệnh để <b>sửa NVL thực tế</b> nếu có sai sót và bấm <b>Xác nhận đã kiểm tra</b>.`
+      : 'Tự lập lệnh sản xuất theo phiếu nhập thành phẩm đang <b>tắt</b>.'}
+      ${isAdmin ? ' <button class="btn sm" id="lx-cfg">⚙ Cài đặt</button>' : ''}</div>
+    ${sync && sync.manualX && sync.manualX.length ? `<div class="callout warn">⚠ Có ${sync.manualX.length} phiếu xuất NVL cho Xưởng lập tay từ ${vnDate(cfg.from)} (không theo lệnh):
+      ${sync.manualX.map(v => `<a href="#/phieu/${esc(v.id)}">${esc(v.no)}</a>`).join(', ')} – NVL có thể bị trừ 2 lần (lệnh tự lập đã trừ theo định mức). Kiểm tra và xóa nếu trùng.</div>` : ''}
+    ${nobom.length ? `<div class="callout warn">Thành phẩm nhập từ xưởng nhưng <b>chưa có định mức NVL</b> (chưa trừ NVL): ${nobom.map(([c, n]) => `<b>${esc(c)}</b> (${fmt(n)})`).join(', ')} –
+      khai báo ở <a href="#/dinh-muc">Định mức NVL</a> rồi bấm Đối chiếu lại.</div>` : ''}
+    <div id="lx-list"></div>`;
+  function draw() {
+    const rows = list.filter(x => !f.only || (f.only === 'auto' ? x.auto : f.only === 'tay' ? !x.auto : !x.check));
+    $('#lx-list').innerHTML = rows.length ? `<div class="table-wrap"><table class="data"><thead><tr><th>Ngày</th><th>Số lệnh</th><th>Thành phẩm</th><th class="num">Số lượng</th><th>Nguồn</th>
+      <th>Phiếu xuất NVL</th><th>Tình trạng NVL</th><th>Kiểm tra</th></tr></thead><tbody>
+      ${rows.map(x => `<tr class="clickable" data-id="${esc(x.id)}"><td class="nowrap">${vnDate(x.date)}</td><td class="nowrap"><b>${esc(x.no)}</b></td><td>${esc(x.tp)} – ${esc(x.tp_name)}</td>
+        <td class="num">${fmt(x.qty)} ${esc(x.tp_unit)}</td><td class="small">${x.auto ? 'Tự lập: ' + esc((x.auto.src || []).join(', ')) : 'Lập tay'}</td>
+        <td class="small">${x.vouchers.map(v => esc(v.no)).join('<br>') || '<span class="muted">—</span>'}</td>
+        <td>${x.left ? `<span class="badge bad">Còn thiếu ${x.left} NVL</span>` : x.edited ? `<span class="badge warn">Đã sửa ${x.edited} NVL</span>` : '<span class="badge ok">Theo định mức</span>'}</td>
+        <td>${checkBadge(x)}</td></tr>`).join('')}
+      </tbody></table></div><p class="hint">${rows.length} lệnh. Bấm dòng để xem / kiểm tra.</p>` : '<p class="muted">Không có lệnh sản xuất nào.</p>';
+    $$('#lx-list tr[data-id]').forEach(tr => tr.onclick = () => go('#/lsx/' + tr.dataset.id));
+  }
+  $('#lx-only').onchange = () => { f.only = $('#lx-only').value; store('lsxFilter', f); draw(); };
+  $('#lx-sync').onclick = () => render();
+  if ($('#lx-cfg')) $('#lx-cfg').onclick = () => {
+    openModal({ title: 'Cài đặt lệnh sản xuất tự lập',
+      body: `<div class="grid c2"><label class="check span2"><input type="checkbox" id="cf-on" ${cfg.on ? 'checked' : ''}> Tự lập lệnh sản xuất theo tổng phiếu nhập thành phẩm từ Xưởng mỗi ngày</label>
+        <label class="field">Áp dụng từ ngày<input type="date" id="cf-from" value="${esc(cfg.from)}"></label>
+        <label class="field">Người được kiểm tra / sửa lệnh (tên đăng nhập, cách nhau dấu phẩy)<input id="cf-rv" value="${esc((cfg.reviewers || []).join(', '))}"></label></div>
+        <p class="hint">Quản lý luôn được kiểm tra / sửa. Không áp dụng cho ngày trước "từ ngày" (tránh trừ NVL 2 lần với phiếu xuất tay cũ).</p>`,
+      onSave: async root => {
+        const rv = $('#cf-rv', root).value.split(',').map(y => y.trim().toLowerCase()).filter(Boolean);
+        await api('PUT', '/settings', { lsx_auto: { on: $('#cf-on', root).checked, from: $('#cf-from', root).value || cfg.from, reviewers: rv } });
+        toast('Đã lưu cài đặt'); await loadMeta(); render(); return true;
+      } });
+  };
+  draw();
+}
+
+async function viewLsx(main, m, q) {
+  if (needNvlWh(main)) return;
+  if (m[1] === 'moi') return lsxNew(main, q || {});
+  const x = await api('GET', '/lsx/' + m[1]);
+  const D = x.data;
+  const auto = !!D.auto;
+  setTitle('Lệnh sản xuất ' + D.no);
+  const left = x.rows.filter(r => r.left > 1e-9);
+  const canMore = !auto && left.some(r => r.have > 1e-9);
+  const warnN = x.rows.filter(r => r.warn).length;
+  const edited = x.rows.filter(r => r.edited).length;
+  main.innerHTML = `<div class="kpis">
+      <div class="kpi"><div class="k-label">Thành phẩm</div><div class="k-val" style="font-size:17px">${esc(D.tp_name)}</div><div class="small">${esc(D.tp)}</div></div>
+      <div class="kpi"><div class="k-label">Số lượng sản xuất</div><div class="k-val">${fmt(D.qty)} <span class="small">${esc(D.tp_unit)}</span></div></div>
+      <div class="kpi"><div class="k-label">Phiếu xuất NVL</div><div class="k-val" style="font-size:16px">${x.vouchers.map(v => `<a href="#/phieu/${esc(v.id)}">${esc(v.no)}</a>`).join('<br>') || '—'}</div></div>
+      <div class="kpi"><div class="k-label">Kiểm tra</div><div class="k-val" style="font-size:16px">${checkBadge(D)}</div><div class="small">${D.check ? esc(D.check.at || '') : ''}</div></div></div>
+    <div class="callout small">${auto ? `🤖 <b>Lệnh tự lập</b> theo phiếu nhập kho thành phẩm từ Xưởng ngày ${vnDate(x.date)}: <b>${esc((D.auto.src || []).join(', '))}</b>.
+      Số lượng thành phẩm lấy từ các phiếu nhập này – sai số lượng thì sửa phiếu nhập TP, lệnh và phiếu xuất NVL tự cập nhật.` : 'Lệnh lập tay.'}
+      ${x.can_review ? ' Bạn được <b>kiểm tra / sửa</b> lệnh này.' : ` Chỉ Quản lý${(x.reviewers || []).length ? ' và ' + x.reviewers.map(esc).join(', ') : ''} được sửa / xác nhận kiểm tra.`}</div>
+    ${D.recheck ? `<div class="callout warn">⚠ ${esc(D.recheck)} – cần kiểm tra lại.</div>` : ''}
+    ${D.edit ? `<p class="hint">NVL thực tế đã sửa bởi <b>${esc(D.edit.by || '')}</b> lúc ${esc(D.edit.at || '')}${D.review_note ? ' – ' + esc(D.review_note) : ''}.</p>` : D.review_note ? `<p class="hint">Ghi chú kiểm tra: ${esc(D.review_note)}</p>` : ''}
+    ${left.length ? `<div class="callout warn">⚠ <b>${left.length} NVL chưa xuất đủ</b> theo định mức vì kho không đủ tồn.
+      ${canMore ? 'Kho đã có tồn cho một số NVL này – bấm <b>Xuất bổ sung NVL còn thiếu</b>.' : auto ? '' : 'Nhập hàng (phiếu nhập) xong quay lại bấm <b>Xuất bổ sung NVL còn thiếu</b>.'}</div>`
+      : warnN ? `<div class="callout warn">⚠ ${warnN} NVL đang dưới tồn tối thiểu / tồn âm – kiểm tra phiếu nhập NVL hoặc lên kế hoạch mua hàng.</div>` : ''}
+    ${x.bomChanged ? '<p class="hint">Định mức của thành phẩm này đã được sửa sau khi lập lệnh – lệnh giữ định mức lúc lập (tự tính lại khi số lượng thành phẩm đổi).</p>' : ''}
+    ${auto ? '' : `<div class="card"><div class="small">Ngày lệnh: <b>${vnDate(x.date)}</b> · Người giao NVL (kho): ${esc(D.giver || '—')} · Người nhận (xưởng): ${esc(D.receiver || '—')}${D.note ? ' · Ghi chú: ' + esc(D.note) : ''} · Lập lúc ${esc(x.created_at || '')}</div></div>`}
+    <div class="table-wrap"><table class="data"><thead><tr><th>Mã NVL</th><th>Tên NVL</th><th>ĐVT</th><th class="num">Định mức / 1 ${esc(D.tp_unit)}</th><th class="num">Theo định mức</th>
+      <th class="num">Đã xuất (thực tế)</th><th class="num">Chênh lệch</th><th class="num">Còn thiếu</th><th class="num">Tồn kho hiện tại</th><th class="num">Tồn tối thiểu</th><th>Cảnh báo</th></tr></thead><tbody>
+      ${x.rows.map(r => { const df = Math.round((r.got - r.need) * 1e6) / 1e6; return `<tr class="${r.left > 1e-9 || r.have < 0 ? 'row-bad' : r.warn ? 'row-warn' : ''}"><td>${esc(r.c)}</td><td class="nm">${esc(r.name)}</td><td>${esc(r.unit)}</td>
+        <td class="num">${r.per ? fmt(r.per, 6) : '<span class="muted">ngoài ĐM</span>'}</td><td class="num">${fmt(r.need)}</td><td class="num">${fmt(r.got)}${r.edited ? ' <span class="badge warn">sửa</span>' : ''}</td>
+        <td class="num">${df ? `<span class="${df > 0 ? 'neg' : 'pos'}">${df > 0 ? '+' : ''}${fmt(df)}</span>` : ''}</td><td class="num">${r.left > 1e-9 ? `<b class="neg">${fmt(r.left)}</b>` : ''}</td>
+        <td class="num ${r.have < 0 ? 'neg' : ''}">${fmt(r.have)}</td><td class="num">${r.min === null ? '' : fmt(r.min)}</td><td>${warnBadge(r.warn)}</td></tr>`; }).join('')}
+    </tbody></table></div>${edited ? `<p class="hint">${edited} NVL xuất khác định mức (đã sửa theo thực tế).</p>` : ''}
+    <div class="form-actions">
+      ${x.can_review && !(D.extra || []).length ? '<button class="btn primary" id="ls-edit">✏ Kiểm tra / sửa NVL thực tế</button>' : ''}
+      ${x.can_review ? (D.check ? '<button class="btn" id="ls-uncheck">Bỏ xác nhận kiểm tra</button>' : '<button class="btn primary" id="ls-check">✔ Xác nhận đã kiểm tra</button>') : ''}
+      ${left.length && !auto ? `<button class="btn primary" id="ls-more" ${canMore ? '' : 'disabled title="Kho chưa có tồn các NVL còn thiếu"'}>⤴ Xuất bổ sung NVL còn thiếu</button>` : ''}
+      ${auto ? '' : '<button class="btn" id="ls-tp">→ Nhập thành phẩm vào kho TP</button>'}
+      <button class="btn" id="ls-print">🖨 In lệnh sản xuất</button>
+      ${auto ? '' : `<a class="btn" href="#/lsx/moi?code=${encodeURIComponent(D.tp)}">+ Lệnh mới cùng thành phẩm</a><button class="btn danger" id="ls-del">Xóa lệnh</button>`}
+      <a class="btn ghost" href="#/lsx">← Danh sách lệnh</a></div>`;
+  const review = async body => {
+    if (await guard(() => api('POST', `/lsx/${encodeURIComponent(x.id)}?act=review`, body))) { await loadMeta(); render(); return true; }
+    return false;
+  };
+  if ($('#ls-check')) $('#ls-check').onclick = async () => { if (await review({ check: true })) toast('Đã xác nhận kiểm tra ' + D.no); };
+  if ($('#ls-uncheck')) $('#ls-uncheck').onclick = async () => { if (await review({ check: false })) toast('Đã bỏ xác nhận kiểm tra ' + D.no); };
+  if ($('#ls-edit')) $('#ls-edit').onclick = () => lsxEditLines(x, review);
+  if ($('#ls-more')) $('#ls-more').onclick = async () => {
+    const r = await guard(() => api('POST', `/lsx/${encodeURIComponent(x.id)}?act=more`, { date: isoDate() }));
+    if (r) { toast('Đã xuất bổ sung – phiếu ' + r.voucher_no); await loadMeta(); render(); }
+  };
+  if ($('#ls-tp')) $('#ls-tp').onclick = async () => {
+    store('voucherDraft', { wh: 'TP', type: 'N', date: isoDate(), from_party: 'Xưởng', reason: `Nhập kho thành phẩm theo ${D.no}`, doc_ref: D.no,
+      lines: [{ product_code: D.tp, qty: D.qty, price: 0, note: '' }] });
+    await switchWh('TP', true);
+    go('#/phieu/moi?type=N&draft=1', { force: true });
+  };
+  $('#ls-print').onclick = () => printLsx(x);
+  if ($('#ls-del')) $('#ls-del').onclick = async () => {
+    if (!(await ask(`Xóa lệnh ${D.no}? Các phiếu xuất NVL của lệnh (${x.vouchers.map(v => v.no).join(', ') || 'không có'}) cũng bị xóa – NVL được cộng lại vào tồn kho.`))) return;
+    if (await guard(() => api('DELETE', '/lsx/' + encodeURIComponent(x.id)))) { toast('Đã xóa lệnh ' + D.no); await loadMeta(); go('#/lsx', { force: true }); }
+  };
+}
+// Sửa lượng NVL thực tế đã dùng cho lệnh (ghi lại phiếu xuất NVL của lệnh)
+function lsxEditLines(x, review) {
+  const D = x.data;
+  const lines = x.rows.map(r => ({ c: r.c, qty: r.got, need: r.need }));
+  const { root } = openModal({
+    title: 'Kiểm tra / sửa NVL thực tế – ' + D.no, wide: true, saveText: '💾 Lưu & ghi lại phiếu xuất NVL',
+    body: `<p class="small" style="margin-top:0">${esc(D.tp_name)} × <b>${fmt(D.qty)} ${esc(D.tp_unit)}</b>. Sửa cột <b>Thực tế dùng</b> theo số liệu đúng (cân / đếm ở xưởng);
+      phiếu xuất NVL ${esc(D.voucher_no || '')} được ghi lại theo các số này. Bấm "Về định mức" để lấy lại số theo định mức.</p>
+      <div class="table-wrap" style="overflow:visible"><table class="data lines-table"><thead><tr><th style="min-width:260px">Nguyên vật liệu</th><th>ĐVT</th><th class="num">Theo định mức</th>
+      <th class="num" style="width:150px">Thực tế dùng</th><th class="num">Chênh lệch</th><th></th></tr></thead><tbody id="ed-lines"></tbody></table></div>
+      <div style="margin-top:8px;display:flex;gap:8px;flex-wrap:wrap"><button class="btn sm" id="ed-add">+ Thêm NVL ngoài định mức</button><button class="btn sm" id="ed-reset">Về định mức</button></div>
+      <label class="field" style="margin-top:10px">Ghi chú kiểm tra (lý do sửa)<input id="ed-note" value="${esc(D.review_note || '')}" maxlength="500"></label>
+      <label class="check" style="margin-top:8px"><input type="checkbox" id="ed-check" checked> Xác nhận đã kiểm tra lệnh này</label>`,
+    onSave: async () => {
+      if (lines.some(l => l.c && (l.qty === null || isNaN(l.qty)))) throw new Error('Có dòng chưa nhập số lượng thực tế');
+      return review({ lines: lines.filter(l => l.c).map(l => ({ c: l.c, qty: l.qty })), note: $('#ed-note', root).value, check: $('#ed-check', root).checked });
+    },
+  });
+  function draw() {
+    const tb = $('#ed-lines', root); tb.innerHTML = '';
+    lines.forEach((l, i) => {
+      const p = productByCode(l.c);
+      const tr = document.createElement('tr');
+      tr.innerHTML = `<td class="c-prod">${l.need !== undefined ? `<b>${esc(l.c)}</b> ${esc(p ? p.name : '')}` : ''}</td><td>${esc(p ? p.unit : '')}</td><td class="num">${l.need !== undefined ? fmt(l.need) : ''}</td>
+        <td><input class="num" inputmode="decimal" value="${l.qty === null || l.qty === undefined ? '' : esc(fmt(l.qty, 6))}"></td><td class="num" data-o="df"></td>
+        <td>${l.need === undefined ? '<button class="btn sm ghost danger" title="Bỏ dòng">✕</button>' : ''}</td>`;
+      if (l.need === undefined) tr.querySelector('.c-prod').appendChild(productCombo(l.c, prod => { l.c = prod ? prod.code : ''; draw(); }));
+      const qi = $('input.num', tr);
+      const upd = () => { const df = Math.round(((Number(l.qty) || 0) - (l.need || 0)) * 1e6) / 1e6; $('[data-o=df]', tr).innerHTML = df ? `<span class="${df > 0 ? 'neg' : 'pos'}">${df > 0 ? '+' : ''}${fmt(df)}</span>` : ''; };
+      qi.oninput = () => { const n = parseNum(qi.value); l.qty = n === null ? 0 : n; qi.style.borderColor = isNaN(n) ? 'var(--danger)' : ''; upd(); };
+      const b = $('button', tr); if (b) b.onclick = () => { lines.splice(i, 1); draw(); };
+      tb.appendChild(tr); upd();
+    });
+  }
+  $('#ed-add', root).onclick = () => { lines.push({ c: '', qty: null }); draw(); };
+  $('#ed-reset', root).onclick = () => { for (let i = lines.length - 1; i >= 0; i--) { if (lines[i].need === undefined) lines.splice(i, 1); else lines[i].qty = lines[i].need; } draw(); };
+  draw();
+}
+function printLsx(x) {
+  const D = x.data;
+  printHtml(`<div class="doc">${docHead('Phiếu nội bộ', '')}<div class="d-title">Lệnh sản xuất</div><div class="d-sub">${longDate(x.date)}</div><div class="d-no">Số: <b>${esc(D.no)}</b></div>
+    <div class="d-info"><div>Thành phẩm: <b>${esc(D.tp)} – ${esc(D.tp_name)}</b></div><div>Số lượng sản xuất: <b>${fmt(D.qty)} ${esc(D.tp_unit)}</b></div>
+    <div>Phiếu xuất NVL kèm theo: ${x.vouchers.map(v => esc(v.no)).join(', ') || '—'}</div>${D.note ? `<div>Ghi chú: ${esc(D.note)}</div>` : ''}</div>
+    <table class="t"><thead><tr><th>STT</th><th>Mã NVL</th><th>Tên nguyên vật liệu</th><th>ĐVT</th><th>Định mức / 1 ${esc(D.tp_unit)}</th><th>Cần theo lệnh</th><th>Đã xuất</th><th>Còn thiếu</th></tr></thead>
+    <tbody>${x.rows.map((r, i) => `<tr><td class="c">${i + 1}</td><td>${esc(r.c)}</td><td>${esc(r.name)}</td><td class="c">${esc(r.unit)}</td><td class="n">${fmt(r.per, 6)}</td>
+      <td class="n">${fmt(r.need)}</td><td class="n">${fmt(r.got)}</td><td class="n">${r.left > 1e-9 ? fmt(r.left) : ''}</td></tr>`).join('')}</tbody></table>
+    ${signBlock([['Người lập lệnh', S.user], ['Thủ kho', D.giver], ['Tổ trưởng sản xuất', D.receiver]])}</div>`, 'portrait', D.no);
+}
+async function lsxNew(main, q) {
+  setTitle('Lệnh sản xuất mới');
+  const boms = await api('GET', '/bom');
+  if (!boms.length) { main.innerHTML = '<div class="callout warn">Chưa có định mức NVL nào – khai báo ở <a href="#/dinh-muc">Sản xuất › Định mức NVL</a> trước.</div>'; return; }
+  const last = store('lsxLast') || {};
+  const q0 = q.qty ? parseNum(q.qty) : null;
+  const f = { date: isoDate(), code: q.code || '', qty: q0 && !isNaN(q0) ? q0 : null, mode: 'part' };
+  let plan = null, seq = 0;
+  main.innerHTML = `<div class="card"><div class="grid c4">
+      <label class="field">Ngày<input type="date" id="lx-date" value="${f.date}"></label>
+      <label class="field span2">Thành phẩm<select id="lx-tp">${options(boms.map(b => [b.code, `${b.code} – ${b.name} (${b.unit})`]), f.code, '— Chọn thành phẩm —')}</select></label>
+      <label class="field">Số lượng sản xuất <span id="lx-unit"></span><input id="lx-qty" class="num" inputmode="decimal" value="${f.qty ? esc(fmt(f.qty)) : ''}"></label>
+      <label class="field">Người giao NVL (kho)<input id="lx-giver" list="dl-people" value="${esc(last.giver || S.user || '')}"></label>
+      <label class="field">Người nhận (xưởng)<input id="lx-recv" list="dl-people" value="${esc(last.receiver || '')}"></label>
+      <label class="field span2">Ghi chú (ca, tổ…)<input id="lx-note"></label></div>${datalist('dl-people', S.meta.people)}</div>
+    <div id="lx-plan"></div>
+    <div class="form-actions"><button class="btn primary" id="lx-save">✔ Lập lệnh &amp; tự xuất NVL</button><a class="btn ghost" href="#/lsx">← Danh sách lệnh</a></div>`;
+  const unit = () => { const b = boms.find(y => y.code === f.code); $('#lx-unit').textContent = b ? `(${b.unit})` : ''; };
+  async function load() {
+    unit();
+    const box = $('#lx-plan');
+    if (!f.code || !(f.qty > 0)) { plan = null; box.innerHTML = '<p class="muted">Chọn thành phẩm và nhập số lượng – web tính NVL cần xuất theo định mức và so với tồn kho.</p>'; return; }
+    const my = ++seq;
+    const p = await guard(() => api('GET', `/lsx?plan=1&code=${encodeURIComponent(f.code)}&qty=${f.qty}&date=${f.date}`));
+    if (my !== seq || !p) return;
+    plan = p; draw();
+  }
+  function draw() {
+    const short = plan.rows.filter(r => r.warn === 'Thiếu'), low = plan.rows.filter(r => r.warn === 'Dưới tồn tối thiểu'), miss = plan.rows.filter(r => r.missing);
+    const val = plan.rows.reduce((a, r) => a + r.need * r.price, 0);
+    $('#lx-plan').innerHTML = `${miss.length ? `<div class="callout warn">⛔ Định mức có ${miss.length} mã NVL không có trong danh mục kho NVL (${miss.map(r => esc(r.c)).join(', ')}) – sửa ở <a href="#/dinh-muc">Định mức NVL</a>.</div>` : ''}
+      ${short.length ? `<div class="callout warn">⚠ <b>${short.length} NVL không đủ tồn</b>: ${short.map(r => `${esc(r.name)} (cần ${fmt(r.need)}, tồn ${fmt(r.have)} ${esc(r.unit)})`).join('; ')}.
+        <div style="margin-top:8px;display:grid;gap:4px"><label class="check"><input type="radio" name="lx-mode" value="part" ${f.mode === 'part' ? 'checked' : ''}> Chỉ xuất phần NVL đang còn tồn – phần thiếu xuất bổ sung sau khi nhập hàng (khuyên dùng)</label>
+        <label class="check"><input type="radio" name="lx-mode" value="full" ${f.mode === 'full' ? 'checked' : ''}> Vẫn xuất đủ theo định mức (tồn kho NVL sẽ bị âm)</label></div></div>` : ''}
+      ${low.length ? `<div class="callout warn">⚠ ${low.length} NVL sẽ <b>xuống dưới tồn tối thiểu</b> sau lệnh này: ${low.map(r => esc(r.name)).join(', ')} – nên lên kế hoạch mua hàng.</div>` : ''}
+      ${!short.length && !low.length && !miss.length ? '<div class="callout">✔ Đủ nguyên vật liệu cho lệnh này.</div>' : ''}
+      <div class="table-wrap"><table class="data"><thead><tr><th>Mã NVL</th><th>Tên NVL</th><th>ĐVT</th><th class="num">Định mức / 1 ${esc(plan.unit)}</th><th class="num">Cần xuất</th>
+        <th class="num">Tồn kho</th><th class="num">Tồn sau khi xuất</th><th class="num">Tồn tối thiểu</th><th class="num">Thành tiền (đ)</th><th>Cảnh báo</th></tr></thead><tbody>
+        ${plan.rows.map(r => `<tr class="${r.warn === 'Thiếu' || r.missing ? 'row-bad' : r.warn ? 'row-warn' : ''}"><td>${esc(r.c)}</td><td class="nm">${esc(r.name)}</td><td>${esc(r.unit)}</td>
+          <td class="num">${fmt(r.per, 6)}</td><td class="num"><b>${fmt(r.need)}</b></td><td class="num">${fmt(r.have)}</td><td class="num ${r.after < 0 ? 'neg' : ''}">${fmt(r.after)}</td>
+          <td class="num">${r.min === null ? '' : fmt(r.min)}</td><td class="num">${fmtBlank0(Math.round(r.need * r.price))}</td><td>${warnBadge(r.warn)}</td></tr>`).join('')}
+        </tbody><tfoot><tr><td colspan="8">Giá trị NVL theo định mức (đơn giá mua gần nhất)</td><td class="num">${money(val)}</td><td></td></tr></tfoot></table></div>
+      ${plan.note ? `<p class="hint">Ghi chú định mức: ${esc(plan.note)}</p>` : ''}`;
+    $$('input[name=lx-mode]').forEach(r => r.onchange = () => { f.mode = r.value; });
+  }
+  const reload = debounce(load, 300);
+  $('#lx-date').onchange = () => { f.date = $('#lx-date').value; load(); };
+  $('#lx-tp').onchange = () => { f.code = $('#lx-tp').value; load(); };
+  $('#lx-qty').oninput = () => { const n = parseNum($('#lx-qty').value); f.qty = n === null || isNaN(n) ? null : n; reload(); };
+  $('#lx-save').onclick = async () => {
+    if (!f.code) return toast('Chọn thành phẩm', true);
+    if (!(f.qty > 0)) return toast('Nhập số lượng sản xuất', true);
+    await load();
+    if (!plan) return;
+    if (plan.rows.some(r => r.missing)) return toast('Định mức có NVL chưa có trong danh mục kho NVL', true);
+    const short = plan.rows.filter(r => r.warn === 'Thiếu').length;
+    if (short && f.mode === 'full' && !(await ask(`${short} NVL không đủ tồn – xuất đủ sẽ làm tồn kho âm. Vẫn lập lệnh?`))) return;
+    const body = { date: f.date, code: f.code, qty: f.qty, mode: f.mode, giver: $('#lx-giver').value, receiver: $('#lx-recv').value, note: $('#lx-note').value };
+    $('#lx-save').disabled = true;
+    const r = await guard(() => api('POST', '/lsx', body));
+    $('#lx-save').disabled = false;
+    if (!r) return;
+    store('lsxLast', { giver: body.giver, receiver: body.receiver });
+    toast(`Đã lập ${r.no}` + (r.voucher_no ? ` và xuất NVL – phiếu ${r.voucher_no}` : ' – kho chưa có NVL để xuất'));
+    await loadMeta();
+    go('#/lsx/' + r.id, { force: true });
+  };
+  load();
 }
 
 /* ============================================================ Lịch sử */

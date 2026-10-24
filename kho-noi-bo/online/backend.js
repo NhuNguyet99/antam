@@ -63,11 +63,13 @@ const Backend = (() => {
     drivers: {},
     admin: {}, // web Giao hàng An Tâm: mật khẩu quản lý {salt, pin}
     staff_accounts: {}, // tài khoản nhân viên web kho {id: {user, name, admin, active, salt, pw}}
+    // tự lập lệnh sản xuất theo tổng thành phẩm nhập từ xưởng mỗi ngày; reviewers = tên đăng nhập được kiểm tra / sửa lệnh (cùng Quản lý)
+    lsx_auto: { on: true, from: '2026-10-24', reviewers: ['hoaithu'] },
   };
 
   const st = {
     db: null, user: null, uid: '', wh: 'TP', ready: {},
-    settings: {}, routes: {}, products: {}, days: {}, docs: {}, plans: {},
+    settings: {}, routes: {}, products: {}, days: {}, docs: {}, plans: {}, bom: {},
     ver: {}, vcache: {}, globalSubs: [], whSubs: [], lastLocal: 0, onRemote: null, loaded: false,
   };
 
@@ -113,6 +115,7 @@ const Backend = (() => {
     settings: () => dbx().doc('config/settings'),
     routes: () => dbx().doc('config/routes'),
     products: wh => dbx().doc(`kho/${wh}/meta/products`),
+    bom: () => dbx().doc('kho/NVL/meta/bom'),
     days: wh => dbx().collection(`kho/${wh}/days`),
     day: (wh, d) => dbx().doc(`kho/${wh}/days/${d}`),
     docs: wh => dbx().collection(`kho/${wh}/docs`),
@@ -185,7 +188,7 @@ const Backend = (() => {
   function docData(snap) { return snap.exists ? snap.data() : null; }
 
   function loadSnapshot(snap) {
-    st.settings = snap.settings || {}; st.routes = snap.routes || {};
+    st.settings = snap.settings || {}; st.routes = snap.routes || {}; st.bom = snap.bom || {};
     for (const w of WAREHOUSES) {
       const d = (snap.warehouses || {})[w] || {};
       st.products[w] = d.products || {}; st.days[w] = d.days || {}; st.docs[w] = d.docs || {}; st.plans[w] = d.plans || {};
@@ -217,15 +220,21 @@ const Backend = (() => {
     await Promise.all([
       subscribe(st.globalSubs, ref.settings(), s => { st.settings = (docData(s) || {}).s || {}; }, 'settings'),
       subscribe(st.globalSubs, ref.routes(), s => { st.routes = (docData(s) || {}).r || {}; }, 'routes'),
+      subscribe(st.globalSubs, ref.bom(), s => { st.bom = (docData(s) || {}).b || {}; }, 'bom'),
     ]);
   }
   async function setWh(wh) {
     if (VIEW) { st.wh = wh; st.loaded = true; return; }
-    st.whSubs.forEach(u => { try { u(); } catch (e) { /* bỏ qua */ } });
-    st.whSubs = [];
     st.wh = wh;
     st.loaded = false;
-    await Promise.all([
+    await liveWh(wh);
+    st.loaded = true;
+  }
+  // Dữ liệu từng kho: theo dõi trực tiếp, mở 1 lần và giữ (lệnh sản xuất tự lập cần cả phiếu kho TP lẫn kho NVL)
+  function liveWh(wh) {
+    st.whLive = st.whLive || {};
+    if (VIEW) return Promise.resolve();
+    if (!st.whLive[wh]) st.whLive[wh] = Promise.all([
       subscribe(st.whSubs, ref.products(wh), s => { st.products[wh] = (docData(s) || {}).p || {}; }, 'products'),
       subscribe(st.whSubs, ref.days(wh).orderBy('date', 'desc').limit(1000), s => {
         const m = {}; s.docs.forEach(d => { m[d.id] = d.data(); }); st.days[wh] = m; bump(wh);
@@ -236,8 +245,8 @@ const Backend = (() => {
       subscribe(st.whSubs, ref.plans(wh).orderBy('ym', 'desc').limit(240), s => {
         const m = {}; s.docs.forEach(d => { m[d.id] = d.data(); }); st.plans[wh] = m;
       }, 'plans'),
-    ]);
-    st.loaded = true;
+    ]).catch(e => { st.whLive[wh] = null; throw e; });
+    return st.whLive[wh];
   }
 
   /* ---------------------------------------------------------- cài đặt */
@@ -383,7 +392,7 @@ const Backend = (() => {
   const APPROVAL_COLS = ['status', 'created_by', 'approved_by', 'approved_at', 'review_note', 'created_by_id'];
   // Phân quyền tài khoản nhân viên kho: perm = danh sách quyền; chưa có thì theo vai trò cũ
   // (Quản lý = tất cả; nhân viên = tất cả trừ duyệt phiếu điều chỉnh và quản lý tài khoản)
-  const STAFF_PERMS = ['khoTP', 'khoNVL', 'pN', 'pX', 'pD', 'xoa', 'duyet', 'phieu', 'baocao', 'kiemke', 'bangiao', 'kehoach', 'phantuyen', 'taixe', 'hang', 'tuyen', 'caidat', 'lichsu', 'taikhoan'];
+  const STAFF_PERMS = ['khoTP', 'khoNVL', 'pN', 'pX', 'pD', 'xoa', 'duyet', 'phieu', 'baocao', 'kiemke', 'bangiao', 'kehoach', 'sanxuat', 'phantuyen', 'taixe', 'hang', 'tuyen', 'caidat', 'lichsu', 'taikhoan'];
   const STAFF_NV = STAFF_PERMS.filter(k => k !== 'duyet' && k !== 'taikhoan');
   const staffPerms = a => new Set(Array.isArray(a && a.perm) ? a.perm.filter(k => STAFF_PERMS.includes(k)) : a && a.admin ? STAFF_PERMS : STAFF_NV);
   const may = (me, k) => !me || staffPerms(me[1]).has(k);
@@ -697,7 +706,7 @@ const Backend = (() => {
   }
   // Toàn bộ dữ liệu 2 kho (đọc mới từ kho dữ liệu): dùng để sao lưu và để cập nhật trang xem công khai
   async function exportBackup() {
-    const out = { format: 'kho-antam-backup', version: 1, at: nowStr(), settings: st.settings, routes: st.routes, warehouses: {}, deliveries: {} };
+    const out = { format: 'kho-antam-backup', version: 1, at: nowStr(), settings: st.settings, routes: st.routes, bom: st.bom || {}, warehouses: {}, deliveries: {} };
     const asMap = snap => Object.fromEntries(snap.docs.map(d => [d.id, d.data()]));
     if (!VIEW) {
       out.deliveries = asMap(await ref.giaoAll().orderBy('date', 'desc').limit(400).get());
@@ -1190,6 +1199,316 @@ const Backend = (() => {
     return publicDriver(id, rec);
   }
 
+  /* ---------------------------------------------------------- định mức NVL & lệnh sản xuất (kho NVL) */
+  // Định mức: kho/NVL/meta/bom {b: {mã thành phẩm (kho TP): {name, unit, lines: [{c: mã NVL, q: lượng cho 1 ĐVT thành phẩm}], note, src, updated_at}|null}}
+  // Lệnh sản xuất: kho/NVL/docs/<id> {kind: 'lsx', date, title, data: {no, tp, tp_name, tp_unit, qty, mode, lines: [{c, per, need}], voucher_id, voucher_no, extra: [mã phiếu xuất bổ sung]}}
+  // Lập lệnh = tự lập phiếu xuất NVL (PXK) theo định mức × số lượng; NVL thiếu tồn thì chỉ xuất phần còn tồn (hoặc xuất đủ nếu chọn).
+  const r6 = x => Math.round(x * 1e6) / 1e6;
+  const bomList = () => live(st.bom).map(([code, b]) => Object.assign({ code }, b)).sort((a, b) => a.code.localeCompare(b.code));
+  async function tpProducts() {
+    let p = st.products.TP;
+    if (!p || !Object.keys(p).length) {
+      if (!st.tpCache) { try { st.tpCache = (docData(await ref.products('TP').get()) || {}).p || {}; } catch (e) { throw dbError(e); } }
+      p = st.tpCache;
+    }
+    return live(p).map(([code, x]) => ({ code, name: x.name || code, unit: x.unit || '', grp: x.grp || '', active: x.active !== 0 }))
+      .sort((a, b) => a.code.localeCompare(b.code));
+  }
+  async function bomApi(method, arg, body) {
+    if (method === 'GET') return bomList();
+    if (method === 'POST') {
+      const code = text(body.code);
+      if (!code) throw new ApiError(400, 'Chọn thành phẩm');
+      const lines = [];
+      (body.lines || []).forEach((l, i) => {
+        const c = text(l.c);
+        if (!c) return;
+        const q = num(l.q);
+        if (!(q > 0)) throw new ApiError(400, `Dòng ${i + 1}: định mức phải lớn hơn 0`);
+        if (lines.some(x => x.c === c)) throw new ApiError(400, `NVL ${c} bị lặp – gộp thành 1 dòng`);
+        lines.push({ c, q: r6(q) });
+      });
+      if (!lines.length) throw new ApiError(400, 'Định mức chưa có NVL nào');
+      const rec = { name: text(body.name) || code, unit: text(body.unit), lines, note: text(body.note), src: text(body.src) || 'Sửa trên web', updated_at: nowStr() };
+      await mergeInto(ref.bom(), { b: { [code]: rec } }, { b: {} });
+      st.bom = Object.assign({}, st.bom, { [code]: rec });
+      await log('Lưu định mức NVL', code, `${lines.length} NVL`, 'NVL');
+      return { ok: true };
+    }
+    if (method === 'DELETE' && arg) {
+      await mergeInto(ref.bom(), { b: { [arg]: null } }, { b: {} });
+      st.bom = Object.assign({}, st.bom, { [arg]: null });
+      await log('Xóa định mức NVL', arg, '', 'NVL');
+      return { ok: true };
+    }
+    throw new ApiError(404, 'Không có chức năng này');
+  }
+  // NVL cần cho qty thành phẩm, so với tồn kho NVL đến hết ngày d
+  function lsxPlan(code, qty, d, exclude) {
+    const b = (st.bom || {})[code];
+    if (!b) throw new ApiError(400, `Thành phẩm ${code} chưa có định mức NVL – khai báo ở Sản xuất › Định mức NVL`);
+    const pm = productMap('NVL'), stock = stockMap('NVL', { until: d, exclude });
+    const rows = (b.lines || []).map(l => {
+      const p = pm[l.c] || null, per = num(l.q), need = r6(per * qty), have = r6(stock[l.c] || 0), after = r6(have - need);
+      const min = p && p.min_qty !== null && p.min_qty !== undefined ? p.min_qty : null;
+      const warn = !p ? 'Chưa có mã trong kho NVL' : after < -1e-9 ? 'Thiếu' : min !== null && after < min - 1e-9 ? 'Dưới tồn tối thiểu' : '';
+      return { c: l.c, name: p ? p.name : '(không có trong danh mục NVL)', unit: p ? p.unit : '', per, need, have, after, min, price: p ? p.price || 0 : 0,
+        warn, missing: !p, short: r6(Math.max(0, need - Math.max(0, have))) };
+    });
+    return { code, name: b.name || code, unit: b.unit || '', note: b.note || '', qty, rows };
+  }
+  const lsxDocs = () => live(st.docs.NVL).filter(([, x]) => x.kind === 'lsx');
+  function lsxNextNo(d) {
+    const head = `LSX-${d.slice(8, 10)}${d.slice(5, 7)}-`;
+    let seq = 0;
+    for (const [, x] of lsxDocs()) {
+      const s = text((x.data || {}).no);
+      if ((x.date || '').slice(0, 4) === d.slice(0, 4) && s.startsWith(head)) seq = Math.max(seq, parseInt(s.slice(head.length), 10) || 0);
+    }
+    return head + z(seq + 1);
+  }
+  // các phiếu xuất NVL của lệnh (phiếu đã xóa tay thì bỏ qua) và lượng đã xuất theo mã
+  function lsxIssued(x) {
+    const ids = [x.voucher_id].concat(x.extra || []).filter(Boolean);
+    const vs = ids.map(id => voucherById('NVL', id)).filter(Boolean);
+    const got = {};
+    vs.forEach(v => v.lines.forEach(l => { got[l.product_code] = r6((got[l.product_code] || 0) + l.qty); }));
+    return { vs: vs.map(v => ({ id: v.id, no: v.no, date: v.date })), got };
+  }
+  async function lsxIssue(no, plan, d, body, me, wantOf) {
+    const lines = plan.rows.filter(r => !r.missing).map(r => {
+      const want = wantOf(r);
+      return { product_code: r.c, qty: body.mode === 'full' ? want : r6(Math.min(want, Math.max(0, r.have))), price: r.price, note: '' };
+    }).filter(l => l.qty > 1e-9);
+    if (!lines.length) return null;
+    const wd = settings().warehouses.NVL;
+    const vid = await saveVoucher('NVL', { type: 'X', date: d, from_party: wd.name, to_party: text(body.to_party) || 'Xưởng', giver: text(body.giver), receiver: text(body.receiver),
+      reason: text(body.reason) || `Xuất NVL sản xuất theo ${no}: ${plan.name} × ${fmtq(plan.qty)} ${plan.unit}`, doc_ref: no, note: text(body.note), lines }, null, me);
+    return voucherById('NVL', vid);
+  }
+  async function lsxCreate(id, d, plan, body, me, auto) {
+    const no = lsxNextNo(d);
+    if (auto) body = Object.assign({}, body, { mode: 'full', reason: `Xuất NVL sản xuất theo ${no} (tự lập theo phiếu nhập TP ${auto.src.join(', ')}): ${plan.name} × ${fmtq(plan.qty)} ${plan.unit}` });
+    const v = await lsxIssue(no, plan, d, body, me, r => r.need);
+    const rec = { kind: 'lsx', date: d, title: `${no} · ${plan.name} × ${fmtq(plan.qty)} ${plan.unit}`, created_at: nowStr(), updated_at: nowStr(),
+      data: { no, tp: plan.code, tp_name: plan.name, tp_unit: plan.unit, qty: plan.qty, mode: body.mode === 'full' ? 'full' : 'part', giver: text(body.giver), receiver: text(body.receiver),
+        note: text(body.note), lines: plan.rows.map(r => ({ c: r.c, per: r.per, need: r.need })), voucher_id: v ? v.id : '', voucher_no: v ? v.no : '', extra: [],
+        auto: auto ? { src: auto.src } : null, adj: {}, check: null } };
+    await write(() => ref.doc('NVL', id).set(rec));
+    st.docs.NVL = Object.assign({}, st.docs.NVL, { [id]: rec });
+    const short = plan.rows.filter(r => r.warn === 'Thiếu').length;
+    await log(auto ? 'Tự lập lệnh sản xuất' : 'Lập lệnh sản xuất', no, `${plan.name} × ${fmtq(plan.qty)} ${plan.unit}${auto ? ' (theo phiếu nhập TP ' + auto.src.join(', ') + ')' : ''} – ${v ? 'xuất NVL ' + v.no : 'chưa xuất được NVL'}${short ? ` – ${short} NVL thiếu tồn` : ''}`, 'NVL');
+    return { id, no, voucher_no: v ? v.no : '' };
+  }
+  // Ghi lại phiếu xuất NVL chính của lệnh theo các dòng [{c, qty}] (sửa tay / số lượng thành phẩm đổi) rồi lưu lệnh
+  async function lsxSaveLines(id, cur, nd, lines, me, reason) {
+    const pm = productMap('NVL');
+    const vl = lines.filter(l => l.qty > 1e-9 && pm[l.c]).map(l => ({ product_code: l.c, qty: r6(l.qty), price: pm[l.c].price || 0, note: '' }));
+    const old = nd.voucher_id && voucherById('NVL', nd.voucher_id);
+    if (old && !vl.length) { await deleteVoucher(old.id, me); nd.voucher_id = ''; nd.voucher_no = ''; }
+    else if (old) {
+      const full = voucherFull(old.id);
+      await saveVoucher('NVL', Object.assign({}, full, { date: cur.date, reason: reason || full.reason, lines: vl }), old.id, me);
+    } else if (vl.length) {
+      const wd = settings().warehouses.NVL;
+      const vid = await saveVoucher('NVL', { type: 'X', date: cur.date, from_party: wd.name, to_party: 'Xưởng', reason: reason || `Xuất NVL sản xuất theo ${nd.no}`, doc_ref: nd.no, lines: vl }, null, me);
+      nd.voucher_id = vid; nd.voucher_no = voucherById('NVL', vid).no;
+    }
+    const rec = Object.assign({}, cur, { title: `${nd.no} · ${nd.tp_name} × ${fmtq(nd.qty)} ${nd.tp_unit}`, data: nd, updated_at: nowStr() });
+    await write(() => ref.doc('NVL', id).set(rec));
+    st.docs.NVL = Object.assign({}, st.docs.NVL, { [id]: rec });
+    return rec;
+  }
+  async function lsxRemove(id, me) {
+    const x = (st.docs.NVL || {})[id];
+    if (!x || x.kind !== 'lsx') throw new ApiError(404, 'Không tìm thấy lệnh sản xuất');
+    const D = x.data || {};
+    for (const vid of [D.voucher_id].concat(D.extra || []).filter(Boolean)) if (voucherById('NVL', vid)) await deleteVoucher(vid, me);
+    await write(() => ref.doc('NVL', id).delete());
+    const m = Object.assign({}, st.docs.NVL); delete m[id]; st.docs.NVL = m;
+    return D;
+  }
+  /* ---- lệnh sản xuất tự lập: mỗi ngày, mỗi thành phẩm có định mức = tổng số lượng các phiếu nhập kho TP từ Xưởng (bên giao "Xưởng"
+     hoặc lý do có "sản xuất"); phiếu nhập theo lệnh lập tay (Chứng từ = số lệnh) không tính. Sửa / xóa phiếu nhập TP thì lệnh tự cập nhật. */
+  const lsxCfg = () => Object.assign({ on: true, from: '2026-10-24', reviewers: [] }, settings().lsx_auto || {});
+  const canReview = me => !me || !me[0] || !!(staffPerms(me[1]).has('duyet') || (lsxCfg().reviewers || []).map(normNick).includes(normNick(me[1].user)));
+  const fold = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
+  const isProdIn = v => v.type === 'N' && (/xuong/.test(fold(v.from_party)) || /san xuat/.test(fold(v.reason)));
+  const autoId = (d, code) => `lsxa-${d}-${String(code).replace(/[^A-Za-z0-9_-]/g, '_')}`;
+  function tpReceipts(d) {
+    const manual = new Set(lsxDocs().filter(([, x]) => !(x.data || {}).auto).map(([, x]) => text((x.data || {}).no)));
+    const sum = {}, src = {}, nobom = {};
+    for (const v of posted('TP')) {
+      if (v.date !== d || !isProdIn(v) || (v.doc_ref && manual.has(text(v.doc_ref)))) continue;
+      for (const l of v.lines) {
+        const c = l.product_code;
+        if (!(l.qty > 0)) continue;
+        if (!(st.bom || {})[c]) { nobom[c] = r6((nobom[c] || 0) + l.qty); continue; }
+        sum[c] = r6((sum[c] || 0) + l.qty);
+        src[c] = src[c] || [];
+        if (!src[c].includes(v.no)) src[c].push(v.no);
+      }
+    }
+    return { sum, src, nobom };
+  }
+  const autoReason = (no, src, plan) => `Xuất NVL sản xuất theo ${no} (tự lập theo phiếu nhập TP ${src.join(', ')}): ${plan.name} × ${fmtq(plan.qty)} ${plan.unit}`;
+  async function lsxAutoSync(dates, me) {
+    const cfg = lsxCfg();
+    const out = { created: [], updated: [], removed: [], nobom: {}, errors: [] };
+    if (!cfg.on || VIEW) return out;
+    await Promise.all([liveWh('TP'), liveWh('NVL')]);
+    for (const d of [...new Set(dates)].filter(x => validDateOk(x) && x >= cfg.from).sort()) {
+      const { sum, src, nobom } = tpReceipts(d);
+      Object.entries(nobom).forEach(([c, q]) => { out.nobom[c] = r6((out.nobom[c] || 0) + q); });
+      const codes = new Set(Object.keys(sum));
+      lsxDocs().forEach(([, x]) => { if (x.date === d && (x.data || {}).auto) codes.add(x.data.tp); });
+      for (const code of codes) {
+        try {
+          const id = autoId(d, code), cur = (st.docs.NVL || {})[id], qty = r6(sum[code] || 0), srcs = (src[code] || []).slice().sort();
+          if (!cur) {
+            if (qty > 0) out.created.push((await lsxCreate(id, d, lsxPlan(code, qty, d), {}, me, { src: srcs })).no);
+            continue;
+          }
+          const D = clone(cur.data || {});
+          if (qty <= 0) { await lsxRemove(id, me); out.removed.push(D.no); continue; }
+          if (r6(D.qty) === qty) {
+            if (JSON.stringify((D.auto || {}).src || []) !== JSON.stringify(srcs)) {
+              D.auto = { src: srcs };
+              const rec = Object.assign({}, cur, { data: D, updated_at: nowStr() });
+              await write(() => ref.doc('NVL', id).set(rec));
+              st.docs.NVL = Object.assign({}, st.docs.NVL, { [id]: rec });
+            }
+            continue;
+          }
+          // số lượng thành phẩm đổi: tính lại NVL theo định mức hiện tại, bỏ phần đã sửa tay, chờ kiểm tra lại
+          const plan = lsxPlan(code, qty, d, D.voucher_id);
+          Object.assign(D, { qty, tp_name: plan.name, tp_unit: plan.unit, lines: plan.rows.map(r => ({ c: r.c, per: r.per, need: r.need })), auto: { src: srcs }, adj: {},
+            recheck: D.check || Object.keys(D.adj || {}).length ? `Số lượng thành phẩm đổi ${fmtq(cur.data.qty)} → ${fmtq(qty)} sau khi đã kiểm tra / sửa – NVL đã tính lại theo định mức` : (D.recheck || ''), check: null });
+          await lsxSaveLines(id, cur, D, plan.rows.filter(r => !r.missing).map(r => ({ c: r.c, qty: r.need })), me, autoReason(D.no, srcs, plan));
+          out.updated.push(D.no);
+        } catch (e) { out.errors.push(`${d} ${code}: ${e.message}`); }
+      }
+    }
+    if (out.created.length + out.updated.length + out.removed.length) {
+      await log('Tự cập nhật lệnh sản xuất theo phiếu nhập TP', '', [out.created.length ? 'lập ' + out.created.join(', ') : '', out.updated.length ? 'sửa ' + out.updated.join(', ') : '',
+        out.removed.length ? 'xóa ' + out.removed.join(', ') : ''].filter(Boolean).join(' · '), 'NVL');
+    }
+    return out;
+  }
+  const lsxAutoSafe = async (dates, me) => { try { return await lsxAutoSync(dates, me); } catch (e) { console.warn('lsx auto', e); return { created: [], updated: [], removed: [], nobom: {}, errors: [e.message] }; } };
+  async function lsxAutoApi(method, q, body, me) {
+    const cfg = lsxCfg();
+    if (method === 'GET') return Object.assign({}, cfg, { can_review: canReview(me) });
+    await Promise.all([liveWh('TP'), liveWh('NVL')]);
+    const from = [cfg.from, validDateOk(body.from) ? body.from : addDays(today(), -31)].sort().pop(), to = validDateOk(body.to) ? body.to : today();
+    const dates = Object.keys(st.days.TP || {}).concat(lsxDocs().filter(([, x]) => (x.data || {}).auto).map(([, x]) => x.date)).filter(d => d >= from && d <= to);
+    const out = await lsxAutoSync(dates, me);
+    // phiếu xuất NVL cho xưởng lập tay (không theo lệnh) từ ngày áp dụng: có thể bị trừ NVL 2 lần
+    out.manualX = cfg.on ? posted('NVL').filter(v => v.type === 'X' && v.date >= cfg.from && /xuong/.test(fold(v.to_party)) && !/^LSX-/.test(text(v.doc_ref)))
+      .map(v => ({ id: v.id, no: v.no, date: v.date })) : [];
+    return out;
+  }
+  async function lsxApi(method, arg, q, body, me) {
+    if (method === 'GET' && q.plan) return lsxPlan(text(q.code), num(q.qty), validDate(q.date || today()));
+    if (method === 'GET' && !arg) {
+      return lsxDocs().map(([id, x]) => {
+        const D = x.data || {}, iss = lsxIssued(D), adj = D.adj || {};
+        const left = (D.lines || []).filter(l => !(l.c in adj) && r6(l.need - (iss.got[l.c] || 0)) > 1e-9).length;
+        return { id, date: x.date, no: D.no, tp: D.tp, tp_name: D.tp_name, tp_unit: D.tp_unit, qty: D.qty, vouchers: iss.vs, left, created_at: x.created_at,
+          auto: D.auto || null, check: D.check || null, recheck: D.recheck || '', edited: Object.keys(adj).length };
+      }).sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : (a.created_at || '') < (b.created_at || '') ? 1 : -1));
+    }
+    if (method === 'GET' && arg) {
+      const x = (st.docs.NVL || {})[arg];
+      if (!x || x.kind !== 'lsx') throw new ApiError(404, 'Không tìm thấy lệnh sản xuất');
+      const D = x.data || {}, iss = lsxIssued(D), adj = D.adj || {};
+      let plan = null;
+      try { plan = lsxPlan(D.tp, D.qty, today()); } catch (e) { plan = null; }
+      const pm = productMap('NVL'), stock = stockMap('NVL', {});
+      const rows = (D.lines || []).map(l => {
+        const p = pm[l.c] || {}, got = iss.got[l.c] || 0, target = l.c in adj ? adj[l.c] : l.need, left = r6(Math.max(0, target - got)), have = r6(stock[l.c] || 0);
+        const min = p.min_qty !== null && p.min_qty !== undefined ? p.min_qty : null;
+        return { c: l.c, name: p.name || l.c, unit: p.unit || '', per: l.per, need: l.need, got, left, have, min, edited: l.c in adj,
+          warn: left > 1e-9 ? (have >= left - 1e-9 ? 'Còn thiếu – đủ tồn để xuất bổ sung' : 'Còn thiếu') : have < -1e-9 ? 'Tồn âm' : min !== null && have < min - 1e-9 ? 'Dưới tồn tối thiểu' : '' };
+      });
+      return Object.assign({ id: arg }, clone(x), { vouchers: iss.vs, rows, can_review: canReview(me), reviewers: lsxCfg().reviewers || [],
+        bomChanged: !!(plan && JSON.stringify(plan.rows.map(r => [r.c, r.per])) !== JSON.stringify((D.lines || []).map(l => [l.c, l.per]))) });
+    }
+    // Kiểm tra / sửa lệnh: Quản lý hoặc người được giao (cài đặt lsx_auto.reviewers) sửa lượng NVL thực tế (ghi lại phiếu xuất NVL) và xác nhận đã kiểm tra
+    if (method === 'POST' && arg && q.act === 'review') {
+      if (!canReview(me)) throw new ApiError(403, 'Chỉ Quản lý hoặc người được giao kiểm tra lệnh sản xuất mới sửa / xác nhận được');
+      const x = (st.docs.NVL || {})[arg];
+      if (!x || x.kind !== 'lsx') throw new ApiError(404, 'Không tìm thấy lệnh sản xuất');
+      const D = clone(x.data || {});
+      const who = st.who || (me && me[1] && me[1].name) || '';
+      let lines = null;
+      if (Array.isArray(body.lines)) {
+        if ((D.extra || []).length) throw new ApiError(400, 'Lệnh có phiếu xuất bổ sung – sửa trực tiếp ở các phiếu xuất NVL của lệnh');
+        const pm = productMap('NVL');
+        lines = [];
+        body.lines.forEach(l => {
+          const c = text(l.c), qty = num(l.qty);
+          if (!c) return;
+          if (!pm[c]) throw new ApiError(400, `Mã ${c} không có trong danh mục kho NVL`);
+          if (qty < 0) throw new ApiError(400, `Số lượng ${c} không được âm`);
+          if (lines.some(y => y.c === c)) throw new ApiError(400, `NVL ${c} bị lặp`);
+          lines.push({ c, qty: r6(qty) });
+        });
+        D.adj = {};
+        lines.forEach(l => {
+          const ln = (D.lines || []).find(y => y.c === l.c);
+          if (!ln) D.lines = (D.lines || []).concat([{ c: l.c, per: 0, need: 0 }]);
+          if (!ln || Math.abs(r6(ln.need) - l.qty) > 1e-9) D.adj[l.c] = l.qty;
+        });
+        (D.lines || []).forEach(ln => { if (!lines.some(l => l.c === ln.c) && ln.need > 0) D.adj[ln.c] = 0; });
+        D.edit = { by: who, at: nowStr() };
+      }
+      if (body.note !== undefined) D.review_note = text(body.note).slice(0, 500);
+      if (body.check !== undefined) { D.check = body.check ? { by: who, at: nowStr() } : null; if (body.check) D.recheck = ''; }
+      if (lines) await lsxSaveLines(arg, x, D, lines, me, null);
+      else {
+        const rec = Object.assign({}, x, { data: D, updated_at: nowStr() });
+        await write(() => ref.doc('NVL', arg).set(rec));
+        st.docs.NVL = Object.assign({}, st.docs.NVL, { [arg]: rec });
+      }
+      await log(lines ? 'Sửa NVL lệnh sản xuất' : body.check ? 'Xác nhận đã kiểm tra lệnh sản xuất' : 'Bỏ xác nhận kiểm tra lệnh sản xuất', D.no,
+        lines ? Object.entries(D.adj).map(([c, qv]) => `${c}: ${fmtq(qv)}`).join(', ') || 'về đúng định mức' : text(body.note), 'NVL');
+      return { ok: true };
+    }
+    if (method === 'POST' && !arg) {
+      const d = validDate(body.date), code = text(body.code), qty = num(body.qty);
+      if (!(qty > 0)) throw new ApiError(400, 'Nhập số lượng thành phẩm lớn hơn 0');
+      const plan = lsxPlan(code, qty, d);
+      const miss = plan.rows.filter(r => r.missing);
+      if (miss.length) throw new ApiError(400, 'Định mức có NVL chưa có trong danh mục kho NVL: ' + miss.map(r => r.c).join(', ') + ' – sửa định mức hoặc thêm mã ở Mặt hàng');
+      return lsxCreate(newId('lsx'), d, plan, body, me);
+    }
+    if (method === 'POST' && arg && q.act === 'more') {
+      const x = (st.docs.NVL || {})[arg];
+      if (!x || x.kind !== 'lsx') throw new ApiError(404, 'Không tìm thấy lệnh sản xuất');
+      const D = clone(x.data || {}), d = validDate(body.date || today()), iss = lsxIssued(D);
+      const stock = stockMap('NVL', { until: d }), pm = productMap('NVL');
+      const plan = { name: D.tp_name, unit: D.tp_unit, qty: D.qty,
+        rows: (D.lines || []).map(l => ({ c: l.c, need: l.need, left: r6(Math.max(0, l.need - (iss.got[l.c] || 0))), have: r6(stock[l.c] || 0), price: (pm[l.c] || {}).price || 0 })) };
+      const v = await lsxIssue(D.no, plan, d, Object.assign({ giver: D.giver, receiver: D.receiver, note: 'Xuất bổ sung NVL còn thiếu' }, body), me, r => r.left);
+      if (!v) throw new ApiError(400, 'Không có NVL nào còn thiếu mà kho đang có tồn để xuất bổ sung');
+      D.extra = (D.extra || []).concat([v.id]);
+      const rec = Object.assign({}, x, { data: D, updated_at: nowStr() });
+      await write(() => ref.doc('NVL', arg).set(rec));
+      st.docs.NVL = Object.assign({}, st.docs.NVL, { [arg]: rec });
+      await log('Xuất bổ sung NVL cho lệnh sản xuất', D.no, v.no, 'NVL');
+      return { ok: true, voucher_no: v.no };
+    }
+    if (method === 'DELETE' && arg) {
+      const x = (st.docs.NVL || {})[arg];
+      if (x && (x.data || {}).auto && lsxCfg().on) throw new ApiError(400, 'Lệnh tự lập theo phiếu nhập thành phẩm – sửa / xóa phiếu nhập TP thì lệnh tự cập nhật; sửa NVL dùng nút Kiểm tra / sửa NVL');
+      const D = await lsxRemove(arg, me);
+      await log('Xóa lệnh sản xuất', D.no, 'đã xóa cả phiếu xuất NVL của lệnh', 'NVL');
+      return { ok: true };
+    }
+    throw new ApiError(404, 'Không có chức năng này');
+  }
+
   /* ---------------------------------------------------------- bộ định tuyến API (giống server.py) */
   async function handle(method, fullPath, body, opts = {}) {
     const [pathPart, qs] = fullPath.split('?');
@@ -1223,7 +1542,15 @@ const Backend = (() => {
     if (res === 'deliveries' && method === 'GET') return deliveriesOf(validDate(q.date));
     if (res === 'locations' && method === 'GET') return locationsAll();
     if (res === 'tracks' && method === 'GET') return tracksOf(validDate(q.date));
+    if (res === 'bom') { if (method !== 'GET') must(me, 'sanxuat', 'sửa định mức NVL'); return bomApi(method, arg, body || {}); }
+    if (res === 'tp-products' && method === 'GET') return tpProducts();
+    if (res === 'lsx-auto') return lsxAutoApi(method, q, body || {}, me);
     if (!st.days[wh] && !VIEW && res !== 'meta' && res !== 'settings' && res !== 'routes') throw new ApiError(400, 'Chưa tải dữ liệu kho ' + wh);
+    if (res === 'lsx') {
+      if (method !== 'GET' && !canReview(me)) must(me, 'sanxuat', 'lập / sửa lệnh sản xuất');
+      if (!st.days.NVL) throw new ApiError(400, 'Hãy chuyển sang Kho nguyên vật liệu để làm lệnh sản xuất');
+      return lsxApi(method, arg, q, body || {}, me);
+    }
 
     if (res === 'meta' && method === 'GET') {
       const s = settings();
@@ -1364,9 +1691,23 @@ const Backend = (() => {
         list.sort((a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : a.type < b.type ? -1 : a.type > b.type ? 1 : a.no < b.no ? 1 : a.no > b.no ? -1 : 0));
         return list.slice(0, parseInt(q.limit || '1000', 10)).map(voucherSummaryRow);
       }
-      if (method === 'POST') return voucherFull(await saveVoucher(wh, body || {}, null, me));
-      if (method === 'PUT' && arg) return voucherFull(await saveVoucher(wh, body || {}, arg, me));
-      if (method === 'DELETE' && arg) { await deleteVoucher(arg, me); return { ok: true }; }
+      // phiếu kho TP thay đổi → lệnh sản xuất tự lập của ngày đó tự cập nhật
+      if (method === 'POST') {
+        const out = voucherFull(await saveVoucher(wh, body || {}, null, me));
+        if (out.wh === 'TP') out.lsx_auto = await lsxAutoSafe([out.date], me);
+        return out;
+      }
+      if (method === 'PUT' && arg) {
+        const old = voucherFull(arg);
+        const out = voucherFull(await saveVoucher(wh, body || {}, arg, me));
+        if (out.wh === 'TP') out.lsx_auto = await lsxAutoSafe([old.date, out.date], me);
+        return out;
+      }
+      if (method === 'DELETE' && arg) {
+        const old = voucherFull(arg);
+        await deleteVoucher(arg, me);
+        return { ok: true, lsx_auto: old.wh === 'TP' ? await lsxAutoSafe([old.date], me) : null };
+      }
     }
     if (res === 'notices') return noticesApi(method, arg, body || {}, me);
     if (res === 'review' && method === 'POST' && arg) return reviewVoucher(arg, !!(body || {}).ok, (body || {}).note, me);
@@ -1475,6 +1816,7 @@ const Backend = (() => {
       const summary = {};
       if (snap.settings && Object.keys(snap.settings).length) { await write(() => ref.settings().set({ s: snap.settings })); st.settings = snap.settings; }
       await write(() => ref.routes().set({ r: snap.routes || {} })); st.routes = snap.routes || {};
+      if (snap.bom) { await write(() => ref.bom().set({ b: snap.bom })); st.bom = snap.bom; }
       if (snap.deliveries) {
         const oldG = (await ref.giaoAll().limit(1000).get()).docs.map(x => x.id);
         for (const id of oldG) if (!snap.deliveries[id]) await write(() => ref.giao(id).delete());
