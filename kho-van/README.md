@@ -5,7 +5,7 @@ https://claude.ai/artifact/8iwBT1YGqiJ1vTwVQfmzed
 
 - **Đăng nhập**: tài khoản `trolyai` (mật khẩu do chủ trang đặt; lưu dạng băm PBKDF2-SHA256 ở `auth/main`).
   Đây là khóa giao diện – quyền xem trang vẫn do nút *Share* của claude.ai quyết định.
-- **Tab**: Tổng quan (theo ngày: khách, tuyến, đã giao, tổng hàng; tồn kho cần chú ý) · Đơn hàng · Tồn kho (TP / NVL) · Giao hàng · 🤖 Trợ lý AI.
+- **Tab**: Tổng quan (theo ngày: khách, tuyến, đã giao, tổng hàng; tồn kho cần chú ý) · Đơn hàng (lọc 📦 Đơn hàng ngày / 🥙 Tuyến kebab 123) · Tồn kho (TP / NVL) · Giao hàng · 🤖 Trợ lý AI.
 - **Cửa sổ trợ lý ở góc**: nút **🤖 Hỏi trợ lý** ở góc dưới phải mọi tab mở cửa sổ chat nhỏ (điện thoại: nửa dưới màn hình). Trợ lý biết đang xem tab, ngày,
   tuyến, kho, từ khóa nào – hỏi "tuyến này", "ngày này" là hiểu; gợi ý câu hỏi đổi theo tab. Dùng chung cuộc trò chuyện với tab Trợ lý AI (nút ⤢).
 - **Trợ lý AI**: dùng Claude của tài khoản claude.ai đang mở trang (capability `sample`, lần đầu hỏi cho phép), với 4 công cụ chỉ đọc
@@ -17,7 +17,7 @@ https://claude.ai/artifact/8iwBT1YGqiJ1vTwVQfmzed
 |---|---|---|
 | `goi/dh-<ngày>`, `goi/dh-<ngày>-t123` | Đóng hàng An Tâm `khoout/<mã>` (đơn đã chia tuyến, dạng TSV) | tác vụ định kỳ (PHẦN K) |
 | `goi/giao-<ngày>` | Giao hàng An Tâm `kho/TP/giao/<ngày>` (kết quả giao) | tác vụ định kỳ |
-| `goi/kho` | Kho An Tâm `khovan/kho` – web Kho tự ghi Nhập–Xuất–Tồn hôm nay của kho đang mở (sau khi tải số liệu / lưu phiếu, chờ 15 giây) | tác vụ định kỳ |
+| `goi/kho` | Kho An Tâm `khovan/kho` – web Kho tự ghi Nhập–Xuất–Tồn hôm nay của **cả kho TP lẫn kho NVL** (sau khi tải số liệu / lưu phiếu, chờ 15 giây; trang mở thì gửi lại mỗi 10 phút) | tác vụ định kỳ |
 | `goi/nv` | Đóng hàng An Tâm `giaonv/list` (người giao, không có PIN) | tác vụ định kỳ |
 | `goi/index` | `{s: {khóa: stamp/version đã chép}, at}` | tác vụ định kỳ |
 

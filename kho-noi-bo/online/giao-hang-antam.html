@@ -895,19 +895,22 @@ const Backend = (() => {
         open: op, in: m.N, out: m.X, adj: m.D, close, price: p.price || 0, value: close * (p.price || 0), warn, moved: m.n > 0 };
     });
   }
-  // Gói tồn kho cho Kho vận An Tâm: Nhập – Xuất – Tồn hôm nay của kho đang mở (mã đang dùng hoặc còn tồn / có phát sinh)
+  // Gói tồn kho cho Kho vận An Tâm: Nhập – Xuất – Tồn hôm nay của cả 2 kho (TP và NVL; kho chưa mở thì tải ngầm), mã đang dùng hoặc còn tồn / có phát sinh
   // rows: [mã, tên, ĐVT, nhóm, tồn đầu ngày, nhập, xuất, điều chỉnh, tồn cuối, tồn tối thiểu, cảnh báo]
   async function khovanPush() {
-    const wh = st.wh;
-    if (VIEW || !st.db || !st.days[wh] || st.canWrite === false) return null;
-    const d = today(), r6_ = x => Math.round(x * 1e6) / 1e6;
-    const active = new Set(products(wh).filter(p => p.active !== 0).map(p => p.code));
-    const rows = reportNxt(wh, d, d).filter(r => active.has(r.code) || Math.abs(r.close) > 1e-9 || r.moved)
-      .map(r => [r.code, r.name, r.unit, r.grp, r6_(r.open), r6_(r.in), r6_(r.out), r6_(r.adj), r6_(r.close), r.min_qty, r.warn]);
-    const pending = vouchers(wh).filter(v => v.status === 'pending').length;
-    const at = nowStr();
-    await mergeInto(dbx().doc('khovan/kho'), { at, [wh]: { at, date: d, name: (settings().warehouses[wh] || {}).name || wh, rows, pending } }, {});
-    return { wh, n: rows.length };
+    if (VIEW || !st.db || st.canWrite === false) return null;
+    const d = today(), r6_ = x => Math.round(x * 1e6) / 1e6, at = nowStr(), patch = { at }, out = {};
+    for (const wh of WAREHOUSES) {
+      try { await liveWh(wh); } catch (e) { continue; }
+      if (!st.days[wh]) continue;
+      const active = new Set(products(wh).filter(p => p.active !== 0).map(p => p.code));
+      const rows = reportNxt(wh, d, d).filter(r => active.has(r.code) || Math.abs(r.close) > 1e-9 || r.moved)
+        .map(r => [r.code, r.name, r.unit, r.grp, r6_(r.open), r6_(r.in), r6_(r.out), r6_(r.adj), r6_(r.close), r.min_qty, r.warn]);
+      patch[wh] = { at, date: d, name: (settings().warehouses[wh] || {}).name || wh, rows, pending: vouchers(wh).filter(v => v.status === 'pending').length };
+      out[wh] = rows.length;
+    }
+    await mergeInto(dbx().doc('khovan/kho'), patch, {});
+    return out;
   }
   function stockCard(wh, code, from, to) {
     const opening = stockMap(wh, { before: from })[code] || 0;
@@ -3804,9 +3807,11 @@ async function loadMeta() {
   if (ONLINE && !VIEW && !GIAO_APP) khovanSoon();
 }
 // Gói tồn kho cho Kho vận An Tâm: cập nhật sau mỗi lần tải lại số liệu (gộp nhiều lần lưu liên tiếp thành 1 lần ghi)
+// (gửi cả kho TP lẫn kho NVL; trang đang mở thì gửi lại mỗi 10 phút để số tồn theo kịp phiếu người khác lập)
 function khovanSoon() {
   clearTimeout(khovanSoon.t);
   khovanSoon.t = setTimeout(() => Backend.khovanPush().catch(e => console.warn('khovan', e)), 15000);
+  if (!khovanSoon.iv) khovanSoon.iv = setInterval(() => { if (!document.hidden) khovanSoon(); }, 600000);
 }
 async function switchWh(wh, keepPage) {
   if (wh === S.wh) return;

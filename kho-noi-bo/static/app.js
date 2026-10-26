@@ -532,9 +532,11 @@ async function loadMeta() {
   if (ONLINE && !VIEW && !GIAO_APP) khovanSoon();
 }
 // Gói tồn kho cho Kho vận An Tâm: cập nhật sau mỗi lần tải lại số liệu (gộp nhiều lần lưu liên tiếp thành 1 lần ghi)
+// (gửi cả kho TP lẫn kho NVL; trang đang mở thì gửi lại mỗi 10 phút để số tồn theo kịp phiếu người khác lập)
 function khovanSoon() {
   clearTimeout(khovanSoon.t);
   khovanSoon.t = setTimeout(() => Backend.khovanPush().catch(e => console.warn('khovan', e)), 15000);
+  if (!khovanSoon.iv) khovanSoon.iv = setInterval(() => { if (!document.hidden) khovanSoon(); }, 600000);
 }
 async function switchWh(wh, keepPage) {
   if (wh === S.wh) return;

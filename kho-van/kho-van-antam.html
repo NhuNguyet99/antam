@@ -167,7 +167,11 @@ const z = n => String(n).padStart(2, '0');
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`; };
 const vn = iso => (iso ? iso.slice(0, 10).split('-').reverse().join('/') : '');
 const store = (k, v) => { try { if (v === undefined) return JSON.parse(localStorage.getItem('kv.' + k)); if (v === null) localStorage.removeItem('kv.' + k); else localStorage.setItem('kv.' + k, JSON.stringify(v)); } catch (e) { return null; } return undefined; };
-const S = { db: null, auth: null, goi: {}, tab: store('tab') || 'tq', date: '', wh: 'TP', q: '', route: '', warnOnly: false, chat: [], ctl: null };
+const S = { db: null, auth: null, goi: {}, tab: store('tab') || 'tq', date: '', wh: 'TP', q: '', route: '', kind: '', warnOnly: false, chat: [], ctl: null };
+const KIND = { don: '📦 Đơn hàng ngày', t123: '🥙 Tuyến kebab 123' };
+// số khách từng loại đơn của ngày (đơn hàng ngày / tuyến kebab 123) – 0 = web Đóng hàng chưa gửi / chưa chép sang
+const kindCount = rows => ({ don: rows.filter(r => r.kind !== 't123').length, t123: rows.filter(r => r.kind === 't123').length });
+const kindChips = rows => { const c = kindCount(rows); return Object.entries(KIND).map(([k, n]) => `<span class="chip ${c[k] ? '' : 'warn'}">${n}: ${c[k] ? c[k] + ' khách' : 'chưa có'}</span>`).join(' '); };
 
 /* ---------------------------------------------------------- đăng nhập */
 async function pbkdf2(pw, salt, iter) {
@@ -301,7 +305,7 @@ function viewTq() {
   const warn = wh => stockRows(wh).filter(r => r.warn);
   const neg = ['TP', 'NVL'].reduce((a, w) => a + warn(w).filter(r => r.warn === 'Tồn âm').length, 0);
   const low = ['TP', 'NVL'].reduce((a, w) => a + warn(w).filter(r => r.warn !== 'Tồn âm').length, 0);
-  $('#view').innerHTML = `<div class="bar">${dateSel()}<span class="muted small">Đơn hàng và giao hàng theo ngày · tồn kho là số mới nhất</span></div>
+  $('#view').innerHTML = `<div class="bar">${dateSel()}${kindChips(ordersOf(S.date).rows)}<span class="muted small">Tồn kho là số mới nhất</span></div>
     <div class="kpis">
       <div class="kpi"><b>${all}</b><span>khách có đơn · ${rs.length} tuyến</span></div>
       <div class="kpi ok"><b>${ok}</b><span>đã giao</span></div>
@@ -325,17 +329,18 @@ function viewTq() {
 function viewDon() {
   const { rows, cols } = ordersOf(S.date), dv = delivOf(S.date);
   const routes = Array.from(new Set(rows.map(r => r.route))).sort();
-  const list = rows.filter(r => (!S.route || r.route === S.route) && (!S.q || like(S.q, [r.crm, r.code, r.cust, r.phone, r.note].join(' '))));
-  const tot = sumQty(list);
+  const list = rows.filter(r => (!S.kind || (S.kind === 't123') === (r.kind === 't123')) && (!S.route || r.route === S.route) && (!S.q || like(S.q, [r.crm, r.code, r.cust, r.phone, r.note].join(' '))));
+  const tot = sumQty(list), kc = kindCount(rows);
   const st = r => { const x = dv[keyOf(r)]; return !x ? '' : x.status === 'ok' ? `<span class="chip ok">✓ ${esc((x.at || '').slice(11, 16))}</span>` : `<span class="chip bad" title="${esc(x.note)}">✗ ${esc(x.note || 'Không giao được')}</span>`; };
-  $('#view').innerHTML = `<div class="bar">${dateSel()}<select id="rsel" aria-label="Tuyến"><option value="">Tất cả tuyến</option>${routes.map(x => `<option ${x === S.route ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>
+  $('#view').innerHTML = `<div class="bar">${dateSel()}<select id="ksel" aria-label="Loại đơn"><option value="">Tất cả đơn (${rows.length})</option>${Object.entries(KIND).map(([k, n]) => `<option value="${k}" ${S.kind === k ? 'selected' : ''}>${n} (${kc[k]})</option>`).join('')}</select><select id="rsel" aria-label="Tuyến"><option value="">Tất cả tuyến</option>${routes.map(x => `<option ${x === S.route ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>
       <input type="search" id="q" class="grow" placeholder="Tìm khách, mã CRM, SĐT…" value="${esc(S.q)}"></div>
     ${list.length ? `<div class="card"><div class="tw"><table><thead><tr><th>Tuyến</th><th>CRM</th><th>Khách hàng</th><th>Hàng</th><th>Thanh toán</th><th>Giao</th></tr></thead><tbody>
       ${list.map(r => `<tr><td>${esc(r.route)}</td><td class="mono">${esc(r.crm)}</td><td>${esc(r.cust)}${r.note ? `<div class="small muted">${esc(r.note)}</div>` : ''}</td><td>${qtyChips(r.qty)}</td><td class="small">${esc(r.pay)}</td><td>${st(r)}</td></tr>`).join('')}
       </tbody></table></div><p class="small muted" style="margin:10px 0 0">${list.length} khách · ${Object.entries(tot).map(([k, n]) => `${esc(k)}: <b>${fmt(n)}</b>`).join(' · ')}</p></div>`
-      : `<div class="empty">${rows.length ? 'Không có khách khớp bộ lọc.' : 'Chưa có đơn ngày này (web Đóng hàng chưa chia tuyến, hoặc tác vụ chưa chép sang).'}</div>`}`;
+      : `<div class="empty">${S.kind && !kc[S.kind] ? KIND[S.kind] + ' của ngày này chưa có – web Đóng hàng chưa chia tuyến / gửi kho, hoặc tác vụ chưa chép sang (15 phút/lần).' : rows.length ? 'Không có khách khớp bộ lọc.' : 'Chưa có đơn ngày này (web Đóng hàng chưa chia tuyến, hoặc tác vụ chưa chép sang).'}</div>`}`;
   bindDate();
   $('#rsel').onchange = e => { S.route = e.target.value; draw(); };
+  $('#ksel').onchange = e => { S.kind = e.target.value; draw(); };
   let t; $('#q').oninput = e => { clearTimeout(t); t = setTimeout(() => { S.q = e.target.value; draw(); const q = $('#q'); q.focus(); q.setSelectionRange(q.value.length, q.value.length); }, 250); };
   void cols;
 }
