@@ -9,7 +9,7 @@
   --bg: #f3f5f4; --panel: #ffffff; --ink: #18232b; --muted: #5d6b73; --line: #dbe2e0;
   --accent: #0f6b5c; --accent-ink: #ffffff; --accent-soft: #e2f1ed;
   --amber: #b45309; --amber-soft: #fdf1e1; --bad: #b42318; --bad-soft: #fde8e6; --ok: #137a3f; --ok-soft: #e3f4ea;
-  --chat-me: #e2f1ed; --chat-ai: #ffffff;
+  --chat-me: #e2f1ed; --chat-ai: #ffffff; --shadow: 0 12px 32px rgba(16, 35, 43, .18);
   --f-body: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
   --f-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
 }
@@ -17,12 +17,12 @@
   --bg: #11181c; --panel: #182226; --ink: #e5ecea; --muted: #9aa9ae; --line: #2a3a40;
   --accent: #3fb59d; --accent-ink: #0c1512; --accent-soft: #173a33;
   --amber: #f0a64b; --amber-soft: #3a2a15; --bad: #f2867b; --bad-soft: #3d1f1c; --ok: #6fd39a; --ok-soft: #173525;
-  --chat-me: #173a33; --chat-ai: #1d292e; color-scheme: dark; } }
+  --chat-me: #173a33; --chat-ai: #1d292e; --shadow: 0 12px 32px rgba(0, 0, 0, .5); color-scheme: dark; } }
 :root[data-theme="dark"] {
   --bg: #11181c; --panel: #182226; --ink: #e5ecea; --muted: #9aa9ae; --line: #2a3a40;
   --accent: #3fb59d; --accent-ink: #0c1512; --accent-soft: #173a33;
   --amber: #f0a64b; --amber-soft: #3a2a15; --bad: #f2867b; --bad-soft: #3d1f1c; --ok: #6fd39a; --ok-soft: #173525;
-  --chat-me: #173a33; --chat-ai: #1d292e; color-scheme: dark; }
+  --chat-me: #173a33; --chat-ai: #1d292e; --shadow: 0 12px 32px rgba(0, 0, 0, .5); color-scheme: dark; }
 * { box-sizing: border-box; }
 body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--f-body); }
 .wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 16px 40px; }
@@ -50,6 +50,7 @@ input[type=text], input[type=password], input[type=search], select, textarea { b
 .brand .mark { width: 36px; height: 36px; border-radius: 10px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-weight: 700; font-size: 13px; }
 .brand h1 { font-size: 19px; }
 .fresh { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
+@media (max-width: 600px) { .fresh { order: 3; flex-basis: 100%; } .brand { flex: 1; } }
 .chip { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 2px 10px; font-size: 12.5px; background: var(--accent-soft); color: var(--ink); white-space: nowrap; }
 .chip.warn { background: var(--amber-soft); color: var(--amber); }
 .chip.bad { background: var(--bad-soft); color: var(--bad); }
@@ -90,6 +91,25 @@ tr.sum td { font-weight: 700; }
 .suggest button { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 5px 12px; font-size: 13px; }
 .ask { display: flex; gap: 8px; align-items: flex-end; }
 .ask textarea { flex: 1; resize: vertical; min-height: 46px; max-height: 200px; }
+/* cửa sổ trợ lý nhỏ ở góc – hỏi ngay tại tab đang xem */
+.fab { position: fixed; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 19;
+  border: 0; border-radius: 999px; padding: 12px 18px; background: var(--accent); color: var(--accent-ink); font-weight: 700; box-shadow: var(--shadow); }
+.dock { position: fixed; right: calc(16px + env(safe-area-inset-right, 0px)); bottom: calc(16px + env(safe-area-inset-bottom, 0px)); z-index: 20;
+  width: min(400px, calc(100vw - 32px)); height: min(600px, calc(100vh - 96px)); display: grid; grid-template-rows: auto auto minmax(0, 1fr) auto;
+  gap: 8px; padding: 12px; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; box-shadow: var(--shadow); }
+.dock-h { display: flex; align-items: center; gap: 8px; }
+.dock-h b { flex: 1; min-width: 0; font-size: 15px; }
+.dock-h .ctx { display: block; font-weight: 400; font-size: 12px; color: var(--muted); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.dock-h button { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 4px 9px; font-size: 13px; }
+.dock .msgs { overflow-y: auto; min-height: 0; padding-right: 2px; }
+.dock .msg { max-width: 100%; font-size: 14px; padding: 8px 11px; }
+.dock .suggest button { font-size: 12.5px; padding: 4px 10px; }
+.dock .ask textarea { min-height: 42px; max-height: 120px; }
+.dock .empty { padding: 16px; font-size: 13.5px; }
+@media (max-width: 600px) {
+  .dock { right: 0; left: 0; bottom: 0; width: auto; height: min(78vh, calc(100vh - 40px)); border-radius: 16px 16px 0 0;
+    padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
+}
 @media (prefers-reduced-motion: no-preference) { .dots::after { content: "…"; animation: blink 1s steps(3) infinite; } @keyframes blink { 50% { opacity: .3; } } }
 </style>
 
@@ -117,6 +137,11 @@ tr.sum td { font-weight: 700; }
       <button data-tab="giao">Giao hàng</button><button data-tab="ai">🤖 Trợ lý AI</button>
     </nav>
     <div id="view"></div>
+    <button class="fab" id="fab" type="button" aria-controls="dock">🤖 Hỏi trợ lý</button>
+    <section class="dock" id="dock" hidden aria-label="Trợ lý AI">
+      <div class="dock-h"><b>🤖 Trợ lý AI<span class="ctx" id="dock-ctx"></span></b><button type="button" id="dock-big" title="Mở tab Trợ lý AI">⤢</button><button type="button" id="dock-x" aria-label="Thu nhỏ">✕</button></div>
+      <div id="dock-body" style="display:contents"></div>
+    </section>
   </section>
   <p id="boot" class="muted">Đang kết nối dữ liệu…</p>
 </div>
@@ -259,6 +284,7 @@ function freshness() {
 function draw() {
   $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
   ({ tq: viewTq, don: viewDon, ton: viewTon, giao: viewGiao, ai: viewAi })[S.tab]();
+  drawDock();
 }
 $$('#tabs button').forEach(b => b.onclick = () => { S.tab = b.dataset.tab; store('tab', S.tab); draw(); });
 $('#reload').onclick = async () => { const b = $('#reload'); b.disabled = true; try { await loadGoi(); freshness(); draw(); } finally { b.disabled = false; } };
@@ -378,6 +404,7 @@ const RULES = () => `Bạn là Trợ lý AI của Kho vận An Tâm (công ty �
   + `Hôm nay là ${vn(today())} (${today()}). Luôn lấy số liệu bằng các công cụ, không đoán; nếu công cụ không có dữ liệu thì nói rõ. `
   + `Bạn chỉ đọc, không sửa được 3 web – việc cần làm (nhập đơn, lập phiếu…) thì hướng dẫn người dùng làm trên web tương ứng. `
   + `Trả lời bằng tiếng Việt, ngắn gọn, có số cụ thể; dùng gạch đầu dòng hoặc bảng Markdown khi liệt kê. Nói ngày / giờ cập nhật của số liệu khi liên quan.`;
+const turnCtx = () => `[Lúc hỏi, người dùng đang xem: ${ctxText()}. "Ngày này", "tuyến này", "kho này" là theo phần đang xem.]\n`;
 function md(s) {
   const lines = String(s).split('\n'), out = []; let list = null, table = null;
   const inline = t => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<span class="mono">$1</span>');
@@ -400,35 +427,77 @@ function md(s) {
 const SAMPLE_ERR = { not_granted: 'Trang chưa được phép dùng Claude – bấm Cho phép khi claude.ai hỏi (hoặc mở menu Quyền của trang).', sampling_disabled: 'Tài khoản / tổ chức này chưa bật Claude cho trang.',
   rate_limited: 'Đang hỏi quá nhiều hoặc hết lượt dùng Claude – thử lại sau ít phút.', session_expired: 'Phiên claude.ai đã hết – đăng nhập lại claude.ai.', refused: 'Claude không trả lời câu này – hỏi cách khác.',
   empty_completion: 'Claude chưa trả lời được – hỏi ngắn gọn hơn.', prompt_too_large: 'Câu hỏi hoặc dữ liệu quá dài – hỏi phạm vi hẹp hơn (một ngày, một tuyến).', tools_unavailable: 'Trình xem này chưa chạy được công cụ của trang.' };
-const SUGGEST = ['Hôm nay mỗi tuyến bao nhiêu khách, ai giao?', 'Tổng số bánh từng loại cần giao hôm nay?', 'Mã nào tồn âm hoặc dưới tồn tối thiểu?', 'Hôm qua những khách nào không giao được, vì sao?'];
-function viewAi() {
-  $('#view').innerHTML = `<div class="chat">
-    <div class="suggest">${SUGGEST.map(s => `<button data-s="${esc(s)}">${esc(s)}</button>`).join('')}<button id="clr">Cuộc trò chuyện mới</button></div>
-    <div class="msgs" id="msgs"></div>
-    <form class="ask" id="askf"><textarea id="askt" placeholder="Hỏi về đơn hàng, tồn kho, giao hàng… (Enter để gửi, Shift+Enter xuống dòng)"></textarea>
-      <button class="btn pri" id="askb" type="submit">Gửi</button><button class="btn" id="stop" type="button" hidden>Dừng</button></form>
-    <p class="small muted" style="margin:0">Trợ lý dùng Claude của tài khoản claude.ai đang mở trang (lần đầu claude.ai hỏi cho phép). Trợ lý chỉ đọc số liệu, không sửa 3 web.</p></div>`;
-  drawMsgs();
-  $$('[data-s]').forEach(b => b.onclick = () => ask(b.dataset.s));
-  $('#clr').onclick = () => { S.ctl && S.ctl.abort(); S.chat = []; drawMsgs(); };
-  $('#askf').onsubmit = e => { e.preventDefault(); const t = $('#askt').value.trim(); if (t) { $('#askt').value = ''; ask(t); } };
-  $('#askt').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#askf').requestSubmit(); } };
-  $('#stop').onclick = () => S.ctl && S.ctl.abort();
+const SUGGEST = {
+  tq: ['Tóm tắt tình hình ngày đang xem', 'Tuyến nào còn nhiều khách chưa giao?', 'Mã nào tồn âm hoặc dưới tồn tối thiểu?'],
+  don: ['Tổng hàng của tuyến đang lọc?', 'Khách nào có ghi chú cần lưu ý?', 'Khách nào chưa thanh toán?'],
+  ton: ['Mã nào cần nhập thêm?', 'Hôm nay xuất nhiều nhất mã nào?', 'Còn bao nhiêu phiếu chờ duyệt?'],
+  giao: ['Khách nào không giao được, vì sao?', 'Mỗi người giao được bao nhiêu khách?', 'Tuyến nào giao xong sớm nhất?'],
+  ai: ['Hôm nay mỗi tuyến bao nhiêu khách, ai giao?', 'Tổng số bánh từng loại cần giao hôm nay?', 'Mã nào tồn âm hoặc dưới tồn tối thiểu?', 'Hôm qua những khách nào không giao được, vì sao?'],
+};
+const TAB_NAME = { tq: 'Tổng quan', don: 'Đơn hàng', ton: 'Tồn kho', giao: 'Giao hàng', ai: 'Trợ lý AI' };
+// Người dùng đang xem gì – để hỏi "tuyến này", "ngày này", "mã đang lọc" trợ lý hiểu đúng
+function ctxText() {
+  const t = S.tab, bits = ['tab ' + TAB_NAME[t]];
+  if (t === 'tq' || t === 'don' || t === 'giao') bits.push('ngày ' + vn(S.date));
+  if (t === 'don' && S.route) bits.push('tuyến ' + S.route);
+  if (t === 'ton') bits.push(S.wh === 'NVL' ? 'kho nguyên vật liệu (NVL)' : 'kho thành phẩm (TP)');
+  if ((t === 'don' || t === 'ton') && S.q) bits.push('đang tìm "' + S.q + '"');
+  if (t === 'ton' && S.warnOnly) bits.push('chỉ mã cần chú ý');
+  return bits.join(', ');
 }
+function chatHtml(where) {
+  const sug = SUGGEST[S.tab] || SUGGEST.ai;
+  return `<div class="suggest">${sug.map(x => `<button type="button" data-s="${esc(x)}">${esc(x)}</button>`).join('')}<button type="button" data-clr>↺ Hỏi lại từ đầu</button></div>
+    <div class="msgs" data-msgs></div>
+    <form class="ask" data-askf><textarea id="askt-${where}" data-askt placeholder="${where === 'dock' ? 'Hỏi về trang đang xem…' : 'Hỏi về đơn hàng, tồn kho, giao hàng… (Enter để gửi, Shift+Enter xuống dòng)'}"></textarea>
+      <button class="btn pri" data-askb type="submit">Gửi</button><button class="btn" data-stop type="button" hidden>Dừng</button></form>`;
+}
+function bindChat(root) {
+  $$('[data-s]', root).forEach(b => b.onclick = () => ask(b.dataset.s));
+  $('[data-clr]', root).onclick = () => { S.ctl && S.ctl.abort(); S.chat = []; drawMsgs(); };
+  const f = $('[data-askf]', root), t = $('[data-askt]', root);
+  f.onsubmit = e => { e.preventDefault(); const v = t.value.trim(); if (v) { t.value = ''; ask(v); } };
+  t.onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); f.requestSubmit(); } };
+  $('[data-stop]', root).onclick = () => S.ctl && S.ctl.abort();
+}
+function viewAi() {
+  $('#view').innerHTML = `<div class="chat">${chatHtml('tab')}
+    <p class="small muted" style="margin:0">Trợ lý dùng Claude của tài khoản claude.ai đang mở trang (lần đầu claude.ai hỏi cho phép). Trợ lý chỉ đọc số liệu, không sửa 3 web.</p></div>`;
+  bindChat($('#view'));
+  drawMsgs();
+}
+// Cửa sổ nhỏ ở góc: mở ở mọi tab (trừ tab Trợ lý AI), dùng chung cuộc trò chuyện với tab Trợ lý AI
+function drawDock() {
+  const open = !!store('dock') && S.tab !== 'ai';
+  $('#fab').hidden = open || S.tab === 'ai';
+  $('#dock').hidden = !open;
+  if (!open) return;
+  $('#dock-ctx').textContent = 'Đang xem: ' + ctxText();
+  const old = $('#askt-dock'), draft = old ? old.value : '', focused = old && document.activeElement === old;
+  $('#dock-body').innerHTML = chatHtml('dock'); // gợi ý đổi theo tab đang xem
+  bindChat($('#dock'));
+  const t = $('#askt-dock'); t.value = draft; if (focused) t.focus();
+  drawMsgs();
+}
+$('#fab').onclick = () => { store('dock', 1); drawDock(); const t = $('#askt-dock'); if (t) t.focus(); };
+$('#dock-x').onclick = () => { store('dock', 0); drawDock(); };
+$('#dock-big').onclick = () => { S.tab = 'ai'; store('tab', S.tab); draw(); };
 function drawMsgs() {
-  const box = $('#msgs'); if (!box) return;
-  box.innerHTML = S.chat.length ? S.chat.map(m => `<div class="msg ${m.role === 'user' ? 'me' : 'ai'}">${m.role === 'user' ? esc(m.content).replace(/\n/g, '<br>') : m.content ? md(m.content) : '<span class="muted dots">Đang suy nghĩ</span>'}${m.tool ? `<div class="tool">${esc(m.tool)}</div>` : ''}${m.err ? `<div class="err">${esc(m.err)}</div>` : ''}</div>`).join('')
-    : '<div class="empty">Hỏi Trợ lý AI bất cứ điều gì về đơn hàng, tồn kho, giao hàng – trợ lý tự tra số liệu của 3 web.</div>';
-  const busy = !!S.ctl; const b = $('#askb'), st = $('#stop'); if (b) b.disabled = busy; if (st) st.hidden = !busy;
+  const html = S.chat.length ? S.chat.map(m => `<div class="msg ${m.role === 'user' ? 'me' : 'ai'}">${m.role === 'user' ? esc(m.content).replace(/\n/g, '<br>') : m.content ? md(m.content) : '<span class="muted dots">Đang suy nghĩ</span>'}${m.tool ? `<div class="tool">${esc(m.tool)}</div>` : ''}${m.err ? `<div class="err">${esc(m.err)}</div>` : ''}</div>`).join('')
+    : `<div class="empty">Hỏi Trợ lý AI về ${S.tab === 'ai' ? 'đơn hàng, tồn kho, giao hàng' : 'trang đang xem (' + esc(TAB_NAME[S.tab]) + ')'} – trợ lý tự tra số liệu của 3 web.</div>`;
+  $$('[data-msgs]').forEach(box => { const end = box.scrollHeight - box.scrollTop - box.clientHeight < 40; box.innerHTML = html; if (end || S.ctl) box.scrollTop = box.scrollHeight; });
+  const busy = !!S.ctl;
+  $$('[data-askb]').forEach(b => { b.disabled = busy; });
+  $$('[data-stop]').forEach(b => { b.hidden = !busy; });
 }
 async function ask(text) {
   if (S.ctl) return;
   const sample = await claude.use('sample');
   if (!sample) { S.chat.push({ role: 'user', content: text }, { role: 'assistant', content: '', err: 'Trang này chưa dùng được Claude (mở trang trên claude.ai).' }); drawMsgs(); return; }
-  S.chat.push({ role: 'user', content: text });
+  S.chat.push({ role: 'user', content: text, ctx: turnCtx() });
   const reply = { role: 'assistant', content: '' };
   S.chat.push(reply);
-  const turns = [{ role: 'user', content: RULES() }].concat(S.chat.slice(0, -1).filter(m => m.content && !m.err).slice(-12).map(m => ({ role: m.role, content: m.content })));
+  const turns = [{ role: 'user', content: RULES() }].concat(S.chat.slice(0, -1).filter(m => m.content && !m.err).slice(-12).map(m => ({ role: m.role, content: (m.ctx || '') + m.content })));
   S.ctl = new AbortController(); drawMsgs();
   const tools = TOOLS.map(t => Object.assign({}, t, { execute: (i, ctx) => { reply.tool = '🔎 Đang tra: ' + t.name.replace(/_/g, ' '); drawMsgs(); return t.execute(i || {}, ctx); } }));
   try {
@@ -437,7 +506,7 @@ async function ask(text) {
   } catch (e) {
     reply.content = e && e.text || ''; reply.tool = '';
     if (!(e && e.code === 'cancelled')) reply.err = SAMPLE_ERR[e && e.code] || 'Chưa trả lời được (lỗi kết nối) – bấm Gửi lại câu hỏi.';
-  } finally { S.ctl = null; drawMsgs(); const box = $('#msgs'); if (box) box.lastElementChild && box.lastElementChild.scrollIntoView({ block: 'nearest' }); }
+  } finally { S.ctl = null; drawMsgs(); }
 }
 
 /* ---------------------------------------------------------- khởi động */

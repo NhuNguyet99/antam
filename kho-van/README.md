@@ -6,6 +6,8 @@ https://claude.ai/artifact/8iwBT1YGqiJ1vTwVQfmzed
 - **Đăng nhập**: tài khoản `trolyai` (mật khẩu do chủ trang đặt; lưu dạng băm PBKDF2-SHA256 ở `auth/main`).
   Đây là khóa giao diện – quyền xem trang vẫn do nút *Share* của claude.ai quyết định.
 - **Tab**: Tổng quan (theo ngày: khách, tuyến, đã giao, tổng hàng; tồn kho cần chú ý) · Đơn hàng · Tồn kho (TP / NVL) · Giao hàng · 🤖 Trợ lý AI.
+- **Cửa sổ trợ lý ở góc**: nút **🤖 Hỏi trợ lý** ở góc dưới phải mọi tab mở cửa sổ chat nhỏ (điện thoại: nửa dưới màn hình). Trợ lý biết đang xem tab, ngày,
+  tuyến, kho, từ khóa nào – hỏi "tuyến này", "ngày này" là hiểu; gợi ý câu hỏi đổi theo tab. Dùng chung cuộc trò chuyện với tab Trợ lý AI (nút ⤢).
 - **Trợ lý AI**: dùng Claude của tài khoản claude.ai đang mở trang (capability `sample`, lần đầu hỏi cho phép), với 4 công cụ chỉ đọc
   `tong_quan`, `don_hang(ngay, tuyen?, tim?)`, `ton_kho(kho, tim?, chi_canh_bao?)`, `giao_hang(ngay, tuyen?)`. Trợ lý không sửa được 3 web.
 
