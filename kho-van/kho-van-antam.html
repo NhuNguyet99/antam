@@ -1,0 +1,461 @@
+<title>Kho vận An Tâm</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Gom dữ liệu Đóng hàng, Kho và Giao hàng An Tâm – có Trợ lý AI hỏi đáp số liệu">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Bố cục: thanh trên (tên + độ mới dữ liệu) → tab → nội dung từng tab; điện thoại xếp 1 cột */
+:root {
+  --bg: #f3f5f4; --panel: #ffffff; --ink: #18232b; --muted: #5d6b73; --line: #dbe2e0;
+  --accent: #0f6b5c; --accent-ink: #ffffff; --accent-soft: #e2f1ed;
+  --amber: #b45309; --amber-soft: #fdf1e1; --bad: #b42318; --bad-soft: #fde8e6; --ok: #137a3f; --ok-soft: #e3f4ea;
+  --chat-me: #e2f1ed; --chat-ai: #ffffff;
+  --f-body: "Be Vietnam Pro", system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+  --f-mono: "JetBrains Mono", ui-monospace, SFMono-Regular, Menlo, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #11181c; --panel: #182226; --ink: #e5ecea; --muted: #9aa9ae; --line: #2a3a40;
+  --accent: #3fb59d; --accent-ink: #0c1512; --accent-soft: #173a33;
+  --amber: #f0a64b; --amber-soft: #3a2a15; --bad: #f2867b; --bad-soft: #3d1f1c; --ok: #6fd39a; --ok-soft: #173525;
+  --chat-me: #173a33; --chat-ai: #1d292e; color-scheme: dark; } }
+:root[data-theme="dark"] {
+  --bg: #11181c; --panel: #182226; --ink: #e5ecea; --muted: #9aa9ae; --line: #2a3a40;
+  --accent: #3fb59d; --accent-ink: #0c1512; --accent-soft: #173a33;
+  --amber: #f0a64b; --amber-soft: #3a2a15; --bad: #f2867b; --bad-soft: #3d1f1c; --ok: #6fd39a; --ok-soft: #173525;
+  --chat-me: #173a33; --chat-ai: #1d292e; color-scheme: dark; }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--ink); font: 15px/1.5 var(--f-body); }
+.wrap { max-width: 1180px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 16px 40px; }
+h1, h2, h3 { text-wrap: balance; margin: 0; }
+button, input, select, textarea { font: inherit; color: inherit; }
+button { cursor: pointer; }
+:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn { border: 1px solid var(--line); background: var(--panel); border-radius: 9px; padding: 8px 14px; }
+.btn.pri { background: var(--accent); border-color: var(--accent); color: var(--accent-ink); font-weight: 600; }
+.btn:disabled { opacity: .55; cursor: default; }
+.muted { color: var(--muted); } .small { font-size: 13px; }
+.mono { font-family: var(--f-mono); font-size: 12.5px; }
+.num { text-align: right; font-variant-numeric: tabular-nums; white-space: nowrap; }
+input[type=text], input[type=password], input[type=search], select, textarea { background: var(--panel); border: 1px solid var(--line); border-radius: 9px; padding: 8px 11px; min-width: 0; }
+
+/* đăng nhập */
+.login { max-width: 380px; margin: 8vh auto 0; background: var(--panel); border: 1px solid var(--line); border-radius: 16px; padding: 26px; display: grid; gap: 12px; }
+.login .mark { width: 46px; height: 46px; border-radius: 12px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-weight: 700; letter-spacing: .5px; }
+.login label { display: grid; gap: 4px; font-size: 13px; color: var(--muted); }
+.err { color: var(--bad); font-size: 13.5px; min-height: 1em; margin: 0; }
+
+/* khung chính */
+.top { display: flex; flex-wrap: wrap; align-items: center; gap: 10px 16px; margin-bottom: 12px; }
+.brand { display: flex; align-items: center; gap: 10px; }
+.brand .mark { width: 36px; height: 36px; border-radius: 10px; background: var(--accent); color: var(--accent-ink); display: grid; place-items: center; font-weight: 700; font-size: 13px; }
+.brand h1 { font-size: 19px; }
+.fresh { display: flex; flex-wrap: wrap; gap: 6px; flex: 1; min-width: 0; }
+.chip { display: inline-flex; align-items: center; gap: 5px; border-radius: 999px; padding: 2px 10px; font-size: 12.5px; background: var(--accent-soft); color: var(--ink); white-space: nowrap; }
+.chip.warn { background: var(--amber-soft); color: var(--amber); }
+.chip.bad { background: var(--bad-soft); color: var(--bad); }
+.chip.ok { background: var(--ok-soft); color: var(--ok); }
+.tabs { display: flex; gap: 4px; overflow-x: auto; border-bottom: 1px solid var(--line); margin-bottom: 16px; }
+.tabs button { border: 0; background: none; padding: 10px 14px; border-bottom: 3px solid transparent; color: var(--muted); font-weight: 600; white-space: nowrap; }
+.tabs button.on { color: var(--accent); border-bottom-color: var(--accent); }
+.bar { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; margin-bottom: 12px; }
+.bar .grow { flex: 1; min-width: 160px; }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-bottom: 16px; }
+.kpi { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 12px 14px; }
+.kpi b { display: block; font-size: 24px; font-variant-numeric: tabular-nums; }
+.kpi span { font-size: 12.5px; color: var(--muted); }
+.kpi.bad b { color: var(--bad); } .kpi.warn b { color: var(--amber); } .kpi.ok b { color: var(--ok); }
+.grid2 { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 16px; }
+@media (max-width: 820px) { .grid2 { grid-template-columns: minmax(0, 1fr); } }
+.card { background: var(--panel); border: 1px solid var(--line); border-radius: 12px; padding: 14px; min-width: 0; }
+.card h3 { font-size: 15px; margin-bottom: 8px; }
+.tw { overflow-x: auto; }
+table { width: 100%; border-collapse: collapse; font-size: 13.5px; }
+th, td { text-align: left; padding: 6px 8px; border-bottom: 1px solid var(--line); vertical-align: top; }
+th { color: var(--muted); font-weight: 600; font-size: 12.5px; white-space: nowrap; }
+tr.sum td { font-weight: 700; }
+.empty { padding: 26px; text-align: center; color: var(--muted); border: 1px dashed var(--line); border-radius: 12px; }
+.qty { display: flex; flex-wrap: wrap; gap: 4px; }
+.qty span { background: var(--bg); border-radius: 6px; padding: 0 6px; font-size: 12.5px; white-space: nowrap; }
+
+/* trợ lý AI */
+.chat { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 10px; }
+.msgs { display: grid; gap: 10px; align-content: start; min-height: 240px; }
+.msg { max-width: min(760px, 100%); border-radius: 14px; padding: 10px 14px; border: 1px solid var(--line); min-width: 0; overflow-wrap: anywhere; }
+.msg.me { background: var(--chat-me); justify-self: end; border-color: transparent; }
+.msg.ai { background: var(--chat-ai); }
+.msg.ai p { margin: 0 0 8px; } .msg.ai p:last-child { margin: 0; }
+.msg.ai ul, .msg.ai ol { margin: 0 0 8px; padding-left: 20px; }
+.msg .tool { font-size: 12px; color: var(--muted); margin-top: 6px; }
+.suggest { display: flex; flex-wrap: wrap; gap: 6px; }
+.suggest button { border: 1px solid var(--line); background: var(--panel); border-radius: 999px; padding: 5px 12px; font-size: 13px; }
+.ask { display: flex; gap: 8px; align-items: flex-end; }
+.ask textarea { flex: 1; resize: vertical; min-height: 46px; max-height: 200px; }
+@media (prefers-reduced-motion: no-preference) { .dots::after { content: "…"; animation: blink 1s steps(3) infinite; } @keyframes blink { 50% { opacity: .3; } } }
+</style>
+
+<div class="wrap">
+  <section class="login" id="login" hidden>
+    <div class="mark">KV</div>
+    <div><h2 style="font-size:20px">Kho vận An Tâm</h2><p class="muted small" style="margin:4px 0 0">Đơn hàng · Tồn kho · Giao hàng · Trợ lý AI</p></div>
+    <form id="lg" autocomplete="on" style="display:grid;gap:10px">
+      <label>Tài khoản<input type="text" id="lg-u" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" required></label>
+      <label>Mật khẩu<input type="password" id="lg-p" name="password" autocomplete="current-password" required></label>
+      <button class="btn pri" type="submit" id="lg-b">Đăng nhập</button>
+      <p class="err" id="lg-e"></p>
+    </form>
+  </section>
+
+  <section id="main" hidden>
+    <div class="top">
+      <div class="brand"><div class="mark">KV</div><div><h1>Kho vận An Tâm</h1><div class="small muted" id="who"></div></div></div>
+      <div class="fresh" id="fresh"></div>
+      <button class="btn" id="reload" title="Tải lại dữ liệu">↻ Tải lại</button>
+      <button class="btn" id="logout">Đăng xuất</button>
+    </div>
+    <nav class="tabs" id="tabs">
+      <button data-tab="tq">Tổng quan</button><button data-tab="don">Đơn hàng</button><button data-tab="ton">Tồn kho</button>
+      <button data-tab="giao">Giao hàng</button><button data-tab="ai">🤖 Trợ lý AI</button>
+    </nav>
+    <div id="view"></div>
+  </section>
+  <p id="boot" class="muted">Đang kết nối dữ liệu…</p>
+</div>
+
+<script>
+'use strict';
+/* Kho vận An Tâm – gói dữ liệu của 3 web (Đóng hàng, Kho, Giao hàng An Tâm) trong kho dữ liệu của trang này:
+     goi/kho          gói tồn kho hôm nay (web Kho ghi "khovan/kho", tác vụ định kỳ chép sang)
+     goi/dh-<mã>      đơn hàng ngày / tuyến kebab 123 đã chia tuyến (web Đóng hàng "khoout/<mã>")
+     goi/giao-<ngày>  kết quả giao hàng (web Giao hàng "kho/TP/giao/<ngày>")
+     goi/nv           danh sách người giao (không có mã PIN)
+     goi/index        {s: {khóa: stamp/version}, at} – tác vụ ghi để biết đã chép gì
+     auth/main        {u, salt, iter, hash} – tài khoản đăng nhập trang (PBKDF2-SHA256)
+   Trợ lý AI dùng Claude của người đang xem (capability sample) với các công cụ đọc gói dữ liệu này – chỉ đọc, không sửa 3 web. */
+const $ = (s, r = document) => r.querySelector(s);
+const $$ = (s, r = document) => Array.from(r.querySelectorAll(s));
+const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const noAcc = s => String(s || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D');
+const norm = s => noAcc(s).toUpperCase().replace(/\s+/g, ' ').trim();
+const like = (q, hay) => { const h = noAcc(hay).toLowerCase(); return noAcc(q).toLowerCase().split(/\s+/).filter(Boolean).every(t => h.includes(t)); };
+const fmt = n => (n == null || n === '' ? '' : Number(n).toLocaleString('vi-VN', { maximumFractionDigits: 3 }));
+const z = n => String(n).padStart(2, '0');
+const today = () => { const d = new Date(); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`; };
+const vn = iso => (iso ? iso.slice(0, 10).split('-').reverse().join('/') : '');
+const store = (k, v) => { try { if (v === undefined) return JSON.parse(localStorage.getItem('kv.' + k)); if (v === null) localStorage.removeItem('kv.' + k); else localStorage.setItem('kv.' + k, JSON.stringify(v)); } catch (e) { return null; } return undefined; };
+const S = { db: null, auth: null, goi: {}, tab: store('tab') || 'tq', date: '', wh: 'TP', q: '', route: '', warnOnly: false, chat: [], ctl: null };
+
+/* ---------------------------------------------------------- đăng nhập */
+async function pbkdf2(pw, salt, iter) {
+  const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveBits']);
+  const bits = await crypto.subtle.deriveBits({ name: 'PBKDF2', hash: 'SHA-256', salt: new TextEncoder().encode(salt), iterations: iter || 100000 }, key, 256);
+  return Array.from(new Uint8Array(bits)).map(b => b.toString(16).padStart(2, '0')).join('');
+}
+async function loadAuth() {
+  const snap = await S.db.doc('auth/main').get();
+  S.auth = snap.exists ? snap.data() : null;
+}
+function signedIn() {
+  const s = store('sess');
+  return !!(S.auth && s && s.u === S.auth.u && s.k === String(S.auth.hash || '').slice(0, 24));
+}
+function showLogin(msg) {
+  $('#main').hidden = true; $('#login').hidden = false; $('#boot').hidden = true;
+  $('#lg-e').textContent = msg || (S.auth ? '' : 'Trang chưa có tài khoản đăng nhập – nhờ Claude tạo tài khoản.');
+  ($('#lg-u').value ? $('#lg-p') : $('#lg-u')).focus();
+}
+$('#lg').addEventListener('submit', async e => {
+  e.preventDefault();
+  const b = $('#lg-b'); b.disabled = true; $('#lg-e').textContent = '';
+  try {
+    await loadAuth();
+    if (!S.auth) throw new Error('Trang chưa có tài khoản đăng nhập.');
+    const u = $('#lg-u').value.trim().toLowerCase(), h = await pbkdf2($('#lg-p').value, S.auth.salt, S.auth.iter);
+    if (u !== S.auth.u || h !== S.auth.hash) { await new Promise(r => setTimeout(r, 600)); throw new Error('Sai tài khoản hoặc mật khẩu.'); }
+    store('sess', { u, k: h.slice(0, 24) }); $('#lg-p').value = '';
+    await enter();
+  } catch (err) { $('#lg-e').textContent = err.message; } finally { b.disabled = false; }
+});
+$('#logout').onclick = () => { store('sess', null); S.ctl && S.ctl.abort(); showLogin(); };
+
+/* ---------------------------------------------------------- dữ liệu */
+async function loadGoi() {
+  const snap = await S.db.collection('goi').get();
+  const m = {};
+  snap.docs.forEach(d => { m[d.id] = d.data(); });
+  S.goi = m;
+  const dates = orderDates();
+  if (!S.date || !dates.includes(S.date)) S.date = dates.includes(today()) ? today() : dates[0] || today();
+}
+const orderDates = () => Array.from(new Set(Object.keys(S.goi).map(k => (/^(?:dh|giao)-(\d{4}-\d\d-\d\d)/.exec(k) || [])[1]).filter(Boolean))).sort().reverse();
+const drivers = () => Object.fromEntries(((S.goi.nv || {}).list || []).map(x => [x.id, x.name || x.nick]));
+
+// Bảng đơn của web Đóng hàng (dạng TSV như sheet): cột sản phẩm nằm sau cột trạng thái, trước cột ghi chú (tuyến 123)
+function parseOrders(pkg) {
+  const lines = String(pkg.tsv || '').split('\n').map(l => l.split('\t'));
+  const head = lines[0] || [], H = head.map(norm);
+  const at = f => H.findIndex(f);
+  const c = { q: at(h => h === 'QUAN'), route: at(h => h === 'TUYEN'), crm: at(h => h === 'CRM'), cust: at(h => h === 'KHACH HANG' || h.startsWith('TEN KHACH')),
+    phone: at(h => h.startsWith('SDT')), note: at(h => h.startsWith('GHI CHU')), driver: at(h => h === 'TAI XE'), st: at(h => h === 'TRANG THAI'), pay: at(h => h === 'TINH TRANG') };
+  if (c.st < 0) c.st = c.pay, c.pay = -1; // tuyến 123: cột TÌNH TRẠNG là HOẠT ĐỘNG / NGHỈ
+  const start = Math.max(c.st, c.pay) + 1, end = c.note > start ? c.note : head.length;
+  const cols = []; for (let i = start; i < end; i++) if (H[i]) cols.push([i, head[i].trim()]);
+  const g = (r, i) => (i >= 0 && r[i] != null ? String(r[i]).trim() : '');
+  const out = []; let route = '';
+  for (const r of lines.slice(1)) {
+    if (g(r, c.route)) route = g(r, c.route);
+    const cust = g(r, c.cust);
+    if (!cust) continue;
+    if (c.st >= 0 && !norm(g(r, c.st)).includes('HOAT DONG')) continue;
+    const qty = {};
+    cols.forEach(([i, name]) => { const n = num(g(r, i).replace(/\s*kg$/i, '')); if (n) qty[name] = n; });
+    const code = (/^(k\s?h?\s?\d+[a-z]?)\s*[-–:]/i.exec(cust) || [])[1] || '';
+    const crm = g(r, c.crm).replace(/\s+/g, '').toUpperCase();
+    out.push({ kind: pkg.kind, route, crm, code: code.replace(/\s/g, '').toUpperCase(), cust, phone: g(r, c.phone), note: g(r, c.note), pay: g(r, c.pay), driver: g(r, c.driver), q: g(r, c.q), qty });
+  }
+  return { rows: out, cols: cols.map(x => x[1]) };
+}
+function ordersOf(date) {
+  const rows = [], cols = [];
+  Object.entries(S.goi).filter(([k]) => k.startsWith('dh-' + date)).sort().forEach(([, p]) => {
+    const r = parseOrders(p), asg = (p.kind === 't123' ? p.assignG : p.assign) || {};
+    r.rows.forEach(x => { x.asg = asg[x.route] || ''; });
+    rows.push(...r.rows); r.cols.forEach(x => { if (!cols.includes(x)) cols.push(x); });
+  });
+  return { rows, cols };
+}
+// số kiểu Việt Nam: "1.234" = nghìn, "2,5" = thập phân
+function num(v) {
+  let t = String(v || '').replace(/\s/g, '');
+  if (!t) return 0;
+  if (t.includes(',')) t = t.replace(/\./g, '').replace(',', '.'); else if (/^-?\d{1,3}(\.\d{3})+$/.test(t)) t = t.replace(/\./g, '');
+  const n = Number(t); return isNaN(n) ? 0 : n;
+}
+const keyOf = r => r.crm || r.code || r.cust;
+const delivOf = date => ((S.goi['giao-' + date] || {}).d) || {};
+function sumQty(rows) { const s = {}; rows.forEach(r => Object.entries(r.qty).forEach(([k, n]) => { s[k] = (s[k] || 0) + n; })); return s; }
+function routeSummary(date) {
+  const { rows } = ordersOf(date), dv = delivOf(date), dn = drivers(), m = new Map();
+  rows.forEach(r => {
+    const x = m.get(r.route) || { route: r.route, n: 0, ok: 0, fail: 0, drivers: new Set(), rows: [] };
+    const st = (dv[keyOf(r)] || {}).status; x.n++; if (st === 'ok') x.ok++; if (st === 'fail') x.fail++;
+    const d = (dv[keyOf(r)] || {}).driver; if (d) x.drivers.add(dn[d] || d);
+    if (r.asg) x.drivers.add(dn[r.asg] || ''); // người giao web Đóng hàng chọn cho tuyến
+    x.rows.push(r); m.set(r.route, x);
+  });
+  return Array.from(m.values()).map(x => Object.assign(x, { drivers: Array.from(x.drivers).filter(Boolean), qty: sumQty(x.rows) })).sort((a, b) => a.route.localeCompare(b.route));
+}
+const stock = wh => ((S.goi.kho || {})[wh]) || null;
+const stockRows = wh => ((stock(wh) || {}).rows || []).map(r => ({ code: r[0], name: r[1], unit: r[2], grp: r[3], open: r[4], in: r[5], out: r[6], adj: r[7], close: r[8], min: r[9], warn: r[10] || '' }));
+
+/* ---------------------------------------------------------- giao diện */
+function freshness() {
+  const ix = S.goi.index || {}, k = S.goi.kho || {};
+  const dhAt = Object.entries(S.goi).filter(([x]) => x.startsWith('dh-')).map(([, p]) => p.at || '').sort().pop();
+  const gAt = ix.at || '';
+  $('#fresh').innerHTML = [
+    ['Đóng hàng', dhAt], ['Kho', k.at], ['Giao hàng', gAt],
+  ].map(([n, t]) => `<span class="chip ${t ? '' : 'warn'}" title="Lần cập nhật gần nhất">${n}: ${t ? esc(String(t).slice(5, 16).replace(/^(\d\d)-(\d\d)/, '$2/$1')) : 'chưa có'}</span>`).join('');
+}
+function draw() {
+  $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
+  ({ tq: viewTq, don: viewDon, ton: viewTon, giao: viewGiao, ai: viewAi })[S.tab]();
+}
+$$('#tabs button').forEach(b => b.onclick = () => { S.tab = b.dataset.tab; store('tab', S.tab); draw(); });
+$('#reload').onclick = async () => { const b = $('#reload'); b.disabled = true; try { await loadGoi(); freshness(); draw(); } finally { b.disabled = false; } };
+function dateSel() {
+  const ds = orderDates();
+  return `<select id="dsel" aria-label="Ngày">${ds.map(d => `<option value="${d}" ${d === S.date ? 'selected' : ''}>${vn(d)}${d === today() ? ' (hôm nay)' : ''}</option>`).join('') || `<option>${vn(today())}</option>`}</select>`;
+}
+function bindDate() { const s = $('#dsel'); if (s) s.onchange = () => { S.date = s.value; draw(); }; }
+const qtyChips = q => `<div class="qty">${Object.entries(q).map(([k, n]) => `<span>${esc(k)} <b>${fmt(n)}</b></span>`).join('')}</div>`;
+
+function viewTq() {
+  const rs = routeSummary(S.date), all = rs.reduce((a, x) => a + x.n, 0), ok = rs.reduce((a, x) => a + x.ok, 0), fail = rs.reduce((a, x) => a + x.fail, 0);
+  const tot = sumQty(ordersOf(S.date).rows);
+  const warn = wh => stockRows(wh).filter(r => r.warn);
+  const neg = ['TP', 'NVL'].reduce((a, w) => a + warn(w).filter(r => r.warn === 'Tồn âm').length, 0);
+  const low = ['TP', 'NVL'].reduce((a, w) => a + warn(w).filter(r => r.warn !== 'Tồn âm').length, 0);
+  $('#view').innerHTML = `<div class="bar">${dateSel()}<span class="muted small">Đơn hàng và giao hàng theo ngày · tồn kho là số mới nhất</span></div>
+    <div class="kpis">
+      <div class="kpi"><b>${all}</b><span>khách có đơn · ${rs.length} tuyến</span></div>
+      <div class="kpi ok"><b>${ok}</b><span>đã giao</span></div>
+      <div class="kpi ${fail ? 'bad' : ''}"><b>${fail}</b><span>không giao được</span></div>
+      <div class="kpi"><b>${all - ok - fail}</b><span>chưa có kết quả</span></div>
+      <div class="kpi ${neg ? 'bad' : ''}"><b>${neg}</b><span>mã tồn âm (TP + NVL)</span></div>
+      <div class="kpi ${low ? 'warn' : ''}"><b>${low}</b><span>mã dưới tồn tối thiểu</span></div>
+    </div>
+    <div class="grid2">
+      <div class="card"><h3>Theo tuyến</h3>${rs.length ? `<div class="tw"><table><thead><tr><th>Tuyến</th><th>Người giao</th><th class="num">Khách</th><th class="num">Đã giao</th><th class="num">Không được</th></tr></thead><tbody>
+        ${rs.map(x => `<tr><td><b>${esc(x.route || '—')}</b></td><td class="small">${esc(x.drivers.join(', ') || '—')}</td><td class="num">${x.n}</td><td class="num">${x.ok || ''}</td><td class="num">${x.fail || ''}</td></tr>`).join('')}
+        <tr class="sum"><td>Cộng</td><td></td><td class="num">${all}</td><td class="num">${ok}</td><td class="num">${fail}</td></tr></tbody></table></div>` : '<div class="empty">Chưa có đơn ngày này.</div>'}</div>
+      <div class="card"><h3>Tổng hàng cần giao</h3>${Object.keys(tot).length ? `<div class="tw"><table><thead><tr><th>Sản phẩm</th><th class="num">Số lượng</th></tr></thead><tbody>
+        ${Object.entries(tot).map(([k, n]) => `<tr><td>${esc(k)}</td><td class="num">${fmt(n)}</td></tr>`).join('')}</tbody></table></div>` : '<div class="empty">Chưa có số lượng.</div>'}</div>
+    </div>
+    <div class="card" style="margin-top:16px"><h3>Tồn kho cần chú ý</h3>${['TP', 'NVL'].some(w => warn(w).length) ? `<div class="tw"><table><thead><tr><th>Kho</th><th>Mã</th><th>Tên</th><th class="num">Tồn</th><th class="num">Tối thiểu</th><th></th></tr></thead><tbody>
+      ${['TP', 'NVL'].flatMap(w => warn(w).map(r => `<tr><td>${w}</td><td class="mono">${esc(r.code)}</td><td>${esc(r.name)}</td><td class="num">${fmt(r.close)} ${esc(r.unit)}</td><td class="num">${fmt(r.min)}</td><td><span class="chip ${r.warn === 'Tồn âm' ? 'bad' : 'warn'}">${esc(r.warn)}</span></td></tr>`)).join('')}</tbody></table></div>`
+      : `<div class="empty">${S.goi.kho ? 'Không có mã tồn âm hay dưới tối thiểu.' : 'Chưa có gói tồn kho – mở web Kho An Tâm một lần để web gửi số tồn.'}</div>`}</div>`;
+  bindDate();
+}
+function viewDon() {
+  const { rows, cols } = ordersOf(S.date), dv = delivOf(S.date);
+  const routes = Array.from(new Set(rows.map(r => r.route))).sort();
+  const list = rows.filter(r => (!S.route || r.route === S.route) && (!S.q || like(S.q, [r.crm, r.code, r.cust, r.phone, r.note].join(' '))));
+  const tot = sumQty(list);
+  const st = r => { const x = dv[keyOf(r)]; return !x ? '' : x.status === 'ok' ? `<span class="chip ok">✓ ${esc((x.at || '').slice(11, 16))}</span>` : `<span class="chip bad" title="${esc(x.note)}">✗ ${esc(x.note || 'Không giao được')}</span>`; };
+  $('#view').innerHTML = `<div class="bar">${dateSel()}<select id="rsel" aria-label="Tuyến"><option value="">Tất cả tuyến</option>${routes.map(x => `<option ${x === S.route ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>
+      <input type="search" id="q" class="grow" placeholder="Tìm khách, mã CRM, SĐT…" value="${esc(S.q)}"></div>
+    ${list.length ? `<div class="card"><div class="tw"><table><thead><tr><th>Tuyến</th><th>CRM</th><th>Khách hàng</th><th>Hàng</th><th>Thanh toán</th><th>Giao</th></tr></thead><tbody>
+      ${list.map(r => `<tr><td>${esc(r.route)}</td><td class="mono">${esc(r.crm)}</td><td>${esc(r.cust)}${r.note ? `<div class="small muted">${esc(r.note)}</div>` : ''}</td><td>${qtyChips(r.qty)}</td><td class="small">${esc(r.pay)}</td><td>${st(r)}</td></tr>`).join('')}
+      </tbody></table></div><p class="small muted" style="margin:10px 0 0">${list.length} khách · ${Object.entries(tot).map(([k, n]) => `${esc(k)}: <b>${fmt(n)}</b>`).join(' · ')}</p></div>`
+      : `<div class="empty">${rows.length ? 'Không có khách khớp bộ lọc.' : 'Chưa có đơn ngày này (web Đóng hàng chưa chia tuyến, hoặc tác vụ chưa chép sang).'}</div>`}`;
+  bindDate();
+  $('#rsel').onchange = e => { S.route = e.target.value; draw(); };
+  let t; $('#q').oninput = e => { clearTimeout(t); t = setTimeout(() => { S.q = e.target.value; draw(); const q = $('#q'); q.focus(); q.setSelectionRange(q.value.length, q.value.length); }, 250); };
+  void cols;
+}
+function viewTon() {
+  const s = stock(S.wh), rows = stockRows(S.wh).filter(r => (!S.warnOnly || r.warn) && (!S.q || like(S.q, r.code + ' ' + r.name + ' ' + r.grp)));
+  $('#view').innerHTML = `<div class="bar"><select id="wsel" aria-label="Kho"><option value="TP" ${S.wh === 'TP' ? 'selected' : ''}>Kho thành phẩm - hàng hóa</option><option value="NVL" ${S.wh === 'NVL' ? 'selected' : ''}>Kho nguyên vật liệu</option></select>
+      <input type="search" id="q" class="grow" placeholder="Tìm mã, tên hàng, nhóm…" value="${esc(S.q)}">
+      <label class="small"><input type="checkbox" id="wo" ${S.warnOnly ? 'checked' : ''}> Chỉ mã cần chú ý</label></div>
+    ${s ? `<p class="small muted" style="margin:0 0 10px">Số liệu ngày ${vn(s.date)}, cập nhật ${esc(String(s.at || '').slice(11, 16))}${s.pending ? ` · <span class="chip warn">${s.pending} phiếu điều chỉnh chờ duyệt (chưa tính)</span>` : ''}</p>
+      <div class="card"><div class="tw"><table><thead><tr><th>Mã</th><th>Tên hàng</th><th>ĐVT</th><th class="num">Đầu ngày</th><th class="num">Nhập</th><th class="num">Xuất</th><th class="num">Điều chỉnh</th><th class="num">Tồn</th><th class="num">Tối thiểu</th><th></th></tr></thead><tbody>
+      ${rows.map(r => `<tr><td class="mono">${esc(r.code)}</td><td>${esc(r.name)}<div class="small muted">${esc(r.grp)}</div></td><td>${esc(r.unit)}</td><td class="num">${fmt(r.open)}</td><td class="num">${r.in ? fmt(r.in) : ''}</td><td class="num">${r.out ? fmt(r.out) : ''}</td><td class="num">${r.adj ? fmt(r.adj) : ''}</td><td class="num"><b>${fmt(r.close)}</b></td><td class="num">${fmt(r.min)}</td><td>${r.warn ? `<span class="chip ${r.warn === 'Tồn âm' ? 'bad' : 'warn'}">${esc(r.warn)}</span>` : ''}</td></tr>`).join('') || '<tr><td colspan="10" class="muted">Không có mã khớp.</td></tr>'}
+      </tbody></table></div></div>` : '<div class="empty">Chưa có gói tồn kho của kho này – mở web Kho An Tâm (chuyển sang đúng kho) một lần, tác vụ sẽ chép sang trong ~15 phút.</div>'}`;
+  $('#wsel').onchange = e => { S.wh = e.target.value; draw(); };
+  $('#wo').onchange = e => { S.warnOnly = e.target.checked; draw(); };
+  let t; $('#q').oninput = e => { clearTimeout(t); t = setTimeout(() => { S.q = e.target.value; draw(); const q = $('#q'); q.focus(); q.setSelectionRange(q.value.length, q.value.length); }, 250); };
+}
+function viewGiao() {
+  const dv = delivOf(S.date), dn = drivers();
+  const list = Object.entries(dv).filter(([, x]) => x).sort((a, b) => (a[1].route || '').localeCompare(b[1].route || '') || (a[1].at || '').localeCompare(b[1].at || ''));
+  const ok = list.filter(([, x]) => x.status === 'ok').length;
+  $('#view').innerHTML = `<div class="bar">${dateSel()}<span class="small muted">${ok} đã giao · ${list.length - ok} không giao được</span></div>
+    ${list.length ? `<div class="card"><div class="tw"><table><thead><tr><th>Giờ</th><th>Tuyến</th><th>Người giao</th><th>Khách</th><th>Kết quả</th></tr></thead><tbody>
+      ${list.map(([k, x]) => `<tr><td class="num">${esc((x.at || '').slice(11, 16))}</td><td>${esc(x.route)}</td><td>${esc(dn[x.driver] || '')}</td><td><span class="mono">${esc(k)}</span> ${esc(x.name || '')}</td>
+        <td>${x.status === 'ok' ? '<span class="chip ok">✓ Đã giao</span>' : `<span class="chip bad">✗ ${esc(x.note || 'Không giao được')}</span>`}${x.status === 'ok' && x.note ? `<div class="small muted">${esc(x.note)}</div>` : ''}${(x.photos || []).length ? `<div class="small muted">📷 ${x.photos.length} ảnh</div>` : ''}</td></tr>`).join('')}
+      </tbody></table></div></div>` : '<div class="empty">Chưa có kết quả giao hàng ngày này.</div>'}`;
+  bindDate();
+}
+
+/* ---------------------------------------------------------- trợ lý AI */
+// Công cụ cho Claude: chỉ đọc gói dữ liệu đang có trong trang
+const cap = (a, n) => (a.length > n ? a.slice(0, n).concat([`… còn ${a.length - n} dòng`]) : a);
+const TOOLS = [
+  { name: 'tong_quan', description: 'Tổng quan dữ liệu đang có: các ngày có đơn hàng / kết quả giao, giờ cập nhật tồn kho, số mã cần chú ý. Gọi đầu tiên khi chưa rõ ngày.',
+    execute: () => ({ hom_nay: today(), ngay_co_du_lieu: orderDates(), ton_kho_cap_nhat: (S.goi.kho || {}).at || null,
+      canh_bao_ton: ['TP', 'NVL'].map(w => ({ kho: w, ton_am: stockRows(w).filter(r => r.warn === 'Tồn âm').length, duoi_toi_thieu: stockRows(w).filter(r => r.warn && r.warn !== 'Tồn âm').length })),
+      nguoi_giao: Object.values(drivers()) }) },
+  { name: 'don_hang', description: 'Đơn hàng một ngày (đã chia tuyến ở web Đóng hàng): tổng theo tuyến, tổng sản phẩm, và danh sách khách (lọc theo tuyến / từ khóa). Trả về JSON.',
+    inputSchema: { type: 'object', properties: { ngay: { type: 'string', description: 'yyyy-mm-dd' }, tuyen: { type: 'string' }, tim: { type: 'string', description: 'tên / mã CRM / SĐT khách' } }, required: ['ngay'] },
+    execute: i => {
+      const d = String(i.ngay || today()), { rows } = ordersOf(d), dv = delivOf(d);
+      const list = rows.filter(r => (!i.tuyen || norm(r.route) === norm(i.tuyen)) && (!i.tim || like(String(i.tim), [r.crm, r.code, r.cust, r.phone].join(' '))));
+      return { ngay: d, so_khach: list.length, tong_san_pham: sumQty(list),
+        theo_tuyen: routeSummary(d).map(x => ({ tuyen: x.route, khach: x.n, da_giao: x.ok, khong_giao_duoc: x.fail, nguoi_giao: x.drivers, hang: x.qty })),
+        khach: cap(list.map(r => ({ tuyen: r.route, crm: r.crm, khach: r.cust.slice(0, 90), sdt: r.phone, hang: r.qty, thanh_toan: r.pay, ghi_chu: r.note.slice(0, 80), giao: (dv[keyOf(r)] || {}).status || '' })), i.tim || i.tuyen ? 150 : 60) };
+    } },
+  { name: 'ton_kho', description: 'Tồn kho mới nhất (nhập – xuất – tồn trong ngày) của kho TP (thành phẩm - hàng hóa) hoặc NVL (nguyên vật liệu), lọc theo từ khóa hoặc chỉ mã cần chú ý.',
+    inputSchema: { type: 'object', properties: { kho: { type: 'string', enum: ['TP', 'NVL'] }, tim: { type: 'string' }, chi_canh_bao: { type: 'boolean' } }, required: ['kho'] },
+    execute: i => {
+      const w = i.kho === 'NVL' ? 'NVL' : 'TP', s = stock(w);
+      if (!s) return { loi: 'Chưa có gói tồn kho của kho ' + w };
+      const rows = stockRows(w).filter(r => (!i.chi_canh_bao || r.warn) && (!i.tim || like(String(i.tim), r.code + ' ' + r.name + ' ' + r.grp)));
+      return { kho: s.name, ngay: s.date, cap_nhat: s.at, phieu_cho_duyet: s.pending || 0,
+        ma: cap(rows.map(r => ({ ma: r.code, ten: r.name, dvt: r.unit, nhom: r.grp, dau_ngay: r.open, nhap: r.in, xuat: r.out, dieu_chinh: r.adj, ton: r.close, toi_thieu: r.min, canh_bao: r.warn })), 200) };
+    } },
+  { name: 'giao_hang', description: 'Kết quả giao hàng một ngày từ web Giao hàng: từng khách đã giao / không giao được (lý do), giờ, tuyến, người giao.',
+    inputSchema: { type: 'object', properties: { ngay: { type: 'string', description: 'yyyy-mm-dd' }, tuyen: { type: 'string' } }, required: ['ngay'] },
+    execute: i => {
+      const d = String(i.ngay || today()), dn = drivers();
+      const list = Object.entries(delivOf(d)).filter(([, x]) => x && (!i.tuyen || norm(x.route) === norm(i.tuyen)));
+      return { ngay: d, da_giao: list.filter(([, x]) => x.status === 'ok').length, khong_giao_duoc: list.filter(([, x]) => x.status === 'fail').length,
+        chi_tiet: cap(list.map(([k, x]) => ({ khach: k, ten: String(x.name || '').slice(0, 70), ket_qua: x.status === 'ok' ? 'đã giao' : 'không giao được', ly_do: x.note || '', gio: (x.at || '').slice(11, 16), tuyen: x.route, nguoi_giao: dn[x.driver] || '' })), 200) };
+    } },
+];
+const RULES = () => `Bạn là Trợ lý AI của Kho vận An Tâm (công ty Ẩm thực An Tâm: bánh mì / bánh kebab, giao hàng theo tuyến ở TP.HCM, Bình Dương). `
+  + `Dữ liệu gom từ 3 web nội bộ: Đóng hàng An Tâm (đơn hàng đã chia tuyến), Kho An Tâm (tồn kho thành phẩm TP và nguyên vật liệu NVL), Giao hàng An Tâm (kết quả giao). `
+  + `Hôm nay là ${vn(today())} (${today()}). Luôn lấy số liệu bằng các công cụ, không đoán; nếu công cụ không có dữ liệu thì nói rõ. `
+  + `Bạn chỉ đọc, không sửa được 3 web – việc cần làm (nhập đơn, lập phiếu…) thì hướng dẫn người dùng làm trên web tương ứng. `
+  + `Trả lời bằng tiếng Việt, ngắn gọn, có số cụ thể; dùng gạch đầu dòng hoặc bảng Markdown khi liệt kê. Nói ngày / giờ cập nhật của số liệu khi liên quan.`;
+function md(s) {
+  const lines = String(s).split('\n'), out = []; let list = null, table = null;
+  const inline = t => esc(t).replace(/\*\*(.+?)\*\*/g, '<b>$1</b>').replace(/`([^`]+)`/g, '<span class="mono">$1</span>');
+  const flush = () => { if (list) { out.push(`<${list.t}>${list.items.map(x => `<li>${x}</li>`).join('')}</${list.t}>`); list = null; }
+    if (table) { const [h, ...b] = table.filter(r => !/^\s*\|?\s*:?-{2,}/.test(r)); const cells = r => r.replace(/^\s*\||\|\s*$/g, '').split('|').map(c => inline(c.trim()));
+      out.push(`<div class="tw"><table><thead><tr>${cells(h).map(c => `<th>${c}</th>`).join('')}</tr></thead><tbody>${b.map(r => `<tr>${cells(r).map(c => `<td>${c}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`); table = null; } };
+  for (const l of lines) {
+    let m;
+    if (/^\s*\|.*\|\s*$/.test(l)) { if (list) flush(); (table = table || []).push(l); continue; }
+    if (table) flush();
+    if ((m = /^\s*[-*•]\s+(.*)$/.exec(l))) { if (!list || list.t !== 'ul') { flush(); list = { t: 'ul', items: [] }; } list.items.push(inline(m[1])); continue; }
+    if ((m = /^\s*\d+[.)]\s+(.*)$/.exec(l))) { if (!list || list.t !== 'ol') { flush(); list = { t: 'ol', items: [] }; } list.items.push(inline(m[1])); continue; }
+    flush();
+    if ((m = /^#{1,4}\s+(.*)$/.exec(l))) out.push(`<p><b>${inline(m[1])}</b></p>`);
+    else if (l.trim()) out.push(`<p>${inline(l)}</p>`);
+  }
+  flush();
+  return out.join('');
+}
+const SAMPLE_ERR = { not_granted: 'Trang chưa được phép dùng Claude – bấm Cho phép khi claude.ai hỏi (hoặc mở menu Quyền của trang).', sampling_disabled: 'Tài khoản / tổ chức này chưa bật Claude cho trang.',
+  rate_limited: 'Đang hỏi quá nhiều hoặc hết lượt dùng Claude – thử lại sau ít phút.', session_expired: 'Phiên claude.ai đã hết – đăng nhập lại claude.ai.', refused: 'Claude không trả lời câu này – hỏi cách khác.',
+  empty_completion: 'Claude chưa trả lời được – hỏi ngắn gọn hơn.', prompt_too_large: 'Câu hỏi hoặc dữ liệu quá dài – hỏi phạm vi hẹp hơn (một ngày, một tuyến).', tools_unavailable: 'Trình xem này chưa chạy được công cụ của trang.' };
+const SUGGEST = ['Hôm nay mỗi tuyến bao nhiêu khách, ai giao?', 'Tổng số bánh từng loại cần giao hôm nay?', 'Mã nào tồn âm hoặc dưới tồn tối thiểu?', 'Hôm qua những khách nào không giao được, vì sao?'];
+function viewAi() {
+  $('#view').innerHTML = `<div class="chat">
+    <div class="suggest">${SUGGEST.map(s => `<button data-s="${esc(s)}">${esc(s)}</button>`).join('')}<button id="clr">Cuộc trò chuyện mới</button></div>
+    <div class="msgs" id="msgs"></div>
+    <form class="ask" id="askf"><textarea id="askt" placeholder="Hỏi về đơn hàng, tồn kho, giao hàng… (Enter để gửi, Shift+Enter xuống dòng)"></textarea>
+      <button class="btn pri" id="askb" type="submit">Gửi</button><button class="btn" id="stop" type="button" hidden>Dừng</button></form>
+    <p class="small muted" style="margin:0">Trợ lý dùng Claude của tài khoản claude.ai đang mở trang (lần đầu claude.ai hỏi cho phép). Trợ lý chỉ đọc số liệu, không sửa 3 web.</p></div>`;
+  drawMsgs();
+  $$('[data-s]').forEach(b => b.onclick = () => ask(b.dataset.s));
+  $('#clr').onclick = () => { S.ctl && S.ctl.abort(); S.chat = []; drawMsgs(); };
+  $('#askf').onsubmit = e => { e.preventDefault(); const t = $('#askt').value.trim(); if (t) { $('#askt').value = ''; ask(t); } };
+  $('#askt').onkeydown = e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); $('#askf').requestSubmit(); } };
+  $('#stop').onclick = () => S.ctl && S.ctl.abort();
+}
+function drawMsgs() {
+  const box = $('#msgs'); if (!box) return;
+  box.innerHTML = S.chat.length ? S.chat.map(m => `<div class="msg ${m.role === 'user' ? 'me' : 'ai'}">${m.role === 'user' ? esc(m.content).replace(/\n/g, '<br>') : m.content ? md(m.content) : '<span class="muted dots">Đang suy nghĩ</span>'}${m.tool ? `<div class="tool">${esc(m.tool)}</div>` : ''}${m.err ? `<div class="err">${esc(m.err)}</div>` : ''}</div>`).join('')
+    : '<div class="empty">Hỏi Trợ lý AI bất cứ điều gì về đơn hàng, tồn kho, giao hàng – trợ lý tự tra số liệu của 3 web.</div>';
+  const busy = !!S.ctl; const b = $('#askb'), st = $('#stop'); if (b) b.disabled = busy; if (st) st.hidden = !busy;
+}
+async function ask(text) {
+  if (S.ctl) return;
+  const sample = await claude.use('sample');
+  if (!sample) { S.chat.push({ role: 'user', content: text }, { role: 'assistant', content: '', err: 'Trang này chưa dùng được Claude (mở trang trên claude.ai).' }); drawMsgs(); return; }
+  S.chat.push({ role: 'user', content: text });
+  const reply = { role: 'assistant', content: '' };
+  S.chat.push(reply);
+  const turns = [{ role: 'user', content: RULES() }].concat(S.chat.slice(0, -1).filter(m => m.content && !m.err).slice(-12).map(m => ({ role: m.role, content: m.content })));
+  S.ctl = new AbortController(); drawMsgs();
+  const tools = TOOLS.map(t => Object.assign({}, t, { execute: (i, ctx) => { reply.tool = '🔎 Đang tra: ' + t.name.replace(/_/g, ' '); drawMsgs(); return t.execute(i || {}, ctx); } }));
+  try {
+    const { text: out } = await sample(turns, { signal: S.ctl.signal, tools, onText: ({ text: t }) => { reply.content = t; reply.tool = ''; drawMsgs(); } });
+    reply.content = out; reply.tool = '';
+  } catch (e) {
+    reply.content = e && e.text || ''; reply.tool = '';
+    if (!(e && e.code === 'cancelled')) reply.err = SAMPLE_ERR[e && e.code] || 'Chưa trả lời được (lỗi kết nối) – bấm Gửi lại câu hỏi.';
+  } finally { S.ctl = null; drawMsgs(); const box = $('#msgs'); if (box) box.lastElementChild && box.lastElementChild.scrollIntoView({ block: 'nearest' }); }
+}
+
+/* ---------------------------------------------------------- khởi động */
+async function enter() {
+  $('#login').hidden = true; $('#boot').hidden = false; $('#boot').textContent = 'Đang tải dữ liệu…';
+  await loadGoi();
+  $('#boot').hidden = true; $('#main').hidden = false;
+  $('#who').textContent = 'Đăng nhập: ' + S.auth.u;
+  freshness(); draw();
+  clearInterval(enter.t);
+  enter.t = setInterval(async () => { if (document.hidden || S.ctl || !signedIn()) return; try { await loadGoi(); freshness(); if (S.tab !== 'ai') draw(); } catch (e) { /* lần sau */ } }, 300000);
+}
+(async () => {
+  try {
+    S.db = await claude.use('db');
+    if (!S.db) { $('#boot').textContent = 'Không mở được dữ liệu – hãy mở trang trên claude.ai (đã đăng nhập).'; return; }
+    await loadAuth();
+    if (signedIn()) await enter(); else showLogin();
+  } catch (e) { $('#boot').textContent = 'Không tải được dữ liệu: ' + (e && e.message || e); }
+})();
+</script>

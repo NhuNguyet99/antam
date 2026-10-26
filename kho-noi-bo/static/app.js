@@ -529,6 +529,12 @@ async function loadMeta() {
   document.body.dataset.wh = S.wh;
   $$('#wh-switch button').forEach(b => b.classList.toggle('on', b.dataset.wh === S.wh));
   $('#wh-badge').textContent = S.meta.warehouse.name;
+  if (ONLINE && !VIEW && !GIAO_APP) khovanSoon();
+}
+// Gói tồn kho cho Kho vận An Tâm: cập nhật sau mỗi lần tải lại số liệu (gộp nhiều lần lưu liên tiếp thành 1 lần ghi)
+function khovanSoon() {
+  clearTimeout(khovanSoon.t);
+  khovanSoon.t = setTimeout(() => Backend.khovanPush().catch(e => console.warn('khovan', e)), 15000);
 }
 async function switchWh(wh, keepPage) {
   if (wh === S.wh) return;
