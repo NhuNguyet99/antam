@@ -78,6 +78,28 @@ tr.sum td { font-weight: 700; }
 .qty { display: flex; flex-wrap: wrap; gap: 4px; }
 .qty span { background: var(--bg); border-radius: 6px; padding: 0 6px; font-size: 12.5px; white-space: nowrap; }
 
+/* báo cáo tổng quan các bộ phận – đầu mỗi tab */
+.rep { background: var(--panel); border: 1px solid var(--line); border-radius: 14px; padding: 12px 14px; margin-bottom: 16px; }
+.rep-h { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; }
+.rep-h b { font-size: 16px; }
+.rep-h .sub { flex: 1; min-width: 200px; font-size: 12.5px; color: var(--muted); }
+.rep-h button { border: 1px solid var(--line); background: var(--panel); border-radius: 8px; padding: 4px 10px; font-size: 13px; }
+.rep-g { display: grid; grid-template-columns: repeat(auto-fit, minmax(270px, 1fr)); gap: 10px; margin-top: 10px; }
+.dept { border: 1px solid var(--line); border-radius: 12px; padding: 10px 12px; display: grid; gap: 6px; align-content: start; background: var(--bg); min-width: 0; }
+.dept.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); background: var(--panel); }
+.dept-h { display: flex; align-items: center; gap: 8px; font-weight: 700; }
+.dept-h span { flex: 1; }
+.dept-h button { border: 0; background: none; color: var(--accent); font-weight: 600; font-size: 13px; padding: 2px 4px; }
+.dept .big { font-size: 13px; color: var(--muted); }
+.dept .big b { font-size: 26px; color: var(--ink); font-variant-numeric: tabular-nums; margin-right: 4px; }
+.dept .big b.bad { color: var(--bad); } .dept .big b.ok { color: var(--ok); } .dept .big b.warn { color: var(--amber); }
+.dept table { font-size: 12.5px; }
+.dept th, .dept td { padding: 3px 6px; }
+.dept td.num b { font-size: 13.5px; }
+.pbar { height: 8px; border-radius: 999px; background: var(--line); overflow: hidden; display: flex; }
+.pbar i { display: block; height: 100%; } .pbar .ok { background: var(--ok); } .pbar .bad { background: var(--bad); }
+.rep-line { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 8px; }
+
 /* trợ lý AI */
 .chat { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 10px; }
 .msgs { display: grid; gap: 10px; align-content: start; min-height: 240px; }
@@ -146,6 +168,7 @@ tr.sum td { font-weight: 700; }
       <button data-tab="tq">Tổng quan</button><button data-tab="don">Đơn hàng</button><button data-tab="ton">Tồn kho</button>
       <button data-tab="giao">Giao hàng</button><button data-tab="ai">🤖 Trợ lý AI</button>
     </nav>
+    <div id="rep"></div>
     <div id="view"></div>
     <button class="fab" id="fab" type="button" aria-controls="dock">🤖 Hỏi trợ lý</button>
     <section class="dock" id="dock" hidden aria-label="Trợ lý AI">
@@ -177,7 +200,7 @@ const z = n => String(n).padStart(2, '0');
 const today = () => { const d = new Date(); return `${d.getFullYear()}-${z(d.getMonth() + 1)}-${z(d.getDate())}`; };
 const vn = iso => (iso ? iso.slice(0, 10).split('-').reverse().join('/') : '');
 const store = (k, v) => { try { if (v === undefined) return JSON.parse(localStorage.getItem('kv.' + k)); if (v === null) localStorage.removeItem('kv.' + k); else localStorage.setItem('kv.' + k, JSON.stringify(v)); } catch (e) { return null; } return undefined; };
-const S = { db: null, auth: null, goi: {}, tab: store('tab') || 'tq', date: '', wh: 'TP', q: '', route: '', kind: '', warnOnly: false, chat: [], ctl: null };
+const S = { db: null, auth: null, goi: {}, tab: 'tq', date: '', wh: 'TP', q: '', route: '', kind: '', warnOnly: false, chat: [], ctl: null, repOpen: true };
 const KIND = { don: '📦 Đơn hàng ngày', t123: '🥙 Tuyến kebab 123' };
 // số khách từng loại đơn của ngày (đơn hàng ngày / tuyến kebab 123) – 0 = web Đóng hàng chưa gửi / chưa chép sang
 const kindCount = rows => ({ don: rows.filter(r => r.kind !== 't123').length, t123: rows.filter(r => r.kind === 't123').length });
@@ -297,8 +320,50 @@ function freshness() {
 }
 function draw() {
   $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.tab === S.tab));
+  drawRep();
   ({ tq: viewTq, don: viewDon, ton: viewTon, giao: viewGiao, ai: viewAi })[S.tab]();
   drawDock();
+}
+// Báo cáo tổng quan 3 bộ phận (Đóng hàng · Kho · Giao hàng) ở đầu mọi tab; ô của bộ phận đang xem được tô viền
+const DEPT_TAB = { don: 'don', ton: 'kho', giao: 'giao' };
+function deptData(date) {
+  const { rows } = ordersOf(date), kc = kindCount(rows), rs = routeSummary(date), dv = delivOf(date);
+  const all = rs.reduce((a, x) => a + x.n, 0), ok = rs.reduce((a, x) => a + x.ok, 0), fail = rs.reduce((a, x) => a + x.fail, 0);
+  const res = Object.values(dv).filter(Boolean);
+  const top = Object.entries(sumQty(rows)).sort((a, b) => b[1] - a[1]).slice(0, 4);
+  const kho = ['TP', 'NVL'].map(w => { const r = stockRows(w); return { w, has: !!stock(w), n: r.length, inN: r.filter(x => x.in).length, outN: r.filter(x => x.out).length,
+    neg: r.filter(x => x.warn === 'Tồn âm').length, low: r.filter(x => x.warn && x.warn !== 'Tồn âm').length, pending: (stock(w) || {}).pending || 0 }; });
+  return { rows: rows.length, kc, routes: rs.length, top, all, ok, fail, wait: all - ok - fail, kho,
+    drv: new Set(res.map(x => x.driver).filter(Boolean)).size, photos: res.reduce((a, x) => a + (x.photos || []).length, 0) };
+}
+function drawRep() {
+  const el = $('#rep'), d = deptData(S.date), on = DEPT_TAB[S.tab] || '', k = S.goi.kho || {};
+  const warn = d.kho.reduce((a, x) => a + x.neg + x.low, 0), neg = d.kho.reduce((a, x) => a + x.neg, 0), pend = d.kho.reduce((a, x) => a + x.pending, 0);
+  const pct = d.all ? Math.round(d.ok / d.all * 100) : 0;
+  const head = `<div class="rep-h"><b>📊 Báo cáo tổng quan các bộ phận</b>
+    <span class="sub">Đơn hàng &amp; giao hàng ngày ${vn(S.date)}${S.date === today() ? ' (hôm nay)' : ''} · tồn kho mới nhất${k.at ? ' lúc ' + esc(String(k.at).slice(11, 16) + ' ' + vn(String(k.at).slice(0, 10))) : ''}</span>
+    <button type="button" id="rep-t" aria-expanded="${S.repOpen}">${S.repOpen ? 'Thu gọn ▴' : 'Mở báo cáo ▾'}</button></div>`;
+  if (!S.repOpen) {
+    el.innerHTML = `<div class="rep">${head}<div class="rep-line"><span class="chip">📦 ${d.rows} khách có đơn</span><span class="chip ${warn ? (neg ? 'bad' : 'warn') : 'ok'}">🏭 ${warn} mã cần chú ý</span>
+      <span class="chip ${d.fail ? 'bad' : d.all && !d.wait ? 'ok' : ''}">🚚 ${d.ok}/${d.all} đã giao${d.fail ? ' · ' + d.fail + ' không được' : ''}</span></div></div>`;
+  } else {
+    const card = (key, tab, title, body) => `<div class="dept${on === key ? ' on' : ''}"><div class="dept-h"><span>${title}</span>${S.tab === tab ? '' : `<button type="button" data-go="${tab}">Chi tiết →</button>`}</div>${body}</div>`;
+    el.innerHTML = `<div class="rep">${head}<div class="rep-g">
+      ${card('don', 'don', '📦 Đóng hàng', `<div class="big"><b>${d.rows}</b>khách có đơn · ${d.routes} tuyến</div>
+        <table><tbody><tr><td>${KIND.don}</td><td class="num"><b>${d.kc.don || '—'}</b></td></tr><tr><td>${KIND.t123}</td><td class="num"><b>${d.kc.t123 || '—'}</b></td></tr></tbody></table>
+        ${d.top.length ? qtyChips(Object.fromEntries(d.top)) : '<span class="small muted">Web Đóng hàng chưa gửi đơn ngày này.</span>'}`)}
+      ${card('kho', 'ton', '🏭 Kho', `<div class="big"><b class="${neg ? 'bad' : warn ? 'warn' : 'ok'}">${warn}</b>mã cần chú ý${pend ? ` · <span class="chip warn">${pend} phiếu chờ duyệt</span>` : ''}</div>
+        <table><thead><tr><th>Kho</th><th class="num">Mã</th><th class="num">Có nhập</th><th class="num">Có xuất</th><th class="num">Tồn âm</th><th class="num">Dưới TT</th></tr></thead><tbody>
+        ${d.kho.map(x => x.has ? `<tr><td>${x.w}</td><td class="num">${x.n}</td><td class="num">${x.inN || ''}</td><td class="num">${x.outN || ''}</td><td class="num">${x.neg ? `<b style="color:var(--bad)">${x.neg}</b>` : ''}</td><td class="num">${x.low ? `<b style="color:var(--amber)">${x.low}</b>` : ''}</td></tr>`
+          : `<tr><td>${x.w}</td><td colspan="5" class="small muted">chưa có số – mở web Kho</td></tr>`).join('')}</tbody></table>`)}
+      ${card('giao', 'giao', '🚚 Giao hàng', `<div class="big"><b class="${d.all && !d.wait && !d.fail ? 'ok' : ''}">${d.ok}/${d.all}</b>khách đã giao${d.all ? ` · ${pct}%` : ''}</div>
+        <div class="pbar" role="img" aria-label="${d.ok} đã giao, ${d.fail} không giao được trên ${d.all} khách">${d.all ? `<i class="ok" style="width:${d.ok / d.all * 100}%"></i><i class="bad" style="width:${d.fail / d.all * 100}%"></i>` : ''}</div>
+        <table><tbody><tr><td>Không giao được</td><td class="num"><b style="${d.fail ? 'color:var(--bad)' : ''}">${d.fail}</b></td></tr><tr><td>Chưa có kết quả</td><td class="num"><b>${d.wait}</b></td></tr>
+        <tr><td>Người giao · ảnh giao hàng</td><td class="num">${d.drv} · ${d.photos}</td></tr></tbody></table>`)}
+    </div></div>`;
+  }
+  $('#rep-t').onclick = () => { S.repOpen = !S.repOpen; drawRep(); };
+  $$('[data-go]', el).forEach(b => b.onclick = () => { S.tab = b.dataset.go; store('tab', S.tab); draw(); });
 }
 $$('#tabs button').forEach(b => b.onclick = () => { S.tab = b.dataset.tab; store('tab', S.tab); draw(); });
 $('#reload').onclick = async () => { const b = $('#reload'); b.disabled = true; try { await loadGoi(); freshness(); draw(); } finally { b.disabled = false; } };
@@ -313,17 +378,7 @@ function viewTq() {
   const rs = routeSummary(S.date), all = rs.reduce((a, x) => a + x.n, 0), ok = rs.reduce((a, x) => a + x.ok, 0), fail = rs.reduce((a, x) => a + x.fail, 0);
   const tot = sumQty(ordersOf(S.date).rows);
   const warn = wh => stockRows(wh).filter(r => r.warn);
-  const neg = ['TP', 'NVL'].reduce((a, w) => a + warn(w).filter(r => r.warn === 'Tồn âm').length, 0);
-  const low = ['TP', 'NVL'].reduce((a, w) => a + warn(w).filter(r => r.warn !== 'Tồn âm').length, 0);
   $('#view').innerHTML = `<div class="bar">${dateSel()}${kindChips(ordersOf(S.date).rows)}<span class="muted small">Tồn kho là số mới nhất</span></div>
-    <div class="kpis">
-      <div class="kpi"><b>${all}</b><span>khách có đơn · ${rs.length} tuyến</span></div>
-      <div class="kpi ok"><b>${ok}</b><span>đã giao</span></div>
-      <div class="kpi ${fail ? 'bad' : ''}"><b>${fail}</b><span>không giao được</span></div>
-      <div class="kpi"><b>${all - ok - fail}</b><span>chưa có kết quả</span></div>
-      <div class="kpi ${neg ? 'bad' : ''}"><b>${neg}</b><span>mã tồn âm (TP + NVL)</span></div>
-      <div class="kpi ${low ? 'warn' : ''}"><b>${low}</b><span>mã dưới tồn tối thiểu</span></div>
-    </div>
     <div class="grid2">
       <div class="card"><h3>Theo tuyến</h3>${rs.length ? `<div class="tw"><table><thead><tr><th>Tuyến</th><th>Người giao</th><th class="num">Khách</th><th class="num">Đã giao</th><th class="num">Không được</th></tr></thead><tbody>
         ${rs.map(x => `<tr><td><b>${esc(x.route || '—')}</b></td><td class="small">${esc(x.drivers.join(', ') || '—')}</td><td class="num">${x.n}</td><td class="num">${x.ok || ''}</td><td class="num">${x.fail || ''}</td></tr>`).join('')}
@@ -558,7 +613,8 @@ async function enter() {
   await loadGoi();
   $('#boot').hidden = true; $('#main').hidden = false;
   $('#who').textContent = 'Đăng nhập: ' + S.auth.u;
-  freshness(); draw();
+  S.tab = 'tq'; S.repOpen = true; // mở trang: thấy báo cáo tổng quan đầu tiên
+  freshness(); draw(); window.scrollTo(0, 0);
   clearInterval(enter.t);
   enter.t = setInterval(async () => { if (document.hidden || S.ctl || !signedIn()) return; try { await loadGoi(); freshness(); if (S.tab !== 'ai') draw(); } catch (e) { /* lần sau */ } }, 300000);
 }
