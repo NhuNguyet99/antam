@@ -110,6 +110,16 @@ tr.sum td { font-weight: 700; }
   .dock { right: 0; left: 0; bottom: 0; width: auto; height: min(78vh, calc(100vh - 40px)); border-radius: 16px 16px 0 0;
     padding-left: max(12px, env(safe-area-inset-left, 0px)); padding-right: max(12px, env(safe-area-inset-right, 0px)); padding-bottom: calc(12px + env(safe-area-inset-bottom, 0px)); }
 }
+/* ảnh giao hàng */
+.ph { display: flex; flex-wrap: wrap; gap: 6px; margin-top: 6px; }
+.ph button { padding: 0; border: 1px solid var(--line); border-radius: 8px; overflow: hidden; width: 64px; height: 64px; background: var(--bg); }
+.ph img { width: 100%; height: 100%; object-fit: cover; display: block; }
+.ph .wait { font-size: 11px; color: var(--muted); display: grid; place-items: center; height: 100%; padding: 4px; text-align: center; }
+.lb { position: fixed; inset: 0; z-index: 30; background: rgba(10, 16, 18, .88); display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 10px;
+  padding: calc(12px + env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) calc(12px + env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); color: #fff; }
+.lb img { max-width: 100%; max-height: 100%; object-fit: contain; margin: auto; display: block; border-radius: 8px; }
+.lb .lb-bar { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
+.lb button { background: rgba(255, 255, 255, .14); color: #fff; border: 0; border-radius: 9px; padding: 8px 14px; }
 @media (prefers-reduced-motion: no-preference) { .dots::after { content: "…"; animation: blink 1s steps(3) infinite; } @keyframes blink { 50% { opacity: .3; } } }
 </style>
 
@@ -331,7 +341,7 @@ function viewDon() {
   const routes = Array.from(new Set(rows.map(r => r.route))).sort();
   const list = rows.filter(r => (!S.kind || (S.kind === 't123') === (r.kind === 't123')) && (!S.route || r.route === S.route) && (!S.q || like(S.q, [r.crm, r.code, r.cust, r.phone, r.note].join(' '))));
   const tot = sumQty(list), kc = kindCount(rows);
-  const st = r => { const x = dv[keyOf(r)]; return !x ? '' : x.status === 'ok' ? `<span class="chip ok">✓ ${esc((x.at || '').slice(11, 16))}</span>` : `<span class="chip bad" title="${esc(x.note)}">✗ ${esc(x.note || 'Không giao được')}</span>`; };
+  const st = r => { const x = dv[keyOf(r)]; return !x ? '' : (x.status === 'ok' ? `<span class="chip ok">✓ ${esc((x.at || '').slice(11, 16))}</span>` : `<span class="chip bad" title="${esc(x.note)}">✗ ${esc(x.note || 'Không giao được')}</span>`) + photoStrip(x.photos, S.date, keyOf(r) + ' ' + r.cust.slice(0, 40)); };
   $('#view').innerHTML = `<div class="bar">${dateSel()}<select id="ksel" aria-label="Loại đơn"><option value="">Tất cả đơn (${rows.length})</option>${Object.entries(KIND).map(([k, n]) => `<option value="${k}" ${S.kind === k ? 'selected' : ''}>${n} (${kc[k]})</option>`).join('')}</select><select id="rsel" aria-label="Tuyến"><option value="">Tất cả tuyến</option>${routes.map(x => `<option ${x === S.route ? 'selected' : ''}>${esc(x)}</option>`).join('')}</select>
       <input type="search" id="q" class="grow" placeholder="Tìm khách, mã CRM, SĐT…" value="${esc(S.q)}"></div>
     ${list.length ? `<div class="card"><div class="tw"><table><thead><tr><th>Tuyến</th><th>CRM</th><th>Khách hàng</th><th>Hàng</th><th>Thanh toán</th><th>Giao</th></tr></thead><tbody>
@@ -341,6 +351,7 @@ function viewDon() {
   bindDate();
   $('#rsel').onchange = e => { S.route = e.target.value; draw(); };
   $('#ksel').onchange = e => { S.kind = e.target.value; draw(); };
+  bindPhotos($('#view'));
   let t; $('#q').oninput = e => { clearTimeout(t); t = setTimeout(() => { S.q = e.target.value; draw(); const q = $('#q'); q.focus(); q.setSelectionRange(q.value.length, q.value.length); }, 250); };
   void cols;
 }
@@ -357,6 +368,33 @@ function viewTon() {
   $('#wo').onchange = e => { S.warnOnly = e.target.checked; draw(); };
   let t; $('#q').oninput = e => { clearTimeout(t); t = setTimeout(() => { S.q = e.target.value; draw(); const q = $('#q'); q.focus(); q.setSelectionRange(q.value.length, q.value.length); }, 250); };
 }
+// Ảnh giao hàng: web Giao hàng lưu "a:<mã>" trong kho ảnh của nó; tác vụ chép ảnh sang kho ảnh trang này, bảng mã cũ → "/_blob/<mã mới>" ở goi/anh-<ngày>
+const photoMap = date => ((S.goi['anh-' + date] || {}).m) || {};
+function photoStrip(refs, date, title) {
+  const m = photoMap(date), list = (refs || []).filter(r => /^a:[0-9a-f]{32}$/.test(r));
+  if (!list.length) return '';
+  return `<div class="ph">${list.map((r, i) => { const u = m[r.slice(2)]; return `<button type="button" data-ph="${esc(date)}|${esc(list.join(','))}|${i}" data-title="${esc(title)}" aria-label="Xem ảnh ${i + 1}">${u ? `<img src="${esc(u)}" alt="Ảnh giao hàng ${i + 1}" loading="lazy">` : '<span class="wait">ảnh đang chép</span>'}</button>`; }).join('')}</div>`;
+}
+function bindPhotos(root) {
+  $$('[data-ph]', root).forEach(b => b.onclick = () => { const [d, refs, i] = b.dataset.ph.split('|'); lightbox(d, refs.split(','), +i, b.dataset.title); });
+}
+function lightbox(date, refs, i, title) {
+  const m = photoMap(date), el = document.createElement('div');
+  el.className = 'lb'; el.setAttribute('role', 'dialog'); el.setAttribute('aria-modal', 'true');
+  const show = () => {
+    const u = m[refs[i].slice(2)];
+    el.innerHTML = `<div class="lb-bar"><span>${esc(title)} · ảnh ${i + 1}/${refs.length}</span><button type="button" data-x>Đóng ✕</button></div>
+      ${u ? `<img src="${esc(u)}" alt="Ảnh giao hàng ${i + 1}">` : '<p style="margin:auto">Ảnh này chưa chép sang trang (tác vụ tự chép 15 phút/lần).</p>'}
+      <div class="lb-bar">${refs.length > 1 ? '<button type="button" data-p>◀ Trước</button><button type="button" data-n>Sau ▶</button>' : '<span></span>'}</div>`;
+    $('[data-x]', el).onclick = close;
+    if ($('[data-p]', el)) { $('[data-p]', el).onclick = () => { i = (i + refs.length - 1) % refs.length; show(); }; $('[data-n]', el).onclick = () => { i = (i + 1) % refs.length; show(); }; }
+  };
+  const key = e => { if (e.key === 'Escape') close(); else if (e.key === 'ArrowRight' && refs.length > 1) { i = (i + 1) % refs.length; show(); } else if (e.key === 'ArrowLeft' && refs.length > 1) { i = (i + refs.length - 1) % refs.length; show(); } };
+  function close() { el.remove(); document.removeEventListener('keydown', key); }
+  el.onclick = e => { if (e.target === el) close(); };
+  document.addEventListener('keydown', key);
+  show(); document.body.appendChild(el); $('[data-x]', el).focus();
+}
 function viewGiao() {
   const dv = delivOf(S.date), dn = drivers();
   const list = Object.entries(dv).filter(([, x]) => x).sort((a, b) => (a[1].route || '').localeCompare(b[1].route || '') || (a[1].at || '').localeCompare(b[1].at || ''));
@@ -364,9 +402,9 @@ function viewGiao() {
   $('#view').innerHTML = `<div class="bar">${dateSel()}<span class="small muted">${ok} đã giao · ${list.length - ok} không giao được</span></div>
     ${list.length ? `<div class="card"><div class="tw"><table><thead><tr><th>Giờ</th><th>Tuyến</th><th>Người giao</th><th>Khách</th><th>Kết quả</th></tr></thead><tbody>
       ${list.map(([k, x]) => `<tr><td class="num">${esc((x.at || '').slice(11, 16))}</td><td>${esc(x.route)}</td><td>${esc(dn[x.driver] || '')}</td><td><span class="mono">${esc(k)}</span> ${esc(x.name || '')}</td>
-        <td>${x.status === 'ok' ? '<span class="chip ok">✓ Đã giao</span>' : `<span class="chip bad">✗ ${esc(x.note || 'Không giao được')}</span>`}${x.status === 'ok' && x.note ? `<div class="small muted">${esc(x.note)}</div>` : ''}${(x.photos || []).length ? `<div class="small muted">📷 ${x.photos.length} ảnh</div>` : ''}</td></tr>`).join('')}
+        <td>${x.status === 'ok' ? '<span class="chip ok">✓ Đã giao</span>' : `<span class="chip bad">✗ ${esc(x.note || 'Không giao được')}</span>`}${x.status === 'ok' && x.note ? `<div class="small muted">${esc(x.note)}</div>` : ''}${photoStrip(x.photos, S.date, k + ' ' + (x.name || ''))}</td></tr>`).join('')}
       </tbody></table></div></div>` : '<div class="empty">Chưa có kết quả giao hàng ngày này.</div>'}`;
-  bindDate();
+  bindDate(); bindPhotos($('#view'));
 }
 
 /* ---------------------------------------------------------- trợ lý AI */
@@ -401,7 +439,7 @@ const TOOLS = [
       const d = String(i.ngay || today()), dn = drivers();
       const list = Object.entries(delivOf(d)).filter(([, x]) => x && (!i.tuyen || norm(x.route) === norm(i.tuyen)));
       return { ngay: d, da_giao: list.filter(([, x]) => x.status === 'ok').length, khong_giao_duoc: list.filter(([, x]) => x.status === 'fail').length,
-        chi_tiet: cap(list.map(([k, x]) => ({ khach: k, ten: String(x.name || '').slice(0, 70), ket_qua: x.status === 'ok' ? 'đã giao' : 'không giao được', ly_do: x.note || '', gio: (x.at || '').slice(11, 16), tuyen: x.route, nguoi_giao: dn[x.driver] || '' })), 200) };
+        chi_tiet: cap(list.map(([k, x]) => ({ khach: k, ten: String(x.name || '').slice(0, 70), ket_qua: x.status === 'ok' ? 'đã giao' : 'không giao được', ly_do: x.note || '', so_anh: (x.photos || []).length, gio: (x.at || '').slice(11, 16), tuyen: x.route, nguoi_giao: dn[x.driver] || '' })), 200) };
     } },
 ];
 const RULES = () => `Bạn là Trợ lý AI của Kho vận An Tâm (công ty Ẩm thực An Tâm: bánh mì / bánh kebab, giao hàng theo tuyến ở TP.HCM, Bình Dương). `

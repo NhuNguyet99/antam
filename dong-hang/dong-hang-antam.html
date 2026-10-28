@@ -663,6 +663,7 @@ window.addEventListener('error', e => { if (e && e.message) toast('Lỗi: ' + e.
 window.addEventListener('unhandledrejection', e => { const r = e && e.reason; if (r) toast('Lỗi: ' + errText(r), true); });
 function watchDay(d) {
   if (S.dayUnsub) S.dayUnsub();
+  if (S.t1.date !== d || !S.t1.unsub) t1Watch(d); // báo cáo Đơn hàng ngày gộp cả tuyến 123 của ngày
   S.day = null; S.date = d;
   S.dayUnsub = S.db.doc('ngay/' + d).onSnapshot(s => {
     const data = s.exists ? s.data() : { date: d, r: {} };
@@ -1022,12 +1023,13 @@ function paySelect(tt) {
 }
 const payKey = tt => { const n = norm(tt); if (!n) return ''; const hit = PAYS.find(([, , v]) => norm(v) === n) || PAYS.find(([, l]) => norm(l) === n); return hit ? hit[0] : ''; };
 // Báo cáo ngày như cuối sheet: TỔNG TÚI (đơn), BÁNH TUYẾN, TỔNG CÁI = (túi + bánh tuyến) × cái/túi, TACOS, KEBAB, BILL
-function dayReport(dayR, tuyen) {
-  const list = dayOrders(dayR), tui = {}, cai = {};
+// t1: khách Tuyến kebab 123 đang HOẠT ĐỘNG (t1AsOrders) – cộng vào túi / cái / bill / số đơn, không vào thanh toán
+function dayReport(dayR, tuyen, t1 = []) {
+  const list = dayOrders(dayR).concat(t1), tui = {}, cai = {}, t1q = new Set();
   let bill = 0;
   const pay = { ctt: 0, dtt: 0, ht: 0, tm: 0, none: 0 };
-  for (const { o, c } of list) {
-    const pk = payKey(o.tt); pay[pk || 'none']++;
+  for (const { o, c, t1: is1 } of list) {
+    if (is1) Object.keys(o.q).forEach(pid => t1q.add(pid)); else { const pk = payKey(o.tt); pay[pk || 'none']++; }
     for (const [pid, n] of Object.entries(o.q || {})) if (num(n) > 0) tui[pid] = (tui[pid] || 0) + num(n);
     bill += o.bill != null && o.bill !== '' ? num(o.bill) : (c.bill == null ? 1 : num(c.bill));
   }
@@ -1040,11 +1042,11 @@ function dayReport(dayR, tuyen) {
   }
   const tuyenTxt = S.cfg.products.filter(p => num((tuyen || {})[p.id]) > 0)
     .map(p => (perOf(p) > 1 ? `${fmt(tuyen[p.id])} túi ${prodLabel(p)} = ${fmt(num(tuyen[p.id]) * perOf(p))} cái` : `${fmt(tuyen[p.id])} cái ${prodLabel(p)}`)).join(' · ');
-  return { tui, cai, tacos, kebab, bill, count: list.length, tuyenTxt, pay };
+  return { tui, cai, tacos, kebab, bill, count: list.length, n1: t1.length, t1q, tuyenTxt, pay };
 }
-function dayTotals(dayR) {
+function dayTotals(dayR, t1 = []) {
   const need = { tui: 0, tuiK: 0, giay: 0, nho: 0, chung: 0, dai: 0, cay: 0 }, prod = {}, size = { 22: 0, 25: 0, 28: 0, 31: 0, K: 0 };
-  const list = dayOrders(dayR);
+  const list = dayOrders(dayR).concat(t1);
   for (const { o, c } of list) {
     const p = packing(o.q, packOf(o, c));
     for (const k in need) need[k] += p[k];
@@ -1466,14 +1468,15 @@ function setMax(v) {
 document.addEventListener('keydown', e => { if (e.key === 'Escape' && document.body.classList.contains('tbl-max') && !$('.modal-back')) setMax(false); });
 // sản phẩm hiện trên bảng báo cáo: đúng các cột của bảng đơn bên dưới (cột ẩn tay + tự ẩn cột chưa có đơn),
 // thêm sản phẩm đã nhập BÁNH TUYẾN (trừ cột ẩn tay); tổng TACOS / KEBAB vẫn tính đủ mọi sản phẩm
-function repProducts(tuyen) {
+function repProducts(tuyen, extra) {
   const H = hideSet('hideDon'), vis = new Set(visibleProducts().map(p => p.id));
-  return S.cfg.products.filter(p => p.show !== false && !H.has('p:' + p.id) && (vis.has(p.id) || num((tuyen || {})[p.id]) > 0));
+  return S.cfg.products.filter(p => p.show !== false && !H.has('p:' + p.id) && (vis.has(p.id) || num((tuyen || {})[p.id]) > 0 || (extra && extra.has(p.id))));
 }
 // Báo cáo ngày theo tuyến đang lọc (chip tuyến / cột Tuyến): chỉ tính đơn của tuyến đó, không cộng BÁNH TUYẾN của cả ngày
 const repRt = () => [colF().rt || '', colF().tn || ''].join('|').replace(/^\|$/, '');
 function repDayR() {
   const r = S.day ? S.day.r : {}, rt = colF().rt || '', tn = colF().tn || '';
+  if (repSrc() === 't123') return {};
   if (!rt && !tn) return r;
   return Object.fromEntries(dayOrders(r).filter(x => {
     if (tn && (tn === 'co') !== isTn(x.o)) return false;
@@ -1481,31 +1484,49 @@ function repDayR() {
     const k = routeOf(x.o, x.c)[0]; return rt === '-' ? !k : k === rt;
   }).map(x => [x.cid, x.o]));
 }
-const repTuyen = () => (repRt() ? {} : S.day && S.day.tuyen);
-const repPart = () => (repRt() ? { tuyen: false } : {});
+// Báo cáo gồm (S.filter.src): '' = Đơn hàng ngày + Tuyến kebab 123 · 'don' = chỉ Đơn hàng ngày · 't123' = chỉ Tuyến kebab 123.
+// Lọc tuyến / loại đơn của Đơn hàng ngày thì báo cáo chỉ tính các đơn đó (không cộng tuyến 123)
+const repSrc = () => S.filter.src || '';
+const t1Today = () => t1AsOrders(S.t1.day && S.t1.date === S.date ? S.t1.day : null, S.t1.cust);
+const repT1 = () => (repSrc() === 't123' || (!repSrc() && !repRt()) ? t1Today() : []);
+const repSig = () => repRt() + '#' + repSrc();
+const repTuyen = () => (repRt() || repSrc() === 't123' ? {} : S.day && S.day.tuyen);
+const repPart = () => (repRt() || repSrc() === 't123' ? { tuyen: false } : {});
 function repFltHtml() {
-  const rt = colF().rt || '', tn = colF().tn || '', on = !!(rt || tn);
-  const parts = [tn ? `<b>${tn === 'co' ? '⚡ đơn đi trong ngày' : 'đơn thường (không đi trong ngày)'}</b>` : '', rt ? `tuyến <b>${esc(rt === '-' ? 'Chưa chia tuyến' : routeLabel(rt))}</b>` : ''].filter(Boolean);
-  return `<div class="repflt" id="d-repflt" ${on ? '' : 'hidden'}>📍 Báo cáo đang tính theo ${parts.join(' · ')}
-    – chỉ các đơn này${on && S.day && Object.values(S.day.tuyen || {}).some(v => num(v) > 0) ? ' (không cộng bánh tuyến của cả ngày)' : ''}.
+  const rt = colF().rt || '', tn = colF().tn || '', src = repSrc(), on = !!(rt || tn || src);
+  const parts = src === 't123' ? ['<b>🥙 Tuyến kebab 123</b>'] : [src === 'don' ? '<b>📦 Đơn hàng ngày</b> (không gồm Tuyến 123)' : '',
+    tn ? `<b>${tn === 'co' ? '⚡ đơn đi trong ngày' : 'đơn thường (không đi trong ngày)'}</b>` : '', rt ? `tuyến <b>${esc(rt === '-' ? 'Chưa chia tuyến' : routeLabel(rt))}</b>` : ''].filter(Boolean);
+  const sub = src === 't123' ? ' – chỉ khách tuyến 123 đang hoạt động' : rt || tn ? ` – chỉ các đơn này (không cộng Tuyến 123${S.day && Object.values(S.day.tuyen || {}).some(v => num(v) > 0) ? ' và bánh tuyến của cả ngày' : ''})` : '';
+  return `<div class="repflt" id="d-repflt" ${on ? '' : 'hidden'}>📍 Báo cáo đang tính theo ${parts.join(' · ')}${sub}.
     <button class="btn sm" id="d-repflt-x">✕ Bỏ lọc – xem cả ngày</button></div>`;
 }
+// chip chọn báo cáo gồm những đơn nào (số = đơn Đơn hàng ngày / khách Tuyến 123 đang hoạt động)
+function srcChipsHtml() {
+  const s = repSrc(), n0 = dayOrders(S.day ? S.day.r : {}).length, ok1 = !!(S.t1.day && S.t1.date === S.date), n1 = ok1 ? t1Today().length : '…';
+  const b = (k, l, n, t) => `<button class="rtchip${s === k ? ' on' : ''}" data-src="${k}" title="${t}">${l} <b>${n}</b></button>`;
+  return `<span class="small muted">📊 Báo cáo gồm:</span>${b('', 'Tất cả', ok1 ? n0 + n1 : n0 + ' + …', 'Đơn hàng ngày + Tuyến kebab 123')}${b('don', '📦 Đơn hàng ngày', n0, 'Chỉ tính Đơn hàng ngày')}${b('t123', '🥙 Tuyến 123', n1, 'Chỉ tính khách Tuyến kebab 123 đang hoạt động')}`;
+}
+function drawSrcChips() {
+  const el = $('#d-src'); if (!el) return;
+  el.innerHTML = srcChipsHtml();
+  $$('[data-src]', el).forEach(b => b.onclick = () => { S.filter.src = b.dataset.src; store('filter', S.filter); drawSrcChips(); refreshRep(); });
+}
 function refreshRep() {
-  const w = $('#d-rep-wrap'), r = repDayR();
-  S.repRtShown = repRt();
-  if (w) { w.innerHTML = reportHtml(dayReport(r, repTuyen()), dayTotals(r).need, repTuyen(), true, repPart()); bindReport(); }
-  const m = $('#d-mini'); if (m) m.outerHTML = miniHtml(dayReport(r, repTuyen()));
+  const w = $('#d-rep-wrap'), r = repDayR(), t1 = repT1();
+  S.repRtShown = repSig();
+  if (w) { w.innerHTML = reportHtml(dayReport(r, repTuyen(), t1), dayTotals(r, t1).need, repTuyen(), true, repPart()); bindReport(); }
+  const m = $('#d-mini'); if (m) m.outerHTML = miniHtml(dayReport(r, repTuyen(), t1));
   const f = $('#d-repflt'); if (f) { f.outerHTML = repFltHtml(); bindRepFlt(); }
 }
 function bindRepFlt() {
-  const x = $('#d-repflt-x'); if (x) x.onclick = () => { colF().rt = ''; colF().tn = ''; store('filter', S.filter); shown = PAGE; drawTable(); };
+  const x = $('#d-repflt-x'); if (x) x.onclick = () => { colF().rt = ''; colF().tn = ''; S.filter.src = ''; store('filter', S.filter); shown = PAGE; drawSrcChips(); drawTable(); refreshRep(); };
 }
 // tên các cột đang ẩn (ghi chú trên bản in)
 function hiddenDonText() {
   return [...hideSet('hideDon')].map(k => { if (!k.startsWith('p:')) return (DON_COLS.find(c => c[0] === k) || [, k])[1]; const p = S.cfg.products.find(x => x.id === k.slice(2)); return p ? prodLabel(p) : ''; }).filter(Boolean).join(', ');
 }
 function reportHtml(rep, need, tuyen, editable, part = {}) {
-  const runs = groupRuns(repProducts(tuyen)), on = k => part[k] !== false;
+  const runs = groupRuns(repProducts(tuyen, rep.t1q)), on = k => part[k] !== false;
   const cells = (fn) => runs.map(r => r.list.map((p, i) => `<td class="pc g-${r.g}${i ? '' : ' gstart'}">${fn(p)}</td>`).join('')).join('');
   const nz = (v, key) => `<span data-r="${key}" class="${v ? '' : 'zero'}">${fmt(v)}</span>`;
   return `<div class="rep" id="d-report">${on('big') ? `
@@ -1513,10 +1534,10 @@ function reportHtml(rep, need, tuyen, editable, part = {}) {
       <div class="hot"><div class="v" data-r="tacos">${fmt(rep.tacos)}</div><div class="k">TACOS · tổng cái bánh các size</div></div>
       <div class="hot"><div class="v" data-r="kebab">${fmt(rep.kebab)}</div><div class="k">KEBAB · tổng cái (gồm mè, than tre)</div></div>
       <div><div class="v" data-r="bill">${fmt(rep.bill)}</div><div class="k">BILL</div></div>
-      <div><div class="v" data-r="count">${fmt(rep.count)}</div><div class="k">ĐƠN HOẠT ĐỘNG</div></div>
+      <div><div class="v" data-r="count">${fmt(rep.count)}</div><div class="k">ĐƠN HOẠT ĐỘNG${rep.n1 ? ` · gồm <span data-r="n1">${fmt(rep.n1)}</span> khách tuyến 123` : ''}</div></div>
     </div>
     <div class="paychips">${PAYS.map(([k, l, , full]) => `<span class="pchip p-${k}" title="${esc(full)}">${esc(l)} <b data-r="pay:${k}">${fmt(rep.pay[k])}</b></span>`).join('')}
-      <span class="pchip p-none" title="Đơn chưa chọn thanh toán">Chưa chọn <b data-r="pay:none">${fmt(rep.pay.none)}</b></span></div>` : ''}${on('rept') ? `
+      <span class="pchip p-none" title="Đơn chưa chọn thanh toán">Chưa chọn <b data-r="pay:none">${fmt(rep.pay.none)}</b></span>${rep.n1 ? `<span class="pchip p-none" title="Khách tuyến 123 không chọn thanh toán ở đây">🥙 Tuyến 123 <b data-r="n1">${fmt(rep.n1)}</b></span>` : ''}</div>` : ''}${on('rept') ? `
     <div class="tw"><table class="orders rept"><thead>
       <tr><th class="stick rl" rowspan="2"></th>${runs.map(r => `<th class="gh g-${r.g} gstart" colspan="${r.list.length}">${esc(GROUPS[r.g].name)}</th>`).join('')}</tr>
       <tr>${runs.map(r => r.list.map((p, i) => `<th class="p g-${r.g}${i ? '' : ' gstart'}" title="${esc(p.name)} · ${perOf(p)} cái/túi">${esc(prodShort(p))}</th>`).join('')).join('')}</tr></thead><tbody>
@@ -1548,8 +1569,8 @@ function visibleAuto(ps) {
 function viewDay(main) {
   if (!Object.keys(S.cust).length) { main.innerHTML = emptyCust(); return; }
   const d = S.date, f = S.filter;
-  const rr = repDayR(), tot = dayTotals(rr);
-  S.repRtShown = repRt();
+  const rr = repDayR(), t1 = repT1(), tot = dayTotals(rr, t1);
+  S.repRtShown = repSig();
   main.innerHTML = `
     <div class="card" id="d-head" style="display:grid;gap:12px">
       <div class="daybar">
@@ -1564,12 +1585,13 @@ function viewDay(main) {
         <button class="btn sm" id="d-rp" title="In báo cáo tất cả hoặc theo bộ lọc đang chọn">🖨 In báo cáo</button>
         <button class="btn sm" id="d-print">Xem định mức đóng hàng</button>
       </div>
-      ${miniHtml(dayReport(rr, repTuyen()))}
+      <div class="rtchips" id="d-src">${srcChipsHtml()}</div>
+      ${miniHtml(dayReport(rr, repTuyen(), t1))}
       ${repFltHtml()}
       <div class="rtchips" id="d-rt"></div>
       ${khoBar('don', d)}
       ${can('donNhap') ? '' : '<p class="ro-note">👁 Chế độ xem – tài khoản của bạn không nhập / sửa đơn' + (can('tuyen') ? ' (vẫn đổi tuyến, chọn người giao được)' : '') + '.</p>'}
-      <div id="d-rep-wrap" ${S.repOpen ? '' : 'hidden'}>${reportHtml(dayReport(rr, repTuyen()), tot.need, repTuyen(), true, repPart())}</div>
+      <div id="d-rep-wrap" ${S.repOpen ? '' : 'hidden'}>${reportHtml(dayReport(rr, repTuyen(), t1), tot.need, repTuyen(), true, repPart())}</div>
     </div>
     <div class="row">
       <label class="field grow" style="min-width:200px">Tìm khách (tên, CRM, SĐT, địa chỉ) – tìm trong tất cả khách để thêm đơn<input id="f-q" value="${esc(f.q)}" placeholder="VD: K1326 hoặc Wallace"></label>
@@ -1589,7 +1611,7 @@ function viewDay(main) {
   $('#d-rp').onclick = () => dayPrint(d); bindKhoBar(d);
   $('#d-rep-t').onclick = () => setRepOpen(!S.repOpen);
   $('#d-max').onclick = () => setMax(!document.body.classList.contains('tbl-max'));
-  bindReport(); bindRepFlt();
+  bindReport(); bindRepFlt(); drawSrcChips();
   $('#d-add').onclick = () => editCustomer(null);
   $('#d-tnmode').onclick = () => { S.tnMode = !S.tnMode; store('tnMode', S.tnMode); toast(S.tnMode ? 'Đang nhập đơn đi trong ngày – đơn mới gõ số lượng tự đánh dấu ⚡' : 'Đã tắt nhập đơn đi trong ngày'); render(); };
   const saveF = () => store('filter', S.filter);
@@ -1663,10 +1685,12 @@ function dayPrint(d) {
   const rtOf = x => routeOf(x.o, custOf(x.cid) || x.c)[0] || '-', payOf = x => payKey(x.o.tt) || 'none';
   const count = f => { const m = {}; all.forEach(x => { const k = f(x); m[k] = (m[k] || 0) + 1; }); return m; };
   const nRt = count(rtOf), nPay = count(payOf), tnOf = x => (isTn(x.o) ? 'co' : 'khong'), nTn = count(tnOf), H = hideSet('hideDon');
+  const t1 = t1Today();
   printModal({
-    title: 'In theo yêu cầu – đơn hàng ngày ' + vn(d), key: 'prDon', defTitle: 'BÁO CÁO ĐƠN HÀNG', unit: 'đơn', nAll: all.length,
+    title: 'In theo yêu cầu – đơn hàng ngày ' + vn(d), key: 'prDon', defTitle: 'BÁO CÁO ĐƠN HÀNG', unit: 'đơn', nAll: all.length + t1.length,
     flt: note ? { n: all.filter(x => ids.has(x.cid)).length, note } : null,
     conds: [
+      { key: 'src', name: 'Gồm', items: [['don', 'Đơn hàng ngày', all.length], ['t123', 'Tuyến kebab 123 (vào số tổng)', t1.length]] },
       { key: 'tn', name: 'Loại đơn', items: TN_OPTS.map(([k, l]) => [k, l, nTn[k] || 0]) },
       { key: 'pay', name: 'Thanh toán', items: PAYS.map(([k, , , full]) => [k, full, nPay[k] || 0]).concat([['none', 'Chưa chọn', nPay.none || 0]]) },
       { key: 'rt', name: 'Tuyến', items: Object.keys(nRt).sort((a, b) => routeIdx(a === '-' ? '' : a) - routeIdx(b === '-' ? '' : b)).map(k => [k, k === '-' ? 'Chưa chia tuyến' : routeLabel(k), nRt[k]]) },
@@ -1675,12 +1699,14 @@ function dayPrint(d) {
     cols: DON_PRINT_COLS, colOn: k => !H.has(k),
     byOpts: [['tuyen', 'Tuyến giao'], ['area', 'Khu vực'], ['pay', 'Thanh toán']], byDef: S.filter.by === 'area' ? 'area' : 'tuyen',
     build: o => {
-      const keep = x => (o.scope !== 'flt' || ids.has(x.cid)) && o.cond.tn.has(tnOf(x)) && o.cond.pay.has(payOf(x)) && o.cond.rt.has(rtOf(x));
+      const keep = x => o.cond.src.has('don') && (o.scope !== 'flt' || ids.has(x.cid)) && o.cond.tn.has(tnOf(x)) && o.cond.pay.has(payOf(x)) && o.cond.rt.has(rtOf(x));
       const picked = all.filter(keep), whole = picked.length === all.length;
+      // tuyến 123 vào số tổng khi in cả ngày, hoặc khi chỉ in tuyến 123
+      const p1 = o.cond.src.has('t123') && (!o.cond.src.has('don') || (o.scope !== 'flt' && o.condAll.tn && o.condAll.pay && o.condAll.rt)) ? t1 : [];
       const sub = Object.fromEntries(picked.map(x => [x.cid, x.o]));
       const note2 = [o.scope === 'flt' ? note : '', o.condNote].filter(Boolean).join(' · ');
-      return { count: picked.length, name: `bao-cao-don-hang-${d}${whole ? '' : '-chon'}.html`, title: `${o.head} ${vn(d)}`,
-        body: printDoc(d, sub, whole ? S.day && S.day.tuyen : null, { title: o.head, note: note2, sec: o.sec, cols: o.cols, by: o.by, brk: o.brk, sign: o.sign }) };
+      return { count: picked.length + p1.length, name: `bao-cao-don-hang-${d}${whole && p1.length === t1.length ? '' : '-chon'}.html`, title: `${o.head} ${vn(d)}`,
+        body: printDoc(d, sub, whole ? S.day && S.day.tuyen : null, { title: o.head, note: note2, sec: o.sec, cols: o.cols, by: o.by, brk: o.brk, sign: o.sign, t1: p1 }) };
     },
   });
 }
@@ -1754,7 +1780,7 @@ function drawTable() {
   const rk = c => routeOf(orderOf(c.id), c)[0];
   if (byRt) rows = rows.map((c, i) => [c, routeIdx(rk(c)), i]).sort((a, b) => a[1] - b[1] || a[2] - b[2]).map(x => x[0]);
   drawRtChips();
-  if ((S.repRtShown || '') !== repRt()) refreshRep(); // lọc theo tuyến: báo cáo tính theo tuyến đó
+  if ((S.repRtShown || '') !== repSig()) refreshRep(); // lọc theo tuyến: báo cáo tính theo tuyến đó
   if (!rows.length && !colFCount()) {
     const nf = colFCount();
     el.innerHTML = `<div class="card empty"><div class="big">${nf ? 'Không có dòng nào khớp bộ lọc cột' : S.filter.q ? 'Không tìm thấy khách' : S.filter.mode === 'co' ? 'Ngày này chưa có đơn' : 'Không có khách ở khu vực này'}</div>
@@ -1903,8 +1929,8 @@ function updateRow(tr, cid) {
 // cập nhật số trên báo cáo mà không vẽ lại ô đang gõ
 function updateDayTotals() {
   const root = $('#d-head'); if (!root || !S.day) return;
-  if ((S.repRtShown || '') !== repRt()) return refreshRep(); // vừa đổi tuyến lọc: vẽ lại báo cáo
-  const rr = repDayR(), rep = dayReport(rr, repTuyen()), t = dayTotals(rr);
+  if ((S.repRtShown || '') !== repSig()) return refreshRep(); // vừa đổi tuyến lọc: vẽ lại báo cáo
+  const rr = repDayR(), t1 = repT1(), rep = dayReport(rr, repTuyen(), t1), t = dayTotals(rr, t1);
   const val = key => {
     const [k, id] = key.split(':');
     if (k === 'tui') return rep.tui[id] || 0; if (k === 'cai') return rep.cai[id] || 0; if (k === 'need') return t.need[id];
@@ -1912,7 +1938,7 @@ function updateDayTotals() {
     if (k === 'pay') return rep.pay[id];
     return rep[k];
   };
-  drawRtChips();
+  drawRtChips(); drawSrcChips();
   $$('[data-r]', root).forEach(el => {
     const key = el.dataset.r;
     if (key === 'tuyenTxt') { el.textContent = rep.tuyenTxt ? 'Bánh tuyến: ' + rep.tuyenTxt : 'Bánh tuyến: chưa nhập. Nhập số túi ở dòng BÁNH TUYẾN (được cộng vào Tổng cái).'; return; }
@@ -2338,7 +2364,7 @@ function printDoc(d, r, tuyen, opt = {}) {
   const ar = by === 'area' ? areas() : [];
   const gIdx = g => (by === 'tuyen' ? routeIdx(g) : by === 'pay' ? (g === 'none' ? 99 : PAYS.findIndex(p => p[0] === g)) : ar.indexOf(g));
   const gLabel = g => (by === 'tuyen' ? (g ? routeLabel(g) + ((S.drivers || []).length && driverName(driverFor(g, S.day && S.day.assign)[0]) ? ' · Người giao: ' + driverName(driverFor(g, S.day && S.day.assign)[0]) : '') : 'Chưa chia tuyến') : by === 'pay' ? payLabel(g) : g || 'Chưa có khu vực');
-  const t = dayTotals(r), list = dayOrders(r).map(x => Object.assign(x, { rt: rk(x) })).map(x => Object.assign(x, { g: gOf(x) }))
+  const t1 = opt.t1 || [], t = dayTotals(r, t1), n0 = t.count - t1.length, list = dayOrders(r).map(x => Object.assign(x, { rt: rk(x) })).map(x => Object.assign(x, { g: gOf(x) }))
     .sort((a, b) => gIdx(a.g) - gIdx(b.g) || (a.c.s || 0) - (b.c.s || 0));
   const dc = [[true, 'STT', x => `<td class="n">${x.i}</td>`], [C.has('g'), by === 'tuyen' ? 'Khu vực' : 'Tuyến', x => `<td>${esc(by === 'tuyen' ? x.c.q || '' : x.rt)}</td>`],
     [C.has('tn'), 'Trong ngày', x => `<td class="nowrap">${isTn(x.o) ? '⚡ Trong ngày' : ''}</td>`],
@@ -2354,10 +2380,10 @@ function printDoc(d, r, tuyen, opt = {}) {
     <table class="t1p"><thead><tr>${dc.map(([, h]) => `<th${h === 'STT' ? ' class="n"' : ''}>${h}</th>`).join('')}</tr></thead>
     <tbody>${G.rows.map(x => { x.i = ++i; x.pk = packOf(x.o, x.c); return `<tr>${dc.map(([, , f]) => f(x)).join('')}</tr>`; }).join('')}</tbody></table>${sec.gsum ? groupSumHtml(gLabel(G.g), G.rows) : ''}${opt.brk && opt.sign ? signHtml() : ''}</section>`).join('');
   return `<h2 style="text-align:center;margin-bottom:4px">${esc(opt.title || 'ĐỊNH MỨC ĐÓNG HÀNG')} NGÀY ${vn(d)}</h2>
-    <p class="hint" style="text-align:center;margin:0 0 ${opt.note ? 4 : 14}px">${dow(d)} · ${t.count} đơn</p>
+    <p class="hint" style="text-align:center;margin:0 0 ${opt.note ? 4 : 14}px">${dow(d)} · ${n0} đơn${t1.length ? ` + ${t1.length} khách tuyến kebab 123 (cộng vào số tổng; chi tiết in ở mục Tuyến kebab 123)` : ''}</p>
     ${opt.note ? `<p style="text-align:center;margin:0 0 14px"><b>Chọn in:</b> ${esc(opt.note)}</p>` : ''}
     ${hid && (sec.rept || sec.det) ? `<p class="hint" style="text-align:center;margin:-8px 0 12px">Đang ẩn cột: ${esc(hid)} (số tổng vẫn tính đủ)</p>` : ''}
-    ${sec.big || sec.rept || sec.need ? `<div style="margin-bottom:16px">${reportHtml(dayReport(r, tuyen), t.need, tuyen, false, sec).replace('id="d-report"', '')}</div>` : ''}
+    ${sec.big || sec.rept || sec.need ? `<div style="margin-bottom:16px">${reportHtml(dayReport(r, tuyen, t1), t.need, tuyen, false, sec).replace('id="d-report"', '')}</div>` : ''}
     ${sec.rt ? rtSummaryHtml(r) : ''}
     ${sec.det ? `${opt.brk ? '' : '<h3 style="margin-bottom:6px">Chi tiết đóng hàng từng khách</h3>'}${det || '<p class="muted">Không có đơn nào</p>'}` : ''}
     ${opt.sign && !(opt.brk && sec.det) ? signHtml() : ''}
@@ -2551,17 +2577,22 @@ function metricOptions() {
   }
   return html + (open ? '</optgroup>' : '');
 }
-const TK = Object.assign({ from: addDays(today(), -29), to: today(), metric: 'banh' }, store('tk') || {});
+const TK = Object.assign({ from: addDays(today(), -29), to: today(), metric: 'banh', src: '' }, store('tk') || {});
+const TK_SRC = [['', 'Tất cả'], ['don', '📦 Đơn hàng ngày'], ['t123', '🥙 Tuyến kebab 123']];
+// đơn từng ngày theo TK.src: Đơn hàng ngày (ngay/<ngày>) và / hoặc khách Tuyến kebab 123 đang hoạt động (t123/<ngày>)
 async function loadRange(from, to) {
-  const snap = await S.db.collection('ngay').where('date', '>=', from).where('date', '<=', to).get().catch(e => { throw dbErr(e); });
-  const out = {}; snap.docs.forEach(d => { const x = d.data() || {}; out[x.date || d.id] = x.r || {}; });
+  const get = c => S.db.collection(c).where('date', '>=', from).where('date', '<=', to).get().catch(e => { throw dbErr(e); });
+  const [a, b] = await Promise.all([TK.src === 't123' ? null : get('ngay'), TK.src === 'don' ? null : get('t123')]);
+  const out = {}, add = (d, l) => { out[d] = (out[d] || []).concat(l); };
+  if (a) a.docs.forEach(d => { const x = d.data() || {}; add(x.date || d.id, dayOrders(x.r || {})); });
+  if (b) b.docs.forEach(d => { const x = d.data() || {}; add(x.date || d.id, t1AsOrders(x, S.t1.cust)); });
   return out;
 }
 function statsOf(days) {
   const st = { orders: 0, banh: 0, kebab: 0, need: { tui: 0, tuiK: 0, giay: 0, nho: 0, chung: 0, dai: 0, cay: 0 }, perDay: {}, prod: {}, prodOrders: {}, prodCust: {}, prodDays: {}, area: {}, tao: {}, tx: {}, pay: {}, cust: {}, debt: 0 };
-  for (const [d, r] of Object.entries(days)) {
+  for (const [d, list] of Object.entries(days)) {
     const pd = st.perDay[d] = { orders: 0, banh: 0, kebab: 0, prod: {} };
-    for (const { cid, o, c } of dayOrders(r)) {
+    for (const { cid, o, c } of list) {
       const sz = sizeTotals(o.q), banh = SIZES.reduce((a, s) => a + sz[s], 0);
       const p = packing(o.q, packOf(o, c));
       for (const k in st.need) st.need[k] += p[k];
@@ -2586,6 +2617,7 @@ function viewStats(main) {
       <label class="field">Từ ngày<input type="date" id="t-from" value="${TK.from}"></label>
       <label class="field">Đến ngày<input type="date" id="t-to" value="${TK.to}"></label>
       <div class="field">Nhanh<div class="seg" id="t-pre"><button data-p="7">7 ngày</button><button data-p="30">30 ngày</button><button data-p="m">Tháng này</button><button data-p="pm">Tháng trước</button></div></div>
+      <div class="field">Gồm<div class="seg" id="t-src">${TK_SRC.map(([k, l]) => `<button data-s="${k}" class="${(TK.src || '') === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
     </div><div id="t-body"><div class="card empty"><div class="big">Đang tính…</div></div></div>`;
   const run = async () => {
     store('tk', TK);
@@ -2597,6 +2629,7 @@ function viewStats(main) {
   const setR = (a, b) => { TK.from = a; TK.to = b; $('#t-from').value = a; $('#t-to').value = b; guard(run); };
   $('#t-from').onchange = e => { TK.from = e.target.value; guard(run); };
   $('#t-to').onchange = e => { TK.to = e.target.value; guard(run); };
+  $$('#t-src button').forEach(b => b.onclick = () => { TK.src = b.dataset.s; $$('#t-src button').forEach(x => x.classList.toggle('on', x === b)); guard(run); });
   $$('#t-pre button').forEach(b => b.onclick = () => {
     const t = today(), p = b.dataset.p;
     if (p === '7') setR(addDays(t, -6), t); else if (p === '30') setR(addDays(t, -29), t);
@@ -2927,7 +2960,24 @@ function t1Watch(d) {
     S.t1.day = { date: d, r: Object.assign({}, data.r || {}), assign: Object.assign({}, data.assign || {}) };
     for (const [cid, rec] of Object.entries(S.t1.local)) S.t1.day.r[cid] = deepMerge(JSON.parse(JSON.stringify(S.t1.day.r[cid] || {})), rec);
     if (S.view === 't123') { const a = document.activeElement; if (a && a.closest && a.closest('#t1-table')) t1Totals(); else if ($('#t1-table')) t1Draw(); else render(); }
+    else if (S.view === 'don' && S.date === d) { const a = document.activeElement; if (a && a.closest && a.closest('#d-report')) updateDayTotals(); else { drawSrcChips(); refreshRep(); } }
   }, e => toast('Tuyến 123: ' + dbErr(e).message, true));
+}
+// khách tuyến 123 đang HOẠT ĐỘNG của 1 ngày thành "đơn" dạng Đơn hàng ngày (chỉ để báo cáo / thống kê, đóng túi):
+// túi 22–31 cm → bánh 22–31 cm, kebab vàng / đen (cái) → bánh mì kebab / mè đen, cây thịt 5 / 12 / 18 kg → 1 cây
+const T1_CAY = { 5: 'caythit5kg', 12: 'caythit12kg', 18: 'caythit18kg' };
+function t1AsOrders(day, cust) {
+  if (!day) return [];
+  const r = day.r || {}, as = day.assign || {}, gName = Object.fromEntries(T123_GROUPS);
+  return Object.entries(cust || {}).filter(([, c]) => c).map(([id, c]) => {
+    const o = r[id] || {};
+    if (t1Status(o) !== 'HOẠT ĐỘNG') return null;
+    const q = {}, g = t1G(c), cay = T1_CAY[t1V(o, 'thit')];
+    for (const [k, , pid] of T123_P) if (pid && t1V(o, k) > 0) q[pid] = t1V(o, k);
+    if (cay) q[cay] = 1;
+    return { cid: 't1:' + id, t1: true, o: { q, bill: 1, tt: c.ht ? 'HỖ TRỢ' : 'Tuyến 123', tao: o.by || '', tx: driverName(t1DriverFor(g, as)[0]) || '' },
+      c: { id: 't1:' + id, crm: c.crm || '', name: c.name || '', phone: c.phone || '', q: 'Tuyến 123 · ' + (gName[g] || g), pk: 'Túi' } };
+  }).filter(Boolean);
 }
 function t1Sum(list) {
   const q = Object.fromEntries(T123_P.map(([k]) => [k, 0]));
@@ -2957,7 +3007,6 @@ function viewT123(main) {
         <button class="btn sm p-nguoigiao" id="t1-drv" title="Chọn nhân viên giao cho từng tuyến">👤 Người giao</button>
         <button class="btn sm" id="t1-print" title="In báo cáo tất cả hoặc theo bộ lọc đang chọn">🖨 In báo cáo</button>
         <button class="btn sm p-t123Nhap" id="t1-copy" title="Lấy số lượng của ngày gần nhất trước đó làm sẵn">Chép số ngày trước</button>
-        <button class="btn sm pri p-t123Nhap" id="t1-send" title="Ghi tổng số tuyến 123 vào dòng BÁNH TUYẾN của Đơn hàng ngày">→ Đưa vào Bánh tuyến</button>
       </div>
       ${khoBar('t123', d)}
       ${can('t123Nhap') ? '' : '<p class="ro-note">👁 Chế độ xem – tài khoản của bạn không nhập / sửa đơn Tuyến 123.</p>'}
@@ -2975,11 +3024,11 @@ function viewT123(main) {
       <button class="btn" id="t1-cols" title="Chọn cột muốn hiện / ẩn trên bảng">👁 Ẩn / hiện cột${hideSet('hideT1').size ? ` (ẩn ${hideSet('hideT1').size})` : ''}</button>
     </div>
     <div id="t1-table"></div>`;
-  const go = nd => { watchDay(nd); t1Watch(nd); render(); };
+  const go = nd => { watchDay(nd); render(); };
   $('#t1-prev').onclick = () => go(addDays(d, -1)); $('#t1-next').onclick = () => go(addDays(d, 1)); $('#t1-today').onclick = () => go(today());
   $('#t1-date').onchange = e => e.target.value && go(e.target.value);
   $('#t1-price').onclick = t1EditPrice; $('#t1-add').onclick = () => t1EditCust(null); $('#t1-import').onclick = t1Import;
-  $('#t1-copy').onclick = () => need('t123Nhap') && guard(t1CopyPrev); $('#t1-send').onclick = () => need('t123Nhap') && guard(t1Send);
+  $('#t1-copy').onclick = () => need('t123Nhap') && guard(t1CopyPrev);
   $('#t1-csv').onclick = () => guard(() => saveFile(`tuyen-123-${d}.csv`, '﻿' + toCsv(t1Rows()), 'text/csv'));
   $('#t1-print').onclick = t1Print; $('#t1-drv').onclick = t1EditDrivers; $('#t1-cols').onclick = t1ColChooser; bindKhoBar(d);
   let qt; $('#t1f-q').oninput = e => { clearTimeout(qt); qt = setTimeout(() => { f.q = e.target.value; t1SaveF(); t1Draw(); }, 220); };
@@ -3196,20 +3245,6 @@ async function t1CopyPrev() {
   if (!Object.keys(patch).length) return toast('Không có gì để chép');
   await mergeInto('t123/' + d, { r: patch }, { date: d }); khoOutLater('t123', d);
   toast(`Đã chép ${Object.keys(patch).length} khách từ ngày ${vn(prev.date)}`);
-}
-// ghi tổng tuyến 123 vào dòng BÁNH TUYẾN của Đơn hàng ngày (cây thịt 5 / 12 / 18 kg tính 1 cây)
-async function t1Send() {
-  const d = S.t1.date, list = t1List(), s = t1Sum(list), tuyen = {};
-  for (const [k, , pid] of T123_P) if (pid) tuyen[pid] = s.q[k];
-  const cay = { 5: 'caythit5kg', 12: 'caythit12kg', 18: 'caythit18kg' };
-  Object.values(cay).forEach(pid => { tuyen[pid] = 0; });
-  for (const c of list) { const o = t1Order(c.id), kg = t1V(o, 'thit'); if (t1Status(o) === 'HOẠT ĐỘNG' && cay[kg]) tuyen[cay[kg]]++; }
-  const cur = (S.day && S.day.date === d && S.day.tuyen) || {};
-  const changed = Object.entries(tuyen).some(([pid, v]) => num(cur[pid]) && num(cur[pid]) !== v);
-  const txt = Object.entries(tuyen).filter(([, v]) => v).map(([pid, v]) => { const p = prodById(pid); return (p ? prodLabel(p) : pid) + ' ' + fmt(v); }).join(', ');
-  if (!(await confirmBox(`Ghi tổng tuyến 123 ngày ${vn(d)} vào dòng BÁNH TUYẾN của Đơn hàng ngày: ${txt || 'không có số'}?${changed ? ' Số Bánh tuyến đang có sẽ bị thay.' : ''}`, 'Ghi vào Bánh tuyến'))) return;
-  await mergeInto('ngay/' + d, { tuyen }, { date: d, r: {} });
-  toast('Đã ghi vào dòng BÁNH TUYẾN của Đơn hàng ngày ' + vn(d));
 }
 function t1EditPrice() {
   if (!need('gia')) return;

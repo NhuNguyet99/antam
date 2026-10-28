@@ -31,7 +31,7 @@ Web riêng (trang claude.ai, một file `dong-hang-antam.html`) thay cho Google 
   Cột Hỗ trợ (tích), CRM, tên, SĐT, tình trạng (tự HOẠT ĐỘNG khi có số), 22/25/28/31 cm (túi), VÀNG/ĐEN (cái),
   CÂY THỊT (kg), Túi 50 / túi lẻ (tự tính từ VÀNG), ghi chú khách + ghi chú ngày. Tổng bánh, túi 50 và DOANH THU từng tuyến
   (giá mặc định 22cm 37.500đ/túi, 25cm 45.000đ/túi, vàng 2.640đ/cái, thịt 125.000đ/kg; sửa ở "Sửa giá").
-  **Đưa vào Bánh tuyến** ghi tổng sang dòng BÁNH TUYẾN của Đơn hàng ngày (thịt 5/12/18 kg → cây thịt tương ứng);
+  Số tuyến 123 tự vào **Báo cáo** của Đơn hàng ngày và **Thống kê** (xem mục *Báo cáo gộp Tuyến 123* dưới) – không cần chép sang Bánh tuyến;
   "Cập nhật từ sheet" dán tab ngày để cập nhật khách và số lượng (có thể thay toàn bộ danh sách).
   Dữ liệu: `tuyen123/khach` (khách), `t123/<ngày>` (số lượng).
 - **Ẩn / hiện từng cột** (Đơn hàng ngày và Tuyến kebab 123): nút **👁 Ẩn / hiện cột** mở hộp tích chọn từng cột (thông tin,
@@ -100,6 +100,11 @@ Web riêng (trang claude.ai, một file `dong-hang-antam.html`) thay cho Google 
   điền mã đã khớp. Đơn đã nhập các ngày trước giữ nguyên tên lúc nhập.
 - **Thống kê**: theo khoảng ngày – số đơn, bánh, kebab, bao bì, theo khu vực / người tạo đơn / tài xế / thanh toán,
   khách đặt nhiều, khách ngưng đặt; so với cùng số ngày trước đó.
+- **Báo cáo gộp Tuyến 123**: Báo cáo của Đơn hàng ngày (TACOS, KEBAB, BILL, số đơn, Tổng túi / cái, bao bì), bản in báo cáo
+  và Thống kê tính cả khách **Tuyến kebab 123** đang hoạt động của ngày (mỗi khách = 1 đơn / 1 bill, đóng túi: túi 22–31 cm → bánh
+  22–31 cm, VÀNG / ĐEN → bánh mì kebab / mè đen, cây thịt 5 / 12 / 18 kg → 1 cây; khách 123 không vào ô thanh toán).
+  Chip **📊 Báo cáo gồm: Tất cả · 📦 Đơn hàng ngày · 🥙 Tuyến 123** (Đơn hàng ngày) và ô **Gồm** (Thống kê) xem riêng từng loại;
+  bản in có điều kiện **Gồm**. Lọc tuyến / loại đơn (⚡) của Đơn hàng ngày thì báo cáo chỉ tính các đơn đó (không cộng Tuyến 123).
 - **Nhập từ sheet** (không bắt buộc): danh sách khách đã đưa sẵn lên web; mục này chỉ dùng khi muốn nạp lại từ sheet
   (mở sheet ngày, Ctrl+A, Ctrl+C rồi Ctrl+V vào web).
 - **Định mức & cài đặt**: bảng số bánh tối đa cho 1 túi / thùng / cây, danh sách sản phẩm (loại size để tính đóng gói).

@@ -19,6 +19,7 @@ https://claude.ai/artifact/8iwBT1YGqiJ1vTwVQfmzed
 | `goi/giao-<ngày>` | Giao hàng An Tâm `kho/TP/giao/<ngày>` (kết quả giao) | tác vụ định kỳ |
 | `goi/kho` | Kho An Tâm `khovan/kho` – web Kho tự ghi Nhập–Xuất–Tồn hôm nay của **cả kho TP lẫn kho NVL** (sau khi tải số liệu / lưu phiếu, chờ 15 giây; trang mở thì gửi lại mỗi 10 phút) | tác vụ định kỳ |
 | `goi/nv` | Đóng hàng An Tâm `giaonv/list` (người giao, không có PIN) | tác vụ định kỳ |
+| `goi/anh-<ngày>` | Ảnh giao hàng của Giao hàng An Tâm, chép sang kho ảnh của trang (`{m: {mã ảnh gốc: "/_blob/<mã mới>"}}`); xem ở tab Giao hàng và cột Giao của tab Đơn hàng (bấm ảnh để phóng to) | Claude chép |
 | `goi/index` | `{s: {khóa: stamp/version đã chép}, at}` | tác vụ định kỳ |
 
 Tác vụ định kỳ "Theo dõi giao hàng – cập nhật 15 phút" (:22, :37, :52 mỗi giờ, 6h–23h) có PHẦN K chép các gói trên.
