@@ -5,9 +5,9 @@ https://claude.ai/artifact/8iwBT1YGqiJ1vTwVQfmzed
 
 - **Đăng nhập**: tài khoản `trolyai` (mật khẩu do chủ trang đặt; lưu dạng băm PBKDF2-SHA256 ở `auth/main`).
   Đây là khóa giao diện – quyền xem trang vẫn do nút *Share* của claude.ai quyết định.
-- **Báo cáo tổng quan các bộ phận** ở đầu mọi tab (mở trang luôn vào tab Tổng quan, báo cáo mở sẵn): 📦 Đóng hàng (khách có đơn, số tuyến,
+- **Báo cáo tổng quan các bộ phận** ở đầu tab Tổng quan (mở trang luôn vào tab này, báo cáo mở sẵn): 📦 Đóng hàng (khách có đơn, số tuyến,
   Đơn hàng ngày / Tuyến 123, 4 sản phẩm nhiều nhất), 🏭 Kho (bảng TP / NVL: số mã, có nhập, có xuất, tồn âm, dưới tối thiểu, phiếu chờ duyệt),
-  🚚 Giao hàng (đã giao / tổng, thanh tiến độ, không giao được, chưa có kết quả, người giao, ảnh). Ô của bộ phận đang xem có viền;
+  🚚 Giao hàng (đã giao / tổng, thanh tiến độ, không giao được, chưa có kết quả, người giao, ảnh).
   **Chi tiết →** sang tab của bộ phận; **Thu gọn** còn 1 dòng.
 - **Tab**: Tổng quan (theo ngày: khách, tuyến, đã giao, tổng hàng; tồn kho cần chú ý) · Đơn hàng (lọc 📦 Đơn hàng ngày / 🥙 Tuyến kebab 123) · Tồn kho (TP / NVL) · Giao hàng · 🤖 Trợ lý AI.
 - **Cửa sổ trợ lý ở góc**: nút **🤖 Hỏi trợ lý** ở góc dưới phải mọi tab mở cửa sổ chat nhỏ (điện thoại: nửa dưới màn hình). Trợ lý biết đang xem tab, ngày,

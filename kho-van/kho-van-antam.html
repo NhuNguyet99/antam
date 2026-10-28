@@ -324,7 +324,7 @@ function draw() {
   ({ tq: viewTq, don: viewDon, ton: viewTon, giao: viewGiao, ai: viewAi })[S.tab]();
   drawDock();
 }
-// Báo cáo tổng quan 3 bộ phận (Đóng hàng · Kho · Giao hàng) ở đầu mọi tab; ô của bộ phận đang xem được tô viền
+// Báo cáo tổng quan 3 bộ phận (Đóng hàng · Kho · Giao hàng) ở đầu tab Tổng quan
 const DEPT_TAB = { don: 'don', ton: 'kho', giao: 'giao' };
 function deptData(date) {
   const { rows } = ordersOf(date), kc = kindCount(rows), rs = routeSummary(date), dv = delivOf(date);
@@ -337,7 +337,10 @@ function deptData(date) {
     drv: new Set(res.map(x => x.driver).filter(Boolean)).size, photos: res.reduce((a, x) => a + (x.photos || []).length, 0) };
 }
 function drawRep() {
-  const el = $('#rep'), d = deptData(S.date), on = DEPT_TAB[S.tab] || '', k = S.goi.kho || {};
+  const el = $('#rep');
+  el.hidden = S.tab !== 'tq';
+  if (el.hidden) { el.innerHTML = ''; return; }
+  const d = deptData(S.date), on = DEPT_TAB[S.tab] || '', k = S.goi.kho || {};
   const warn = d.kho.reduce((a, x) => a + x.neg + x.low, 0), neg = d.kho.reduce((a, x) => a + x.neg, 0), pend = d.kho.reduce((a, x) => a + x.pending, 0);
   const pct = d.all ? Math.round(d.ok / d.all * 100) : 0;
   const head = `<div class="rep-h"><b>📊 Báo cáo tổng quan các bộ phận</b>
