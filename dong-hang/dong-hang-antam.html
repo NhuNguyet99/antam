@@ -1189,7 +1189,7 @@ function viewTrack(main) {
    cfg/tk {a: {id: {user, name, role: 'ql' | 'dp' | 'nhap', active, salt, pw, at, by}|null}}. Chưa có tài khoản nào thì web dùng như cũ.
    Có tài khoản: ai mở web cũng phải đăng nhập bằng nick + mật khẩu (kể cả chủ trang); tên tài khoản ghi vào cột Người tạo đơn.
    ep: lúc bấm "Đăng xuất tất cả" – phiên đăng nhập trước lúc đó hết hiệu lực.
-   Quyền Nhập liệu: Đơn hàng ngày, Tuyến 123, Định mức đóng hàng, Khách hàng (thêm / sửa), Thống kê.
+   Quyền Nhập liệu: Đơn hàng ngày, Tuyến 123, Định mức đóng hàng, Khách hàng (thêm / sửa), Thống kê, Định mức & cài đặt.
    Quyền Điều phối: thêm chia tuyến (cột Tuyến, quy tắc chia tuyến), chọn người giao, gửi ngay sang Giao hàng & Kho.
    Quyền Quản lý: thêm Định mức & cài đặt, Nhập từ sheet, Tài khoản, quy tắc chia tuyến, giá Tuyến 123, xóa khách, cập nhật từ MISA. */
 // danh sách quyền (tích chọn riêng cho từng tài khoản); mục = tab có cùng mã
@@ -1205,8 +1205,8 @@ const PERM_KEYS = PERMS.flatMap(([, l]) => l.map(x => x[0]));
 const PERM_LAB = Object.fromEntries(PERMS.flatMap(([, l]) => l));
 const VIEWS = ['don', 't123', 'in', 'khach', 'gh', 'tk', 'cd', 'nhap', 'acc'];
 // Điều phối: chỉ xem đơn (không nhập / sửa số lượng), được chia tuyến, chọn người giao, gửi ngay
-const PRESET = { nhap: ['don', 'donNhap', 't123', 't123Nhap', 'in', 'khach', 'gh', 'tk'], dp: ['don', 't123', 'in', 'khach', 'gh', 'tk', 'tuyen', 'quytac', 'nguoigiao', 'gui'], ql: PERM_KEYS };
-const PERM_V = 3; // bản 1: 'don' / 't123' gồm cả nhập đơn; bản 2: chưa có 'gh' (theo dõi giao hàng – cấp cho mọi người)
+const PRESET = { nhap: ['don', 'donNhap', 't123', 't123Nhap', 'in', 'khach', 'gh', 'tk', 'cd'], dp: ['don', 't123', 'in', 'khach', 'gh', 'tk', 'tuyen', 'quytac', 'nguoigiao', 'gui'], ql: PERM_KEYS };
+const PERM_V = 4; // bản 1: 'don' / 't123' gồm cả nhập đơn; bản 2: chưa có 'gh' (theo dõi giao hàng – cấp cho mọi người); bản 3: Nhập liệu chưa có 'cd'
 document.head.insertAdjacentHTML('beforeend', `<style>${PERM_KEYS.map(k => `body.no-p-${k} .p-${k}`).join(',')} { display: none !important; }</style>`);
 const SESSION_DAYS = 30;
 const newSess = (id, pw) => ({ id, sig: pw.slice(0, 24), iat: Date.now(), exp: Date.now() + SESSION_DAYS * 864e5 });
@@ -1223,6 +1223,7 @@ function permsOf(a) {
   const p = new Set(a.perm.filter(k => PERM_KEYS.includes(k)));
   if ((a.pv || 1) < 2) { if (p.has('don')) p.add('donNhap'); if (p.has('t123')) p.add('t123Nhap'); }
   if ((a.pv || 1) < 3) p.add('gh');
+  if ((a.pv || 1) < 4 && roleOf(a) === 'nhap') p.add('cd'); // Nhập liệu được sửa Định mức & cài đặt
   return p;
 }
 const custom = a => { const p = permsOf(a), d = new Set(PRESET[roleOf(a)]); return p.size !== d.size || [...p].some(k => !d.has(k)); };

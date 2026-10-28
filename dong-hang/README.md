@@ -81,7 +81,7 @@ Web riêng (trang claude.ai, một file `dong-hang-antam.html`) thay cho Google 
   xem / nhập-sửa đơn, Tuyến 123 xem / nhập-sửa đơn, Định mức đóng hàng, Khách hàng thêm/sửa, Thống kê), Điều phối (đổi tuyến, quy tắc chia tuyến, chọn người giao, gửi ngay),
   Quản lý (xóa khách, cập nhật MISA, giá Tuyến 123, nhập từ sheet, Định mức & cài đặt, tài khoản & phân quyền). Mục / nút không được
   cấp thì không hiện; lưu ở `perm` của tài khoản (chưa có thì theo mẫu của vai trò). Mẫu mặc định:
-  Nhập liệu: Đơn hàng ngày, Tuyến 123, Định mức đóng hàng, Khách hàng (thêm / sửa), Thống kê, in (cột Tuyến chỉ xem).
+  Nhập liệu: Đơn hàng ngày, Tuyến 123, Định mức đóng hàng, Khách hàng (thêm / sửa), Thống kê, **Định mức & cài đặt** (sửa), in (cột Tuyến chỉ xem).
   Điều phối **chỉ xem đơn** (ô số lượng, thanh toán, tình trạng, chi tiết đơn, Bánh tuyến khóa; có dòng "Chế độ xem"), được: chia tuyến (cột Tuyến, tuyến của khách, quy tắc chia tuyến), chọn 👤 Người giao (Đơn hàng ngày, Tuyến 123),
   📤 Gửi ngay sang Giao hàng & Kho. Quản lý: tất cả – thêm Định mức & cài đặt,
   Nhập từ sheet, Tài khoản, quy tắc chia tuyến, giá / nhập sheet Tuyến 123, xóa khách, cập nhật từ MISA. Lưu ở `cfg/tk`, mật khẩu
