@@ -2126,6 +2126,9 @@ async function viewDrivers(main) {
       : GIAO_LINKED ? `<div class="callout small">Người giao dùng trang riêng <a href="${esc(GIAO_URL)}" target="_blank" rel="noopener"><b>Giao hàng An Tâm ↗</b></a> – mời họ vào trang đó
         (email, quyền <b>Contributor</b> – nhập liệu được, không sửa được code trang (menu Share không có Contributor thì chọn Editor), tắt "Anyone with the link"), <b>không mời vào web Kho An Tâm</b>. Tài khoản tạo / sửa ở đây tự chuyển sang mỗi lần
         <b>Lưu</b> bảng Phân tuyến giao hàng (trong khoảng 1 giờ); kết quả giao, ảnh và vị trí xem ở trang Giao hàng An Tâm.</div>`
+      : window.ANTAM_HOP ? `<div class="callout small">Người giao dùng <b>chung trang An Tâm này</b> (Đóng hàng + Kho + Giao hàng): mời họ bằng <b>email</b> ở nút <i>Share</i>, quyền <b>Contributor</b>
+        (menu Share không có Contributor thì chọn Editor), để <i>General access</i> ở chế độ <b>chỉ người được mời</b>.
+        Trên điện thoại: mở link → chọn <b>🚚 Giao hàng</b> → đăng nhập nick + PIN. Lần sau mở link sẽ vào thẳng tuyến của mình; kết quả giao và ảnh hiện ngay ở Phân tuyến và web Đóng hàng.</div>`
       : ONLINE ? `<div class="callout small">Người giao hàng chỉ được mời vào <b>trang Giao hàng An Tâm này</b> – <b>không mời họ vào web Kho An Tâm</b>.
         Mời bằng <b>email</b> ở nút <i>Share</i> của trang, chọn <b>Contributor</b> (nhập liệu được, không sửa được code trang; menu Share không có Contributor thì chọn Editor; Viewer/Commenter không bấm được "Đã giao" hay gửi ảnh), và để
         <i>General access</i> ở chế độ <b>chỉ người được mời</b> (tắt "Anyone with the link").
@@ -3376,7 +3379,10 @@ async function boot() {
     document.body.classList.add('gh-mode');
     try { await Backend.init(); } catch (e) { giaoRoot().innerHTML = `<p style="padding:20px">Không kết nối được dữ liệu: ${esc(e.message)}</p>`; return; }
     Backend.onRemote(() => GiaoHang.onRemoteChange());
-    return GiaoHang.start(giaoRoot(), { onExit: exitGiaoMode });
+    const started = GiaoHang.start(giaoRoot(), { onExit: exitGiaoMode });
+    // trang gộp: điện thoại người giao cũng tự nhận đơn web Đóng hàng vừa gửi (không cần chờ web kho mở)
+    if (window.ANTAM_HOP) Backend.prepGiao().then(() => { pullDhInbox(); Backend.watchDh(pullDhInbox); }).catch(e => console.warn('dhin', e));
+    return started;
   }
   return bootKho();
 }
@@ -3421,13 +3427,14 @@ async function bootKho() {
   if (!S.user && !VIEW && !S.account) askUser();
   checkNotices();
   pullDhInbox();
+  Backend.watchDh(pullDhInbox);
 }
 
 /* ============================================================ nhận đơn hàng từ web Đóng hàng An Tâm */
 // Web Đóng hàng chia tuyến sẵn cho đơn hàng ngày và tuyến kebab 123; tác vụ định kỳ chép vào "dhin" của trang này.
 // Web kho tự lập (hoặc cập nhật) bảng Phân tuyến giao hàng của ngày, giữ tuyến kho đã chọn tay, lưu, rồi để sẵn gói
 // chuyển tiếp sang Giao hàng An Tâm – không cần dán sheet.
-const DH_EVERY = 120000;
+const DH_EVERY = window.ANTAM_HOP ? 30000 : 120000; // trang gộp: 30 giây (và nhận ngay khi web Đóng hàng gửi)
 let dhTimer = null, dhBusy = false;
 // Trang Giao hàng An Tâm cũng nhận thẳng (tác vụ chép cùng gói vào "dhin" của trang giao hàng): tự lập bảng phân tuyến
 // kèm người giao từng tuyến, không cần chờ web kho mở – mỗi người giao thấy ngay tuyến của mình.
@@ -3493,6 +3500,8 @@ async function pullDhInbox1() {
     } catch (e) { console.warn('dhin render', e); }
     return;
   }
+  // trang gộp, điện thoại người giao: chỉ vẽ lại danh sách giao
+  if (document.body.classList.contains('gh-mode')) { GiaoHang.onRemoteChange(); return; }
   toast('Đã tự nhận từ web Đóng hàng: ' + got.join('; ') + (GIAO_LINKED ? ' – sẽ tự chuyển sang Giao hàng An Tâm' : ''));
   if (!S.dirty && location.hash.startsWith('#/phan-tuyen')) render();
 }

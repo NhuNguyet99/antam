@@ -27,6 +27,9 @@ window.ANTAM_ONLINE = true;
 const Backend = (() => {
   // Trang xem công khai (build --view): đọc số liệu chụp sẵn trong trang, không ghi được
   const VIEW = !!window.ANTAM_VIEW;
+  // Trang gộp An Tâm (Đóng hàng + Kho + Giao hàng chung 1 kho dữ liệu): đọc thẳng đơn web Đóng hàng để ở "khoout"
+  const HOP = !!window.ANTAM_HOP;
+  const DH_IN = HOP ? 'khoout' : 'dhin';
   const SKELETON_RESET = (() => { const el = document.head && document.head.querySelector('style'); return el ? el.textContent : ''; })();
   const TYPE_PREFIX = { N: 'PNK', X: 'PXK', D: 'DCK' };
   const TYPE_LABEL = { N: 'Nhập', X: 'Xuất', D: 'Điều chỉnh' };
@@ -1123,7 +1126,7 @@ const Backend = (() => {
         const cur = docData(await dbx().doc('nvpub/list').get());
         if (!cur || JSON.stringify(cur.list) !== JSON.stringify(pub)) await write(() => dbx().doc('nvpub/list').set({ list: pub, at: nowStr() }));
       } catch (e) { console.warn('nvpub', e); }
-      const snap = await dbx().collection('dhin').limit(60).get();
+      const snap = await dbx().collection(DH_IN).limit(60).get();
       return snap.docs.map(d => Object.assign({}, d.data() || {}, { id: d.id }))
         .filter(x => x.stamp && typeof x.tsv === 'string' && validDateOk(x.date) && (done[x.id] || {}).stamp !== x.stamp)
         .map(x => Object.assign(x, { doc: (done[x.id] || {}).doc || '' }))
@@ -2013,5 +2016,10 @@ const Backend = (() => {
       return snap;
     },
     onRemote(fn) { st.onRemote = fn; },
+    // trang gộp: báo ngay khi web Đóng hàng gửi đơn mới (khoout/index đổi)
+    watchDh(fn) { if (!HOP || VIEW || !st.db) return; let first = true; st.globalSubs.push(st.db.doc('khoout/index').onSnapshot(() => { if (first) { first = false; return; } fn(); }, () => {})); },
+    // chế độ người giao: tải sẵn các bảng phân tuyến (để tự nhận đơn web Đóng hàng cũng chạy được ở điện thoại người giao)
+    prepGiao() { return ensureGiaoData(); },
+    get hop() { return HOP; },
   };
 })();

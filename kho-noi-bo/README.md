@@ -1,5 +1,17 @@
 # Web làm việc nội bộ – Kho An Tâm (2 kho)
 
+> **Từ 30/10/2026: trang chung An Tâm** – Đóng hàng, Kho và Giao hàng chạy trong **một trang claude.ai**
+> (https://claude.ai/artifact/ErmZYgHgUzBeTJrtTR6yAC, file `kho-noi-bo/online/an-tam.html`, tạo bằng `python3 build.py --hop`)
+> và **dùng chung một kho dữ liệu**, nên dữ liệu chuyển cho nhau **ngay** (không còn chờ tác vụ định kỳ):
+> - Mở trang → chọn bộ phận 📦 Đóng hàng / 🏭 Kho / 🚚 Giao hàng (máy nhớ lần sau); đổi bằng **⇄ Đổi bộ phận**. Mỗi lần mở chỉ chạy 1 web.
+> - Đóng hàng bấm *Gửi* → ghi `khoout/*`; web Kho / người giao đang mở nhận trong vài giây (theo dõi `khoout/index`, kiểm tra lại mỗi 30 giây),
+>   ghi đã nhận vào `dhdone/index` – Đóng hàng thấy "✓ Đã chuyển" ngay.
+> - Đóng hàng đọc thẳng người giao `nvpub/list` và kết quả giao `kho/TP/giao/<ngày>` (ảnh `/_blob/<mã>` cùng kho ảnh) của web Kho/Giao.
+> - Trang cũ **Đóng hàng An Tâm** (FGE3VTLud2r3LnEjm5nkLK) và **Giao hàng An Tâm** (6bVzsWLxPdkdCKF687Bnky) chỉ còn trang báo chuyển
+>   (dữ liệu cũ giữ nguyên, đã chép sang trang chung kèm 75 ảnh giao hàng). Các mục dưới nói về `dhin`, `giaoin`, `giaokq`, `giaoanh`,
+>   tác vụ chép giữa các trang là cách làm **trước khi gộp**.
+> - Mời nhân viên đóng hàng và người giao vào trang chung (email, quyền **Contributor**, chỉ người được mời).
+
 Web nội bộ thay cho 2 file Excel quản lý kho, giữ nguyên quy trình và mẫu phiếu đang dùng, nhiều người nhập cùng lúc
 được, có lưu lịch sử sửa/xóa. Web chứa **2 kho**, chuyển qua lại bằng nút ở góc trên bên trái (mỗi kho một màu):
 

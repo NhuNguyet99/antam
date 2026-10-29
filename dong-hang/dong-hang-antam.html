@@ -735,9 +735,10 @@ async function boot() {
   $('#me-name').textContent = S.me || 'Đặt tên';
   // cài đặt: dùng mặc định ngay, có bản đã lưu thì thay
   S.loaded.cfg = true;
-  db.doc('giaonv/list').onSnapshot(s => { S.drivers = (((s.exists && s.data()) || {}).list || []).filter(d => d && d.id && d.active !== false); drawRtChips(); }, () => {});
+  db.doc(HOP ? 'nvpub/list' : 'giaonv/list').onSnapshot(s => { S.drivers = (((s.exists && s.data()) || {}).list || []).filter(d => d && d.id && d.active !== false); drawRtChips(); }, () => {});
   db.doc('khoout/index').onSnapshot(s => { S.khoIdx = (s.exists && (s.data() || {}).s) || {}; drawKho(); }, () => {});
-  db.doc('khoack/index').onSnapshot(s => { S.khoAck = (s.exists && (s.data() || {}).s) || {}; drawKho(); }, () => {});
+  // đã nhận: trang gộp đọc dhdone/index của web Kho ({mã: {stamp, doc}}), trang riêng đọc khoack/index ({mã: stamp}) do tác vụ ghi
+  db.doc(HOP ? 'dhdone/index' : 'khoack/index').onSnapshot(s => { const m = (s.exists && (s.data() || {}).s) || {}; S.khoAck = HOP ? Object.fromEntries(Object.entries(m).map(([k, v]) => [k, v && v.stamp])) : m; drawKho(); }, () => {});
   db.doc('cfg/main').onSnapshot(s => {
     const d = s.exists ? s.data() : null;
     S.cfg = Object.assign(JSON.parse(JSON.stringify(DEFAULT_CFG)), d || {}); S.cfgIn = true;
@@ -857,7 +858,9 @@ const hasOrder = o => !!o && statusOf(o) === 'HOẠT ĐỘNG';
 // Đơn hàng ngày (đã chia tuyến) và tuyến kebab 123 được để sẵn ở "khoout/<ngày>" và "khoout/<ngày>-t123" (danh mục ở
 // "khoout/index"). Tác vụ định kỳ mỗi giờ chép sang web Kho An Tâm (ghi đã chép vào "khoack/index"); web kho tự lập bảng
 // Phân tuyến giao hàng rồi tự chuyển tiếp sang Giao hàng An Tâm.
-const KHO_DELAY = 30000;
+// Trang gộp An Tâm (Đóng hàng + Kho + Giao hàng chung 1 kho dữ liệu): Kho / Giao hàng nhận ngay, đọc thẳng kết quả giao
+const HOP = !!window.ANTAM_HOP;
+const KHO_DELAY = HOP ? 20000 : 30000;
 const khoTimers = {};
 const khoId = (kind, d) => (kind === 't123' ? d + '-t123' : d);
 function khoOutLater(kind, d) {
@@ -944,7 +947,8 @@ function khoStatusHtml(id) {
   const e = (S.khoIdx || {})[id], ack = (S.khoAck || {})[id], hm = x => String(x || '').slice(11, 16);
   if (khoTimers[id]) return '<span class="kho-st wait">⏳ Đang gom thay đổi để gửi sang Giao hàng & Kho…</span>';
   if (!e) return '<span class="kho-st">🔗 Chưa gửi sang Giao hàng & Kho</span>';
-  if (ack && ack === e.stamp) return `<span class="kho-st ok" title="Trang Giao hàng An Tâm tự lập tuyến cho từng người giao khi có người mở; web Kho nhận bản theo dõi">✓ Đã chuyển sang Giao hàng & Kho · ${fmt(e.n)} khách (bản ${hm(e.at)})</span>`;
+  if (ack && ack === e.stamp) return `<span class="kho-st ok" title="Kho đã lập bảng phân tuyến, người giao thấy tuyến của mình">✓ Đã chuyển sang Giao hàng & Kho · ${fmt(e.n)} khách (bản ${hm(e.at)})</span>`;
+  if (HOP) return `<span class="kho-st wait" title="Web Kho / Giao hàng đang mở sẽ nhận ngay; không ai mở thì nhận khi có người mở">📤 Đã gửi · bản ${hm(e.at)}, ${fmt(e.n)} khách – Kho & Giao hàng đang nhận (vài giây)</span>`;
   return `<span class="kho-st wait" title="Tác vụ tự động chạy mỗi giờ (phút thứ 7) chép thẳng sang web Giao hàng An Tâm và web Kho">📤 Chờ chuyển sang Giao hàng & Kho · bản ${hm(e.at)}, ${fmt(e.n)} khách – tự chuyển trong ≤ 1 giờ</span>`;
 }
 function drawKho() {
@@ -958,7 +962,7 @@ function bindKhoBar(d) {
   $$('[data-kho-send]').forEach(b => b.onclick = () => guard(async () => {
     const kind = b.dataset.khoSend, id = khoId(kind, d);
     clearTimeout(khoTimers[id]); delete khoTimers[id];
-    await khoOut(kind, d); toast('Đã để sẵn cho web Giao hàng & Kho – tác vụ tự động chép sang trong ≤ 1 giờ');
+    await khoOut(kind, d); toast(HOP ? 'Đã gửi sang Giao hàng & Kho' : 'Đã để sẵn cho web Giao hàng & Kho – tác vụ tự động chép sang trong ≤ 1 giờ');
   }));
 }
 /* ================================================================ PHÂN TUYẾN GIAO HÀNG */
@@ -1176,9 +1180,10 @@ $('#me-btn').onclick = () => (S.acc || hasAcc() ? accMenu() : modal({
 S.gh = { kq: {}, anh: {}, subs: {}, t1: {}, idx: null, f: Object.assign({ st: '', rt: '', q: '' }, store('ghF') || {}) };
 function ghWatch(d) {
   if (!S.db) return;
-  if (!S.gh.subs.idx) S.gh.subs.idx = S.db.doc('giaokq/index').onSnapshot(sn => { S.gh.idx = (sn.exists && sn.data()) || {}; if (S.view === 'gh') render(); }, () => {});
-  if (!S.gh.subs[d]) S.gh.subs[d] = S.db.doc('giaokq/' + d).onSnapshot(sn => { S.gh.kq[d] = ((sn.exists && sn.data()) || {}).d || {}; if (S.view === 'gh' && S.date === d) render(); }, () => { S.gh.kq[d] = {}; });
-  if (!S.gh.subs['a' + d]) S.gh.subs['a' + d] = S.db.doc('giaoanh/' + d).onSnapshot(sn => { S.gh.anh[d] = ((sn.exists && sn.data()) || {}).m || {}; if (S.view === 'gh' && S.date === d) render(); }, () => { S.gh.anh[d] = {}; });
+  if (!S.gh.subs.idx && !HOP) S.gh.subs.idx = S.db.doc('giaokq/index').onSnapshot(sn => { S.gh.idx = (sn.exists && sn.data()) || {}; if (S.view === 'gh') render(); }, () => {});
+  // trang gộp: đọc thẳng kết quả giao của web Giao hàng (kho/TP/giao/<ngày>), ảnh cùng kho ảnh
+  if (!S.gh.subs[d]) S.gh.subs[d] = S.db.doc((HOP ? 'kho/TP/giao/' : 'giaokq/') + d).onSnapshot(sn => { S.gh.kq[d] = ((sn.exists && sn.data()) || {}).d || {}; if (S.view === 'gh' && S.date === d) render(); }, () => { S.gh.kq[d] = {}; });
+  if (!HOP && !S.gh.subs['a' + d]) S.gh.subs['a' + d] = S.db.doc('giaoanh/' + d).onSnapshot(sn => { S.gh.anh[d] = ((sn.exists && sn.data()) || {}).m || {}; if (S.view === 'gh' && S.date === d) render(); }, () => { S.gh.anh[d] = {}; });
   if (!(d in S.gh.t1)) { S.gh.t1[d] = null; S.db.doc('t123/' + d).get().then(sn => { S.gh.t1[d] = ((sn.exists && sn.data()) || {}); if (S.view === 'gh' && S.date === d) render(); }, () => { S.gh.t1[d] = {}; }); }
 }
 // danh sách điểm giao của ngày: [{grp, grpName, drv, crm, name, phone, k (kết quả giao)|null, src}]
@@ -1214,7 +1219,7 @@ function ghGroups(list) {
   return [...m.values()].sort((a, b) => a.ord - b.ord || a.name.localeCompare(b.name, 'vi'));
 }
 // url ảnh đã chép sang trang này (theo mã ảnh bên Giao hàng)
-const ghPhotoUrls = (k, d) => (k.photos || []).map(r => (S.gh.anh[d] || {})[String(r).replace(/^a:/, '')]).filter(u => typeof u === 'string' && /^(\/_blob\/|https:\/\/)/.test(u));
+const ghPhotoUrls = (k, d) => (k.photos || []).map(r => (HOP ? (/^a:[0-9a-f]{32}$/.test(String(r)) ? '/_blob/' + String(r).slice(2) : '') : (S.gh.anh[d] || {})[String(r).replace(/^a:/, '')])).filter(u => typeof u === 'string' && /^(\/_blob\/|https:\/\/)/.test(u));
 function ghPhotosHtml(x, d) {
   const k = x.k || {}, n = (k.photos || []).length; if (!n) return '';
   const us = ghPhotoUrls(k, d);
@@ -1241,8 +1246,9 @@ function viewTrack(main) {
         <button class="btn sm" id="g-next" aria-label="Ngày sau">▶</button><button class="btn sm" id="g-today">Hôm nay</button>
         <span class="date-big">${vn(d)}</span><span class="dow">${dow(d)}</span><span class="grow"></span>
         <button class="btn sm" id="g-print">🖨 In theo dõi giao hàng</button></div>
-      <p class="hint" style="margin:0">Kết quả do người giao bấm <b>Đã giao / Không giao được</b> trên trang Giao hàng An Tâm, tự chuyển sang đây <b>khoảng 15 phút một lần</b> (6h–23h; trang tự hiện số mới, không cần tải lại)
-        ${idx.at ? `(lần cập nhật gần nhất: <b>${esc(String(idx.at).replace('T', ' ').slice(0, 16))}</b>)` : ''}. Bấm ảnh nhỏ để xem ảnh giao hàng lớn (ảnh chép sang cùng lúc với kết quả); vị trí lúc giao xem ở trang Giao hàng An Tâm.</p>
+      <p class="hint" style="margin:0">${HOP ? 'Kết quả do người giao bấm <b>Đã giao / Không giao được</b> hiện ở đây <b>ngay lập tức</b> (trang tự hiện số mới, không cần tải lại). Bấm ảnh nhỏ để xem ảnh giao hàng lớn; vị trí lúc giao xem ở mục Giao hàng.'
+        : `Kết quả do người giao bấm <b>Đã giao / Không giao được</b> trên trang Giao hàng An Tâm, tự chuyển sang đây <b>khoảng 15 phút một lần</b> (6h–23h; trang tự hiện số mới, không cần tải lại)
+        ${idx.at ? `(lần cập nhật gần nhất: <b>${esc(String(idx.at).replace('T', ' ').slice(0, 16))}</b>)` : ''}. Bấm ảnh nhỏ để xem ảnh giao hàng lớn (ảnh chép sang cùng lúc với kết quả); vị trí lúc giao xem ở trang Giao hàng An Tâm.`}</p>
       <div class="gh-stats"><div><div class="v">${fmt(n)}</div><div class="k">Điểm giao (khách có đơn)</div></div>
         <div class="ok"><div class="v">${fmt(ok)}</div><div class="k">Đã giao</div></div><div class="bad"><div class="v">${fmt(bad)}</div><div class="k">Không giao được</div></div>
         <div class="wait"><div class="v">${fmt(n - ok - bad)}</div><div class="k">Chưa giao</div></div>
