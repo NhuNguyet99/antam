@@ -650,7 +650,7 @@ async function boot() {
   db.doc('khoack/index').onSnapshot(s => { S.khoAck = (s.exists && (s.data() || {}).s) || {}; drawKho(); }, () => {});
   db.doc('cfg/main').onSnapshot(s => {
     const d = s.exists ? s.data() : null;
-    S.cfg = Object.assign(JSON.parse(JSON.stringify(DEFAULT_CFG)), d || {});
+    S.cfg = Object.assign(JSON.parse(JSON.stringify(DEFAULT_CFG)), d || {}); S.cfgIn = true;
     refresh();
   }, e => toast('Cài đặt: ' + dbErr(e).message, true));
   // danh mục khách: đọc 1 lần (có giới hạn thời gian) rồi theo dõi thay đổi
@@ -695,7 +695,8 @@ function refresh(fromDay) {
     // không vẽ lại khi đang gõ trong bảng (tránh mất con trỏ); chỉ cập nhật số tổng
     const a = document.activeElement;
     if (S.view === 'don' && a && a.closest && a.closest('#orders, #d-report')) { if (fromDay) updateDayTotals(); return; }
-    if (S.view === 'cd' && $('#main [data-dirty="1"]')) return;
+    // trang cài đặt đã vẽ từ cài đặt đã lưu: không vẽ lại (giữ ô đang gõ, chỗ cuộn); vẽ lúc chưa tải xong thì vẽ lại
+    if (S.view === 'cd' && ($('#main [data-dirty="1"]') || ($('#s-save') && S.cdFrom))) return;
     if (S.view === 'gh' && a && a.id === 'g-q') return; // đang gõ ô tìm
     render();
   }, 60);
@@ -3396,6 +3397,21 @@ function t1Import() {
 const cfgDoc = () => ({ caps: S.cfg.caps, products: S.cfg.products, pay: S.cfg.pay, thungWords: S.cfg.thungWords, t123: S.cfg.t123 || {}, routes: S.cfg.routes || null, at: nowStr() });
 function viewSettings(main) {
   const c = JSON.parse(JSON.stringify(S.cfg));
+  S.cdFrom = !!S.cfgIn;
+  // danh sách sản phẩm tự lưu (chờ 0,7 giây sau lần sửa cuối) để bảng đơn hàng cập nhật ngay; định mức / thanh toán vẫn bấm Lưu cài đặt
+  let pmsg = '', pt = null;
+  const pstat = m => { pmsg = m; const el = $('#s-pst'); if (el) el.textContent = m; };
+  const saveProds = () => {
+    clearTimeout(pt);
+    if (!S.cfgIn) return pstat('Đang tải cài đặt – chờ vài giây rồi sửa lại');
+    pstat('Đang lưu danh sách sản phẩm…');
+    pt = setTimeout(() => {
+      if (c.products.some(p => !String(p.name || '').trim())) return pstat('⚠ Có sản phẩm chưa có tên – điền tên để tự lưu');
+      const products = JSON.parse(JSON.stringify(c.products));
+      mergeInto('cfg/main', { products, at: nowStr() }, cfgDoc()).then(() => { S.cfg.products = products; pstat('✓ Đã lưu – bảng đơn hàng đã theo danh sách này'); })
+        .catch(e => { pstat(''); toast(e.message, true); });
+    }, 700);
+  };
   const capRows = [['tui', 'Túi đen', [...SIZES, 'K']], ['nho', 'Thùng Nhỏ', SIZES], ['chung', 'Thùng Chung', SIZES], ['dai', 'Thùng đại', SIZES], ['giay', 'Thùng giấy', SIZES], ['cay', 'Cây kebab', ['K']]];
   const draw = () => {
     main.innerHTML = `<div class="card" style="display:grid;gap:10px"><h2>Định mức đóng gói</h2>
@@ -3417,7 +3433,7 @@ function viewSettings(main) {
           <td><input type="checkbox" data-k="show" ${p.show !== false ? 'checked' : ''}></td>
           <td class="nowrap"><button class="btn sm ghost" data-up ${i ? '' : 'disabled'} aria-label="Lên">↑</button><button class="btn sm ghost" data-down ${i < c.products.length - 1 ? '' : 'disabled'} aria-label="Xuống">↓</button><button class="btn sm ghost danger" data-del aria-label="Xóa">✕</button></td></tr>`).join('')}
       </tbody></table></div>
-      <div class="row" style="align-items:center"><button class="btn" id="s-addp">+ Thêm sản phẩm</button><span class="hint">Nắm <b>⠿</b> kéo thả để đổi thứ tự cột (hoặc bấm ↑ ↓), xong bấm <b>Lưu cài đặt</b>.</span></div>
+      <div class="row" style="align-items:center"><button class="btn" id="s-addp">+ Thêm sản phẩm</button><span class="hint">Nắm <b>⠿</b> kéo thả để đổi thứ tự cột (hoặc bấm ↑ ↓). Danh sách sản phẩm <b>tự lưu</b> – bảng Đơn hàng ngày, báo cáo, bản in tự theo đúng thứ tự, tên cột, nhóm màu này.</span><span class="hint" id="s-pst">${esc(pmsg)}</span></div>
     </div>
     <div class="card" style="display:grid;gap:10px"><h2>Tuyến giao hàng</h2>
       <p class="hint" style="margin:0">${routes().length} tuyến: ${routes().map(r => esc(r.code)).join(', ')}. Đơn hàng ngày tự chia đơn vào tuyến theo khu vực / địa chỉ của khách; chọn tay ở cột Tuyến thì nhớ cho khách.</p>
@@ -3429,11 +3445,11 @@ function viewSettings(main) {
     $$('[data-cap]', main).forEach(i => i.oninput = () => { const [k, s] = i.dataset.cap.split('.'); c.caps[k] = c.caps[k] || {}; c.caps[k][s] = num(i.value); dirty(); });
     $$('tr[data-i]', main).forEach(tr => {
       const p = c.products[+tr.dataset.i];
-      $$('[data-k]', tr).forEach(i => i.oninput = i.onchange = () => { p[i.dataset.k] = i.type === 'checkbox' ? i.checked : i.value; dirty(); });
-      const mv = d => { const i = +tr.dataset.i, j = i + d; [c.products[i], c.products[j]] = [c.products[j], c.products[i]]; draw(); dirty(); };
+      $$('[data-k]', tr).forEach(i => i.oninput = i.onchange = () => { p[i.dataset.k] = i.type === 'checkbox' ? i.checked : i.value; saveProds(); });
+      const mv = d => { const i = +tr.dataset.i, j = i + d; [c.products[i], c.products[j]] = [c.products[j], c.products[i]]; draw(); saveProds(); };
       $('[data-up]', tr).onclick = () => mv(-1); $('[data-down]', tr).onclick = () => mv(1);
       $('[data-grip]', tr).onpointerdown = e => dragRow(e, tr);
-      $('[data-del]', tr).onclick = async () => { if (await confirmBox(`Xóa sản phẩm "${p.name}"? Số lượng đã nhập của sản phẩm này sẽ không còn hiện.`, 'Xóa', true)) { c.products.splice(+tr.dataset.i, 1); draw(); dirty(); } };
+      $('[data-del]', tr).onclick = async () => { if (await confirmBox(`Xóa sản phẩm "${p.name}"? Số lượng đã nhập của sản phẩm này sẽ không còn hiện.`, 'Xóa', true)) { c.products.splice(+tr.dataset.i, 1); draw(); saveProds(); } };
     });
     // kéo thả: thả lên nửa trên của dòng → chèn trước, nửa dưới → chèn sau; gần mép khung thì tự cuộn
     const dragRow = (e, tr) => {
@@ -3461,13 +3477,13 @@ function viewSettings(main) {
         document.body.classList.remove('drag-on');
         if (to === from) { tr.classList.remove('dragging'); rows.forEach(r => r.classList.remove('drop-before', 'drop-after')); return; }
         const [it] = c.products.splice(from, 1); c.products.splice(to, 0, it);
-        const sx = box ? box.scrollLeft : 0; draw(); dirty();
+        const sx = box ? box.scrollLeft : 0; draw(); saveProds();
         const nb = $('.prods', main); if (nb) nb.scrollLeft = sx;
         const nr = $(`tr[data-i="${to}"]`, main); if (nr) { nr.classList.add('dragging'); setTimeout(() => nr.classList.remove('dragging'), 700); }
       };
       document.addEventListener('pointermove', move); document.addEventListener('pointerup', up); document.addEventListener('pointercancel', up);
     };
-    $('#s-addp').onclick = () => { const p = P('Sản phẩm mới', '', ''); p.id = rid('p'); c.products.push(p); draw(); dirty(); };
+    $('#s-addp').onclick = () => { const p = P('Sản phẩm mới', '', ''); p.id = rid('p'); c.products.push(p); draw(); saveProds(); };
     $('#s-routes').onclick = editRoutes;
     $('#s-words').oninput = e => { c.thungWords = e.target.value; dirty(); };
     $('#s-pay').oninput = e => { c.pay = e.target.value.split(',').map(x => x.trim()).filter(Boolean); dirty(); };

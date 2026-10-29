@@ -108,6 +108,8 @@ Web riêng (trang claude.ai, một file `dong-hang-antam.html`) thay cho Google 
 - **Nhập từ sheet** (không bắt buộc): danh sách khách đã đưa sẵn lên web; mục này chỉ dùng khi muốn nạp lại từ sheet
   (mở sheet ngày, Ctrl+A, Ctrl+C rồi Ctrl+V vào web).
 - **Định mức & cài đặt**: bảng số bánh tối đa cho 1 túi / thùng / cây, danh sách sản phẩm (loại size để tính đóng gói).
+  Danh sách sản phẩm kéo thả (⠿) hoặc ↑ ↓ để đổi thứ tự và **tự lưu** (0,7 giây sau lần sửa cuối): bảng Đơn hàng ngày, báo cáo, bản in
+  theo ngay thứ tự / tên cột / nhóm màu mới. Định mức, chữ tự chọn thùng, thanh toán vẫn bấm **Lưu cài đặt**.
 
 Quy tắc đóng gói (giống sheet): TÚI ĐEN – mỗi bánh chiếm 1/định mức túi, cộng lại làm tròn lên, kebab túi riêng;
 THÙNG (gửi chành / Bà Tám / gửi tàu – tự chọn khi khu vực hoặc ghi chú có các chữ này) – chọn thùng nhỏ nhất đủ chứa
