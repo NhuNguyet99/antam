@@ -85,7 +85,7 @@ Web riêng (trang claude.ai, một file `dong-hang-antam.html`) thay cho Google 
   Điều phối **chỉ xem đơn** (ô số lượng, thanh toán, tình trạng, chi tiết đơn, Bánh tuyến khóa; có dòng "Chế độ xem"), được: chia tuyến (cột Tuyến, tuyến của khách, quy tắc chia tuyến), chọn 👤 Người giao (Đơn hàng ngày, Tuyến 123),
   📤 Gửi ngay sang Giao hàng & Kho. Quản lý: tất cả – thêm Định mức & cài đặt,
   Nhập từ sheet, Tài khoản, quy tắc chia tuyến, giá / nhập sheet Tuyến 123, xóa khách, cập nhật từ MISA. Lưu ở `cfg/tk`, mật khẩu
-  băm PBKDF2. Nhân viên vẫn phải được mời vào trang (Share, email, Editor); tài khoản để biết ai nhập và giới hạn chức năng.
+  băm PBKDF2. Nhân viên vẫn phải được mời vào trang (Share, email, Contributor – không có thì Editor); tài khoản để biết ai nhập và giới hạn chức năng.
 - **Khách hàng**: danh mục khách (khu vực, CRM, địa chỉ, SĐT, ghi chú/chành xe, đóng gói mặc định).
   **Sửa khách ngay trên bảng**: ở Đơn hàng ngày, Tuyến kebab 123 và danh mục Khách hàng, bấm vào tên khách / CRM / SĐT (danh mục:
   cả khu vực, ghi chú) → ô sửa nhỏ hiện cạnh dòng (tên – địa chỉ, CRM, SĐT, khu vực, ghi chú/chành xe). **Enter** hoặc bấm ra ngoài
@@ -116,4 +116,5 @@ THÙNG (gửi chành / Bà Tám / gửi tàu – tự chọn khi khu vực hoặ
 (giấy → nhỏ → chung → đại), vượt thùng đại thì thêm thùng, kebab đóng cây.
 
 Dữ liệu nằm trong kho dữ liệu của trang: `cfg/main`, `khach/k0..k7` (danh mục khách chia 8 phần), `ngay/<yyyy-mm-dd>` (đơn của ngày).
-Người nhập liệu cần được mời vào trang với quyền **Editor**.
+Người nhập liệu cần được mời vào trang với quyền **Contributor** (nhập liệu được, không sửa được code trang);
+menu Share không có Contributor thì phải chọn **Editor** (Editor sửa được cả code trang).

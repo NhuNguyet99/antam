@@ -584,7 +584,7 @@ function setSync() {
 }
 function dbErr(e) {
   const c = e && e.code;
-  if (c === 'invalid_argument') return new Error(S.readOnly ? 'Bạn đang chỉ có quyền xem trang này – nhờ chủ trang mời bằng email với quyền Editor để nhập liệu.'
+  if (c === 'invalid_argument') return new Error(S.readOnly ? 'Bạn đang chỉ có quyền xem trang này – nhờ chủ trang mời bằng email với quyền Contributor để nhập liệu (không sửa được code trang; menu Share không có Contributor thì chọn Editor).'
     : 'Không lưu được (' + (e.message || 'invalid_argument') + '). Tải lại trang rồi thử lại; nếu vẫn lỗi, chụp màn hình gửi người làm web.');
   if (c === 'quota_exceeded') return new Error('Kho dữ liệu của trang đã đầy: ' + (e.message || ''));
   if (c === 'resource_exhausted') return new Error('Thao tác quá nhanh, thử lại sau vài giây.');
@@ -628,7 +628,7 @@ function applyCust(snap) {
 async function boot() {
   let db = null;
   try { db = await withTimeout(window.claude.use('db'), 15000, 'kết nối dữ liệu'); } catch (e) { return showFatal('Không kết nối được dữ liệu của trang', errText(e)); }
-  if (!db) return showFatal('Không mở được dữ liệu của trang', 'Hãy đăng nhập claude.ai và mở đúng link được chia sẻ (người nhập liệu cần quyền Editor).');
+  if (!db) return showFatal('Không mở được dữ liệu của trang', 'Hãy đăng nhập claude.ai và mở đúng link được chia sẻ (người nhập liệu cần quyền Contributor hoặc Editor).');
   S.db = db;
   // tên người dùng: lấy sau, không chặn việc tải trang
   window.claude.use('user').then(async user => {
@@ -637,7 +637,7 @@ async function boot() {
     const me = await user.me(); S.myId = (me && me.id) || '';
     if (!S.me && !S.acc && me && me.name) { S.me = me.name; $('#me-name').textContent = S.me; }
     const can = await user.can('data.write').catch(() => null);
-    if (can === false) { S.readOnly = true; toast('Bạn đang chỉ có quyền xem – nhờ chủ trang mời bằng email với quyền Editor để nhập liệu.', true); }
+    if (can === false) { S.readOnly = true; toast('Bạn đang chỉ có quyền xem – nhờ chủ trang mời bằng email với quyền Contributor để nhập liệu (không sửa được code trang; menu Share không có Contributor thì chọn Editor).', true); }
   }).catch(e => console.warn('user', e)).finally(() => { if (S.isOwner == null) { S.isOwner = false; applyAuth(); } });
   // tài khoản nhân viên nhập liệu
   db.doc('cfg/tk').onSnapshot(sn => { const d = (sn.exists && sn.data()) || {}; S.tk = Object.fromEntries(live(d.a)); S.tkEp = num(d.ep || 0); S.tkLoaded = true; applyAuth(); },
@@ -1354,7 +1354,7 @@ function viewAccounts(main) {
         bằng nick và mật khẩu (kể cả chủ trang); tên tài khoản tự ghi vào cột <b>Người tạo đơn</b>.
         Bấm <b>Sửa</b> để <b>phân quyền</b> cho từng tài khoản: chọn mẫu (Nhập liệu / Điều phối / Quản lý) rồi tích thêm hoặc bỏ từng quyền.
         Mục nào, nút nào không được cấp quyền thì tài khoản đó không thấy.</p>
-      <p class="hint" style="margin:0">Nhân viên vẫn cần được chủ trang mời vào trang (nút <b>Share</b>, mời bằng email, quyền <b>Editor</b>) mới mở được web;
+      <p class="hint" style="margin:0">Nhân viên vẫn cần được chủ trang mời vào trang (nút <b>Share</b>, mời bằng email, quyền <b>Contributor</b> – nhập liệu được, không sửa được code trang (menu Share không có Contributor thì chọn Editor)) mới mở được web;
         tài khoản ở đây để biết ai nhập và giới hạn chức năng.</p>
       ${first && !S.isOwner ? '<p class="muted">Chưa có tài khoản nào – chủ trang mở web để tạo tài khoản đầu tiên.</p>' : ''}
       ${list.length ? `<div class="tw"><table><thead><tr><th>Họ tên</th><th>Nick</th><th>Vai trò</th><th>Quyền được cấp</th><th>Trạng thái</th><th>Cập nhật</th><th></th></tr></thead><tbody>

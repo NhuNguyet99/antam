@@ -138,7 +138,7 @@ const Backend = (() => {
   };
   function dbError(e) {
     const code = e && e.code;
-    if (code === 'invalid_argument') return new ApiError(403, 'Không lưu được: bạn đang chỉ có quyền xem trang này. Nếu đã được mời làm Editor, nhờ chủ trang tắt chia sẻ "Anyone with the link" rồi tải lại trang.');
+    if (code === 'invalid_argument') return new ApiError(403, 'Không lưu được: bạn đang chỉ có quyền xem trang này. Nhờ chủ trang mời bằng email với quyền Contributor (nhập liệu, không sửa code; không có Contributor thì Editor); nếu đã được mời, nhờ chủ trang tắt chia sẻ "Anyone with the link" rồi tải lại trang.');
     if (code === 'quota_exceeded') return new ApiError(507, 'Kho dữ liệu đã đầy: ' + (e.message || ''));
     if (code === 'resource_exhausted') return new ApiError(429, 'Thao tác quá nhanh, hãy thử lại sau vài giây.');
     return new ApiError(503, 'Mất kết nối dữ liệu, hãy thử lại. ' + (e && e.message ? '(' + e.message + ')' : ''));
@@ -1268,7 +1268,7 @@ const Backend = (() => {
     }
     throw new ApiError(404, 'Không có chức năng này');
   }
-  // Mật khẩu quản lý của web Giao hàng An Tâm: người giao (cũng là Editor của trang) không vào được phần quản lý.
+  // Mật khẩu quản lý của web Giao hàng An Tâm: người giao (Contributor của trang) không vào được phần quản lý.
   // Kiểm tra ở trình duyệt – là khóa giao diện, không thay được phân quyền của claude.ai.
   async function adminApi(method, action, body) {
     const a = settings().admin || {};

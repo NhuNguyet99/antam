@@ -2122,12 +2122,12 @@ async function viewDrivers(main) {
       <b>Không giao được</b> và kho thấy kết quả ở bảng phân tuyến.<br>Tuyến của mỗi người = <b>tuyến thường chạy</b> dưới đây; ngày nào đổi người thì chọn lại ở cột
       <b>Người giao</b> trong phân tuyến của ngày đó.</div>
       ${GIAO_APP ? `<div class="callout small">Tài khoản người giao được <b>tạo / sửa / khóa ở web Kho An Tâm › Tài khoản giao hàng</b> và cập nhật sang đây mỗi lần kho
-        <b>Lưu phân tuyến</b> (tự chuyển sang, trong khoảng 1 giờ). Người giao chỉ được mời vào trang Giao hàng An Tâm này (email, quyền <b>Editor</b>, tắt "Anyone with the link") – không mời họ vào web Kho An Tâm.</div>`
+        <b>Lưu phân tuyến</b> (tự chuyển sang, trong khoảng 1 giờ). Người giao chỉ được mời vào trang Giao hàng An Tâm này (email, quyền <b>Contributor</b> – nhập liệu được, không sửa được code trang (menu Share không có Contributor thì chọn Editor), tắt "Anyone with the link") – không mời họ vào web Kho An Tâm.</div>`
       : GIAO_LINKED ? `<div class="callout small">Người giao dùng trang riêng <a href="${esc(GIAO_URL)}" target="_blank" rel="noopener"><b>Giao hàng An Tâm ↗</b></a> – mời họ vào trang đó
-        (email, quyền <b>Editor</b>, tắt "Anyone with the link"), <b>không mời vào web Kho An Tâm</b>. Tài khoản tạo / sửa ở đây tự chuyển sang mỗi lần
+        (email, quyền <b>Contributor</b> – nhập liệu được, không sửa được code trang (menu Share không có Contributor thì chọn Editor), tắt "Anyone with the link"), <b>không mời vào web Kho An Tâm</b>. Tài khoản tạo / sửa ở đây tự chuyển sang mỗi lần
         <b>Lưu</b> bảng Phân tuyến giao hàng (trong khoảng 1 giờ); kết quả giao, ảnh và vị trí xem ở trang Giao hàng An Tâm.</div>`
       : ONLINE ? `<div class="callout small">Người giao hàng chỉ được mời vào <b>trang Giao hàng An Tâm này</b> – <b>không mời họ vào web Kho An Tâm</b>.
-        Mời bằng <b>email</b> ở nút <i>Share</i> của trang, chọn quyền <b>Editor</b> (quyền Viewer/Commenter không bấm được "Đã giao" hay gửi ảnh), và để
+        Mời bằng <b>email</b> ở nút <i>Share</i> của trang, chọn <b>Contributor</b> (nhập liệu được, không sửa được code trang; menu Share không có Contributor thì chọn Editor; Viewer/Commenter không bấm được "Đã giao" hay gửi ảnh), và để
         <i>General access</i> ở chế độ <b>chỉ người được mời</b> (tắt "Anyone with the link").
         Trên điện thoại: mở link → bấm <b>🚚 Tôi là người giao hàng</b> → đăng nhập nick + PIN. Lần sau mở link sẽ vào thẳng tuyến của mình.</div>`
       : `<div class="card"><h3>Link web giao hàng</h3><div class="toolbar">${links.map(u => `<code class="access-url">${esc(u)}</code><button class="btn sm" data-copy="${esc(u)}">Sao chép</button>`).join('')}</div>
@@ -3172,7 +3172,7 @@ function openSnapshotUpdate() {
 // Người được mời nhưng trang đang bật link công khai (hoặc chỉ được quyền Viewer): giải thích rõ vì sao không lưu được
 function showReadOnlyBanner() {
   const el = $('#ro-banner');
-  el.innerHTML = 'Bạn đang có quyền <b>CHỈ XEM</b> trên trang này nên <b>không lưu, không nhập phiếu, không tải file lên được</b>. Nếu bạn đã được mời làm <b>Editor</b>: nhờ chủ trang mở <b>Share</b> → ở mục <i>General access</i> tắt <b>“Anyone with the link”</b> (chuyển về chỉ người được mời) → rồi bạn tải lại trang. Khi trang đang bật link công khai, claude.ai chỉ cho người được mời qua email quyền xem.';
+  el.innerHTML = 'Bạn đang có quyền <b>CHỈ XEM</b> trên trang này nên <b>không lưu, không nhập phiếu, không tải file lên được</b>. Nếu bạn đã được mời làm <b>Contributor</b> (hoặc Editor): nhờ chủ trang mở <b>Share</b> → ở mục <i>General access</i> tắt <b>“Anyone with the link”</b> (chuyển về chỉ người được mời) → rồi bạn tải lại trang. Khi trang đang bật link công khai, claude.ai chỉ cho người được mời qua email quyền xem.';
   el.hidden = false;
 }
 

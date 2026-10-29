@@ -169,8 +169,9 @@ Link web giao hàng:
     xem ở **Người giao & kết quả giao** của trang này.
   - Muốn Lưu là người giao thấy ngay, không cần bước dán: dùng **bản chạy trên máy** (`/giao-hang` dùng chung dữ liệu với web kho).
   - Người giao mở trang → **🚚 Tôi là người giao hàng** → nick + PIN (lần sau vào thẳng tuyến của mình).
-  - Mời người giao **chỉ vào trang Giao hàng An Tâm** bằng email ở nút *Share*, quyền **Editor**, và tắt "Anyone with the link"
-    (tài khoản claude.ai cá nhân không có quyền Contributor; Viewer/Commenter chỉ xem, không bấm "Đã giao" hay gửi ảnh được).
+  - Mời người giao **chỉ vào trang Giao hàng An Tâm** bằng email ở nút *Share*, quyền **Contributor** (nhập liệu, gửi ảnh được; không sửa được code trang – trang khai báo
+    `assets: {upload: "interact"}`), và tắt "Anyone with the link". Menu Share không có Contributor (tài khoản claude.ai cá nhân, ghi nhận 15/10)
+    thì phải chọn **Editor** – Editor sửa được cả code trang. Viewer/Commenter chỉ xem, không bấm "Đã giao" hay gửi ảnh được.
     Không mời người giao vào web Kho An Tâm.
   - Nick + PIN và mật khẩu quản lý được kiểm tra ở trình duyệt: chúng giữ mỗi người ở đúng phần của mình trên giao diện, không phải
     lớp bảo mật như bản chạy trên máy – người được mời Editor vẫn có quyền Editor của trang Giao hàng An Tâm trên claude.ai.
