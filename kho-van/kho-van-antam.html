@@ -144,6 +144,42 @@ tr.sum td { font-weight: 700; }
 .lb button { background: rgba(255, 255, 255, .14); color: #fff; border: 0; border-radius: 9px; padding: 8px 14px; }
 @media (prefers-reduced-motion: no-preference) { .dots::after { content: "…"; animation: blink 1s steps(3) infinite; } @keyframes blink { 50% { opacity: .3; } } }
 </style>
+<style>
+/* chữ to hơn 15% trên máy tính */
+@media (min-width: 1024px) {
+  body { font-size: 20.5px; }
+  .small { font-size: 18px; }
+  .mono { font-size: 17px; }
+  .login label { font-size: 18px; }
+  .err { font-size: 18.5px; }
+  .brand .mark { font-size: 18px; }
+  .brand h1 { font-size: 26.5px; }
+  .chip { font-size: 17px; }
+  .kpi b { font-size: 33.5px; }
+  .kpi span { font-size: 17px; }
+  .card h3 { font-size: 20.5px; }
+  table { font-size: 18.5px; }
+  th { font-size: 17px; }
+  .qty span { font-size: 17px; }
+  .rep-h b { font-size: 22px; }
+  .rep-h .sub { font-size: 17px; }
+  .rep-h button { font-size: 18px; }
+  .dept-h button { font-size: 18px; }
+  .dept .big { font-size: 18px; }
+  .dept .big b { font-size: 35.5px; }
+  .dept table { font-size: 17px; }
+  .dept td.num b { font-size: 18.5px; }
+  .msg .tool { font-size: 16.5px; }
+  .suggest button { font-size: 18px; }
+  .dock-h b { font-size: 20.5px; }
+  .dock-h .ctx { font-size: 16.5px; }
+  .dock-h button { font-size: 18px; }
+  .dock .msg { font-size: 19.5px; }
+  .dock .suggest button { font-size: 17px; }
+  .dock .empty { font-size: 18.5px; }
+  .ph .wait { font-size: 15px; }
+}
+</style>
 
 <div class="wrap">
   <section class="login" id="login" hidden>

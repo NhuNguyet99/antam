@@ -292,3 +292,31 @@ body.locked #sidebar, body.locked #topbar, body.locked #ro-banner { display: non
 .perm-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(230px, 1fr)); gap: 10px 14px; margin-top: 8px; }
 .perm-grid fieldset { border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 10px 8px; margin: 0; display: grid; gap: 4px; }
 .perm-grid legend { font-size: 14.5px; font-weight: 700; color: var(--muted); padding: 0 4px; }
+
+/* chữ to hơn 15% trên máy tính */
+@media (min-width: 1024px) {
+  :root { font-size: 19.5px; }
+  .brand-sub { font-size: 16.5px; }
+  .nav-group { font-size: 15px; }
+  #page-title { font-size: 23.5px; }
+  .btn.sm { font-size: 18px; }
+  label.field { font-size: 17px; }
+  label.field > input, label.field > select, label.field > textarea, label.field > .combo { font-size: 19.5px; }
+  .card h3 { font-size: 20.5px; }
+  .small { font-size: 17px; }
+  .hint { font-size: 17px; }
+  table.data { font-size: 18.5px; }
+  .badge { font-size: 16.5px; }
+  .kpi .k-label { font-size: 17px; }
+  .kpi .k-val { font-size: 33.5px; }
+  .notice-btn .nb { font-size: 16.5px; }
+  .notice-list .at { font-size: 16.5px; }
+  .lines-table .stock-hint { font-size: 16.5px; }
+  .wh-badge { font-size: 17px; }
+  .view-badge { font-size: 17px; }
+  kbd { font-size: 16.5px; }
+  .access-url { font-size: 20.5px; }
+  .ro-banner { font-size: 18.5px; }
+  .login-card h2 { font-size: 27.5px; }
+  .perm-grid legend { font-size: 16.5px; }
+}

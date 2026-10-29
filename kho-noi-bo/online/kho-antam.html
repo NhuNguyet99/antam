@@ -295,6 +295,34 @@ body.locked #sidebar, body.locked #topbar, body.locked #ro-banner { display: non
 .perm-grid fieldset { border: 1px solid var(--line); border-radius: var(--radius); padding: 6px 10px 8px; margin: 0; display: grid; gap: 4px; }
 .perm-grid legend { font-size: 14.5px; font-weight: 700; color: var(--muted); padding: 0 4px; }
 
+/* chữ to hơn 15% trên máy tính */
+@media (min-width: 1024px) {
+  :root { font-size: 19.5px; }
+  .brand-sub { font-size: 16.5px; }
+  .nav-group { font-size: 15px; }
+  #page-title { font-size: 23.5px; }
+  .btn.sm { font-size: 18px; }
+  label.field { font-size: 17px; }
+  label.field > input, label.field > select, label.field > textarea, label.field > .combo { font-size: 19.5px; }
+  .card h3 { font-size: 20.5px; }
+  .small { font-size: 17px; }
+  .hint { font-size: 17px; }
+  table.data { font-size: 18.5px; }
+  .badge { font-size: 16.5px; }
+  .kpi .k-label { font-size: 17px; }
+  .kpi .k-val { font-size: 33.5px; }
+  .notice-btn .nb { font-size: 16.5px; }
+  .notice-list .at { font-size: 16.5px; }
+  .lines-table .stock-hint { font-size: 16.5px; }
+  .wh-badge { font-size: 17px; }
+  .view-badge { font-size: 17px; }
+  kbd { font-size: 16.5px; }
+  .access-url { font-size: 20.5px; }
+  .ro-banner { font-size: 18.5px; }
+  .login-card h2 { font-size: 27.5px; }
+  .perm-grid legend { font-size: 16.5px; }
+}
+
 /* Web giao hàng An Tâm (điện thoại trước) – dùng chung cho trang /giao-hang và chế độ giao hàng của bản online */
 #gh-root {
   --gh-bg: #f2f4f3;
@@ -482,6 +510,49 @@ a.gh-btn { display: flex; align-items: center; justify-content: center; text-ali
 .gh-trk-st { font-size: 15.5px; color: var(--gh-muted); }
 .gh-trk.on .gh-trk-st { color: var(--gh-ok); font-weight: 600; }
 .gh-trk p { margin: 0; }
+
+/* chữ to hơn 15% trên máy tính */
+@media (min-width: 1024px) {
+  #gh-root { font-size: 20.5px; }
+  .gh-btn.sm { font-size: 19.5px; }
+  .gh-btn.big { font-size: 22px; }
+  .gh-logo { font-size: 66px; }
+  .gh-login h1 { font-size: 30.5px; }
+  .gh-login label { font-size: 19.5px; }
+  .gh-login input, .gh-search, .gh-fail-box input { font-size: 22px; }
+  .gh-err { font-size: 19.5px; }
+  .gh-avatar { font-size: 33.5px; }
+  .gh-sub { font-size: 16.5px; }
+  .gh-sum-line { font-size: 19.5px; }
+  .gh-tab { font-size: 19.5px; }
+  .gh-route-code { font-size: 27.5px; }
+  .gh-route-name { font-size: 19.5px; }
+  .gh-route-count b { font-size: 27.5px; }
+  .gh-load summary { font-size: 19.5px; }
+  .gh-stt { font-size: 18px; }
+  .gh-stop-name b { font-size: 22px; }
+  .gh-codes { font-size: 18px; }
+  .gh-note { font-size: 19.5px; }
+  .gh-qty small { font-size: 16.5px; }
+  .gh-qty.big b { font-size: 23.5px; }
+  .gh-badge { font-size: 18px; }
+  .gh-chip { font-size: 18px; }
+  .gh-search { font-size: 20.5px; }
+  .gh-small { font-size: 18px; }
+  .gh-input { font-size: 22px; }
+  .gh-locline { font-size: 19.5px; }
+  .gh-linkbtn { font-size: 19.5px; }
+  .gh-gps { font-size: 19.5px; }
+  .gh-check { font-size: 19.5px; }
+  .gh-ph-x { font-size: 18px; }
+  .gh-dialog-box p { font-size: 22px; }
+  .gh-card h3 { font-size: 20.5px; }
+  .gh-day span { font-size: 18px; }
+  .gh-empty-ico { font-size: 55px; }
+  .gh-toast { font-size: 19.5px; }
+  .gh-steps { font-size: 19.5px; }
+  .gh-trk-st { font-size: 18px; }
+}
 </style>
 <div id="app">
   <aside id="sidebar">
