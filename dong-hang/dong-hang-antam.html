@@ -262,6 +262,8 @@ tbody tr.grp:hover td { background: var(--accent-soft); }
   #print-area .rept th, #print-area .rept td { padding: 3px 2px; }
   #print-area .rept th.p { min-width: 0; max-width: none; font-size: 9.5px; }
   #print-area .rept th.rl, #print-area .rept td.rl { width: 84px; min-width: 84px; white-space: normal; }
+  #print-area .rept tr.r-tui td, #print-area .rept tr.r-cai td { font-size: 15px; }
+  #print-area .rept th.gh { font-size: 11px; white-space: normal; overflow-wrap: anywhere; }
 }
 .prs label { display: flex; gap: 8px; align-items: flex-start; cursor: pointer; }
 .prs label input { margin-top: 3px; }
@@ -326,6 +328,8 @@ body.tbl-max #d-table > .hint { display: none; }
 .rept td.pc { font-family: var(--f-num); font-variant-numeric: tabular-nums; }
 .rept tr.r-tui td.pc { color: var(--bad); font-weight: 600; }
 .rept tr.r-cai td { font-weight: 700; border-top: 2px solid var(--line); }
+/* dòng TỔNG TÚI / TỔNG CÁI chữ to cho dễ đọc khi đóng hàng */
+.rept tr.r-tui td, .rept tr.r-cai td { font-size: 1.3em; font-weight: 700; }
 .rept tr.r-tuyen td.rl { color: var(--crust); }
 .rept input.q { width: 66px; }
 .zero { color: var(--muted) !important; font-weight: 400 !important; }
@@ -2618,7 +2622,7 @@ function printablePage(title, body, autoPrint, land = true) {
     .pbar button{font:inherit;font-weight:700;padding:6px 16px;border-radius:6px;border:0;background:#fff;color:#0f6e5a;cursor:pointer}
     @media print{.pbar{display:none}}
     .rep{grid-template-columns:minmax(0,1fr)} .rept{table-layout:fixed;font-size:12px} .rept th,.rept td{padding:3px 2px}
-    .rept th.p{min-width:0;max-width:none;font-size:11.5px} .rept th.rl,.rept td.rl{width:84px;min-width:84px;white-space:normal}</style></head><body>${autoPrint ? '<div class="pbar"><button onclick="print()">🖨 In</button><span>Hộp thoại in tự mở; nếu không, bấm nút In hoặc Ctrl+P (khổ A4 ngang).</span></div>' : ''}${body}${autoPrint ? '<script>addEventListener("load",function(){setTimeout(function(){print()},400)})<\/script>' : ''}</body></html>`;
+    .rept th.p{min-width:0;max-width:none;font-size:11.5px} .rept th.rl,.rept td.rl{width:84px;min-width:84px;white-space:normal} .rept tr.r-tui td,.rept tr.r-cai td{font-size:15px} .rept th.gh{font-size:11px;white-space:normal;overflow-wrap:anywhere}</style></head><body>${autoPrint ? '<div class="pbar"><button onclick="print()">🖨 In</button><span>Hộp thoại in tự mở; nếu không, bấm nút In hoặc Ctrl+P (khổ A4 ngang).</span></div>' : ''}${body}${autoPrint ? '<script>addEventListener("load",function(){setTimeout(function(){print()},400)})<\/script>' : ''}</body></html>`;
 }
 async function saveFile(filename, data, type) {
   const dl = await window.claude.use('downloads');
