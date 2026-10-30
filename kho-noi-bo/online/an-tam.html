@@ -3328,7 +3328,10 @@ function metricOptions() {
   }
   return html + (open ? '</optgroup>' : '');
 }
-const TK = Object.assign({ from: addDays(today(), -29), to: today(), metric: 'banh', src: '' }, store('tk') || {});
+// bộ lọc Thống kê lưu riêng ở "tkf" (trước đây dùng chung khóa "tk" với phiên đăng nhập → đăng xuất xong mở Thống kê lại ghi phiên cũ về)
+const TK = Object.assign({ from: addDays(today(), -29), to: today(), metric: 'banh', src: '' },
+  (({ from, to, metric, src }) => JSON.parse(JSON.stringify({ from, to, metric, src })))(store('tkf') || store('tk') || {}));
+(() => { const ss = store('tk'); if (ss && ('from' in ss || 'metric' in ss)) store('tk', ss.id ? { id: ss.id, sig: ss.sig, iat: ss.iat, exp: ss.exp } : null); })();
 const TK_SRC = [['', 'Tất cả'], ['don', '📦 Đơn hàng ngày'], ['t123', '🥙 Tuyến kebab 123']];
 // đơn từng ngày theo TK.src: Đơn hàng ngày (ngay/<ngày>) và / hoặc khách Tuyến kebab 123 đang hoạt động (t123/<ngày>)
 async function loadRange(from, to) {
@@ -3371,7 +3374,7 @@ function viewStats(main) {
       <div class="field">Gồm<div class="seg" id="t-src">${TK_SRC.map(([k, l]) => `<button data-s="${k}" class="${(TK.src || '') === k ? 'on' : ''}">${l}</button>`).join('')}</div></div>
     </div><div id="t-body"><div class="card empty"><div class="big">Đang tính…</div></div></div>`;
   const run = async () => {
-    store('tk', TK);
+    store('tkf', TK);
     const len = Math.max(1, Math.round((new Date(TK.to) - new Date(TK.from)) / 864e5) + 1);
     const pFrom = addDays(TK.from, -len), pTo = addDays(TK.from, -1);
     const [days, prev] = await Promise.all([loadRange(TK.from, TK.to), loadRange(pFrom, pTo)]);
@@ -3446,7 +3449,7 @@ function drawStats(days, prev, len) {
     $('#t-ch-title').textContent = m[1] + ' mỗi ngày';
     drawBars($('#t-chart'), dates.map(d => { const x = st.perDay[d] || {}; return { d, v: pid ? (x.prod || {})[pid] || 0 : x[m[0]] || 0 }; }), pid ? 'cái' : m[3]);
   };
-  $('#t-metric').onchange = e => { TK.metric = e.target.value; store('tk', TK); drawCh(); };
+  $('#t-metric').onchange = e => { TK.metric = e.target.value; store('tkf', TK); drawCh(); };
   drawCh();
 }
 // Biểu đồ cột 1 dãy số theo ngày (rê chuột / chạm vào cột để xem số)
