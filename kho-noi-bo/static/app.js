@@ -3455,9 +3455,10 @@ async function pullDhInbox1() {
       try {
         if (!GIAO_APP && S.dirty && x.doc && location.hash.includes(x.doc)) continue; // đang sửa chính bảng này: để lần sau
         const p = parseOrderSheet(String(x.tsv).split('\n').map(l => l.split('\t')));
-        let docId = GIAO_APP ? `rt-${x.date}-${dhSrc(x.id)}` : x.doc || '';
+        // trang gộp: nhiều máy (kho + người giao) cùng nhận một lúc → mã bảng cố định theo đơn để không sinh bảng trùng
+        let docId = GIAO_APP ? `rt-${x.date}-${dhSrc(x.id)}` : x.doc || (window.ANTAM_HOP ? `rt-${x.date}-${dhSrc(x.id)}` : '');
         const old = docId ? await api('GET', '/docs/' + encodeURIComponent(docId)).catch(() => null) : null;
-        if (!old && !GIAO_APP) docId = '';
+        if (!old && !GIAO_APP && !window.ANTAM_HOP) docId = '';
         if (old && text0((old.data || {}).dhStamp) > text0(x.stamp)) { await api('POST', '/dh-inbox', { id: x.id, stamp: x.stamp, doc: docId }); continue; }
         if (!p.rows.length && !old) { await api('POST', '/dh-inbox', { id: x.id, stamp: x.stamp, doc: '' }); continue; }
         const od = (old && old.data) || {};
