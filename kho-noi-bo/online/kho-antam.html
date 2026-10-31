@@ -48,6 +48,7 @@ a { color: var(--brand); }
 }
 #nav a:hover { background: #1c3a30; color: #fff; }
 #nav a.active { background: var(--brand); color: #fff; }
+.nav-count { display: inline-block; min-width: 1.5em; padding: 0 6px; margin-left: 6px; border-radius: 99px; background: #f0b552; color: #2a1a00; font-size: .82em; font-weight: 700; text-align: center; }
 .nav-group { font-size: 13px; text-transform: uppercase; letter-spacing: .06em; color: #7f9c92; padding: 14px 10px 4px; }
 
 #content { flex: 1; min-width: 0; display: flex; flex-direction: column; }
@@ -572,6 +573,7 @@ a.gh-btn { display: flex; align-items: center; justify-content: center; text-ali
       <div class="nav-group">Nghiệp vụ hằng ngày</div>
       <a href="#/phieu/moi?type=N" data-route="phieu/moi">Lập phiếu</a>
       <a href="#/phieu" data-route="phieu">Danh sách phiếu</a>
+      <a href="#/phieu?status=pending" data-route="duyet" id="nav-duyet" hidden>Duyệt phiếu <span class="nav-count" id="nav-duyet-n" hidden></span></a>
       <a href="#/so-nx" data-route="so-nx">Sổ nhập – xuất</a>
       <a href="#/phan-tuyen" data-route="phan-tuyen" data-only="TP">Phân tuyến giao hàng</a>
       <div class="nav-group" data-only="NVL">Kế hoạch mua hàng</div>
@@ -647,6 +649,9 @@ window.ANTAM_ONLINE = true;
 const Backend = (() => {
   // Trang xem công khai (build --view): đọc số liệu chụp sẵn trong trang, không ghi được
   const VIEW = !!window.ANTAM_VIEW;
+  // Trang gộp An Tâm (Đóng hàng + Kho + Giao hàng chung 1 kho dữ liệu): đọc thẳng đơn web Đóng hàng để ở "khoout"
+  const HOP = !!window.ANTAM_HOP;
+  const DH_IN = HOP ? 'khoout' : 'dhin';
   const SKELETON_RESET = (() => { const el = document.head && document.head.querySelector('style'); return el ? el.textContent : ''; })();
   const TYPE_PREFIX = { N: 'PNK', X: 'PXK', D: 'DCK' };
   const TYPE_LABEL = { N: 'Nhập', X: 'Xuất', D: 'Điều chỉnh' };
@@ -1743,7 +1748,7 @@ const Backend = (() => {
         const cur = docData(await dbx().doc('nvpub/list').get());
         if (!cur || JSON.stringify(cur.list) !== JSON.stringify(pub)) await write(() => dbx().doc('nvpub/list').set({ list: pub, at: nowStr() }));
       } catch (e) { console.warn('nvpub', e); }
-      const snap = await dbx().collection('dhin').limit(60).get();
+      const snap = await dbx().collection(DH_IN).limit(60).get();
       return snap.docs.map(d => Object.assign({}, d.data() || {}, { id: d.id }))
         .filter(x => x.stamp && typeof x.tsv === 'string' && validDateOk(x.date) && (done[x.id] || {}).stamp !== x.stamp)
         .map(x => Object.assign(x, { doc: (done[x.id] || {}).doc || '' }))
@@ -2633,6 +2638,11 @@ const Backend = (() => {
       return snap;
     },
     onRemote(fn) { st.onRemote = fn; },
+    // trang gộp: báo ngay khi web Đóng hàng gửi đơn mới (khoout/index đổi)
+    watchDh(fn) { if (!HOP || VIEW || !st.db) return; let first = true; st.globalSubs.push(st.db.doc('khoout/index').onSnapshot(() => { if (first) { first = false; return; } fn(); }, () => {})); },
+    // chế độ người giao: tải sẵn các bảng phân tuyến (để tự nhận đơn web Đóng hàng cũng chạy được ở điện thoại người giao)
+    prepGiao() { return ensureGiaoData(); },
+    get hop() { return HOP; },
   };
 })();
 </script>
@@ -3427,6 +3437,7 @@ const ROUTE_PERM = { 'phieu/moi': ['pN', 'pX', 'pD'], phieu: ['phieu', 'pN', 'pX
 const routeOk = path => { const key = /^phieu\/moi/.test(path) ? 'phieu/moi' : path.split('/')[0]; const need = ROUTE_PERM[key]; return !need || need.some(can); };
 function applyPerms() {
   $$('#nav a[data-route]').forEach(a => { a.hidden = !routeOk(a.dataset.route); });
+  const nd = $('#nav-duyet'); if (nd) nd.hidden = !(S.account && can('duyet')); // mục Duyệt phiếu: chỉ người có quyền duyệt phiếu điều chỉnh
   $$('#wh-switch button').forEach(b => { b.hidden = !can('kho' + b.dataset.wh); });
 }
 const HANDOVER_REASONS = ['Bàn giao ca', 'Bàn giao thủ kho (nghỉ phép/nghỉ việc)', 'Bàn giao cuối ngày', 'Chuyển kho', 'Khác'];
@@ -3821,6 +3832,17 @@ function parseHash() {
   const [path, qs] = h.split('?');
   return { path: path.replace(/\/$/, ''), q: Object.fromEntries(new URLSearchParams(qs || '')) };
 }
+let pendTimer = null; const pendLast = {}; // số phiếu chờ duyệt lần trước của từng kho
+async function refreshPend() {
+  const n = $('#nav-duyet-n'); if (!n) return;
+  if (!S.account || !can('duyet') || !S.meta) { n.hidden = true; return; }
+  if (!pendTimer && ONLINE) pendTimer = setInterval(refreshPend, 30000);
+  const r = await api('GET', '/pending').catch(() => null); if (!r) return;
+  n.textContent = r.count; n.hidden = !r.count;
+  const wh = S.wh, before = pendLast[wh];
+  if (before !== undefined && r.count > before) toast(`Có ${r.count - before} phiếu điều chỉnh mới chờ bạn duyệt (mục Duyệt phiếu).`);
+  pendLast[wh] = r.count;
+}
 async function render() {
   const { path, q } = parseHash();
   document.body.classList.remove('nav-open');
@@ -3828,8 +3850,10 @@ async function render() {
   if (S.account && !can('kho' + S.wh)) { const other = S.wh === 'TP' ? 'NVL' : 'TP'; if (can('kho' + other)) return switchWh(other); }
   $$('#nav a').forEach(a => {
     const r = a.dataset.route;
-    a.classList.toggle('active', r === '' ? path === '' : (path === r || (path.startsWith(r + '/') && r !== 'phieu') || (r === 'phieu' && /^phieu\/(?!moi$)[\w-]+$/.test(path))));
+    const pend = path === 'phieu' && q.status === 'pending';
+    a.classList.toggle('active', r === 'duyet' ? pend : r === '' ? path === '' : ((path === r && !(r === 'phieu' && pend)) || (path.startsWith(r + '/') && r !== 'phieu') || (r === 'phieu' && /^phieu\/(?!moi$)[\w-]+$/.test(path))));
   });
+  refreshPend();
   const main = $('#main');
   if (!routeOk(path)) { main.innerHTML = '<div class="callout warn">Tài khoản của bạn chưa được cấp quyền vào mục này – nhờ Quản lý phân quyền ở mục <b>Tài khoản nhân viên</b>.</div>'; return; }
   main.innerHTML = '<p class="muted">Đang tải…</p>';
@@ -5472,6 +5496,9 @@ async function viewDrivers(main) {
       : GIAO_LINKED ? `<div class="callout small">Người giao dùng trang riêng <a href="${esc(GIAO_URL)}" target="_blank" rel="noopener"><b>Giao hàng An Tâm ↗</b></a> – mời họ vào trang đó
         (email, quyền <b>Contributor</b> – nhập liệu được, không sửa được code trang (menu Share không có Contributor thì chọn Editor), tắt "Anyone with the link"), <b>không mời vào web Kho An Tâm</b>. Tài khoản tạo / sửa ở đây tự chuyển sang mỗi lần
         <b>Lưu</b> bảng Phân tuyến giao hàng (trong khoảng 1 giờ); kết quả giao, ảnh và vị trí xem ở trang Giao hàng An Tâm.</div>`
+      : window.ANTAM_HOP ? `<div class="callout small">Người giao dùng <b>chung trang An Tâm này</b> (Đóng hàng + Kho + Giao hàng): mời họ bằng <b>email</b> ở nút <i>Share</i>, quyền <b>Contributor</b>
+        (menu Share không có Contributor thì chọn Editor), để <i>General access</i> ở chế độ <b>chỉ người được mời</b>.
+        Trên điện thoại: mở link → chọn <b>🚚 Giao hàng</b> → đăng nhập nick + PIN. Lần sau mở link sẽ vào thẳng tuyến của mình; kết quả giao và ảnh hiện ngay ở Phân tuyến và web Đóng hàng.</div>`
       : ONLINE ? `<div class="callout small">Người giao hàng chỉ được mời vào <b>trang Giao hàng An Tâm này</b> – <b>không mời họ vào web Kho An Tâm</b>.
         Mời bằng <b>email</b> ở nút <i>Share</i> của trang, chọn <b>Contributor</b> (nhập liệu được, không sửa được code trang; menu Share không có Contributor thì chọn Editor; Viewer/Commenter không bấm được "Đã giao" hay gửi ảnh), và để
         <i>General access</i> ở chế độ <b>chỉ người được mời</b> (tắt "Anyone with the link").
@@ -6722,7 +6749,10 @@ async function boot() {
     document.body.classList.add('gh-mode');
     try { await Backend.init(); } catch (e) { giaoRoot().innerHTML = `<p style="padding:20px">Không kết nối được dữ liệu: ${esc(e.message)}</p>`; return; }
     Backend.onRemote(() => GiaoHang.onRemoteChange());
-    return GiaoHang.start(giaoRoot(), { onExit: exitGiaoMode });
+    const started = GiaoHang.start(giaoRoot(), { onExit: exitGiaoMode });
+    // trang gộp: điện thoại người giao cũng tự nhận đơn web Đóng hàng vừa gửi (không cần chờ web kho mở)
+    if (window.ANTAM_HOP) Backend.prepGiao().then(() => { pullDhInbox(); Backend.watchDh(pullDhInbox); }).catch(e => console.warn('dhin', e));
+    return started;
   }
   return bootKho();
 }
@@ -6767,13 +6797,14 @@ async function bootKho() {
   if (!S.user && !VIEW && !S.account) askUser();
   checkNotices();
   pullDhInbox();
+  Backend.watchDh(pullDhInbox);
 }
 
 /* ============================================================ nhận đơn hàng từ web Đóng hàng An Tâm */
 // Web Đóng hàng chia tuyến sẵn cho đơn hàng ngày và tuyến kebab 123; tác vụ định kỳ chép vào "dhin" của trang này.
 // Web kho tự lập (hoặc cập nhật) bảng Phân tuyến giao hàng của ngày, giữ tuyến kho đã chọn tay, lưu, rồi để sẵn gói
 // chuyển tiếp sang Giao hàng An Tâm – không cần dán sheet.
-const DH_EVERY = 120000;
+const DH_EVERY = window.ANTAM_HOP ? 30000 : 120000; // trang gộp: 30 giây (và nhận ngay khi web Đóng hàng gửi)
 let dhTimer = null, dhBusy = false;
 // Trang Giao hàng An Tâm cũng nhận thẳng (tác vụ chép cùng gói vào "dhin" của trang giao hàng): tự lập bảng phân tuyến
 // kèm người giao từng tuyến, không cần chờ web kho mở – mỗi người giao thấy ngay tuyến của mình.
@@ -6794,9 +6825,10 @@ async function pullDhInbox1() {
       try {
         if (!GIAO_APP && S.dirty && x.doc && location.hash.includes(x.doc)) continue; // đang sửa chính bảng này: để lần sau
         const p = parseOrderSheet(String(x.tsv).split('\n').map(l => l.split('\t')));
-        let docId = GIAO_APP ? `rt-${x.date}-${dhSrc(x.id)}` : x.doc || '';
+        // trang gộp: nhiều máy (kho + người giao) cùng nhận một lúc → mã bảng cố định theo đơn để không sinh bảng trùng
+        let docId = GIAO_APP ? `rt-${x.date}-${dhSrc(x.id)}` : x.doc || (window.ANTAM_HOP ? `rt-${x.date}-${dhSrc(x.id)}` : '');
         const old = docId ? await api('GET', '/docs/' + encodeURIComponent(docId)).catch(() => null) : null;
-        if (!old && !GIAO_APP) docId = '';
+        if (!old && !GIAO_APP && !window.ANTAM_HOP) docId = '';
         if (old && text0((old.data || {}).dhStamp) > text0(x.stamp)) { await api('POST', '/dh-inbox', { id: x.id, stamp: x.stamp, doc: docId }); continue; }
         if (!p.rows.length && !old) { await api('POST', '/dh-inbox', { id: x.id, stamp: x.stamp, doc: '' }); continue; }
         const od = (old && old.data) || {};
@@ -6839,6 +6871,8 @@ async function pullDhInbox1() {
     } catch (e) { console.warn('dhin render', e); }
     return;
   }
+  // trang gộp, điện thoại người giao: chỉ vẽ lại danh sách giao
+  if (document.body.classList.contains('gh-mode')) { GiaoHang.onRemoteChange(); return; }
   toast('Đã tự nhận từ web Đóng hàng: ' + got.join('; ') + (GIAO_LINKED ? ' – sẽ tự chuyển sang Giao hàng An Tâm' : ''));
   if (!S.dirty && location.hash.startsWith('#/phan-tuyen')) render();
 }

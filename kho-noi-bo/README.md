@@ -10,6 +10,7 @@
 > - Trang cũ **Đóng hàng An Tâm** (FGE3VTLud2r3LnEjm5nkLK) và **Giao hàng An Tâm** (6bVzsWLxPdkdCKF687Bnky) chỉ còn trang báo chuyển
 >   (dữ liệu cũ giữ nguyên, đã chép sang trang chung kèm 75 ảnh giao hàng). Các mục dưới nói về `dhin`, `giaoin`, `giaokq`, `giaoanh`,
 >   tác vụ chép giữa các trang là cách làm **trước khi gộp**.
+> - Web Kho: mục **Duyệt phiếu** trên menu (chỉ tài khoản có quyền duyệt) kèm số phiếu điều chỉnh đang chờ, tự cập nhật mỗi 30 giây và báo khi có phiếu mới.
 > - Mời nhân viên đóng hàng và người giao vào trang chung (email, quyền **Contributor**, chỉ người được mời).
 
 Web nội bộ thay cho 2 file Excel quản lý kho, giữ nguyên quy trình và mẫu phiếu đang dùng, nhiều người nhập cùng lúc

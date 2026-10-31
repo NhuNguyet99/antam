@@ -81,6 +81,7 @@ const ROUTE_PERM = { 'phieu/moi': ['pN', 'pX', 'pD'], phieu: ['phieu', 'pN', 'pX
 const routeOk = path => { const key = /^phieu\/moi/.test(path) ? 'phieu/moi' : path.split('/')[0]; const need = ROUTE_PERM[key]; return !need || need.some(can); };
 function applyPerms() {
   $$('#nav a[data-route]').forEach(a => { a.hidden = !routeOk(a.dataset.route); });
+  const nd = $('#nav-duyet'); if (nd) nd.hidden = !(S.account && can('duyet')); // mục Duyệt phiếu: chỉ người có quyền duyệt phiếu điều chỉnh
   $$('#wh-switch button').forEach(b => { b.hidden = !can('kho' + b.dataset.wh); });
 }
 const HANDOVER_REASONS = ['Bàn giao ca', 'Bàn giao thủ kho (nghỉ phép/nghỉ việc)', 'Bàn giao cuối ngày', 'Chuyển kho', 'Khác'];
@@ -475,6 +476,17 @@ function parseHash() {
   const [path, qs] = h.split('?');
   return { path: path.replace(/\/$/, ''), q: Object.fromEntries(new URLSearchParams(qs || '')) };
 }
+let pendTimer = null; const pendLast = {}; // số phiếu chờ duyệt lần trước của từng kho
+async function refreshPend() {
+  const n = $('#nav-duyet-n'); if (!n) return;
+  if (!S.account || !can('duyet') || !S.meta) { n.hidden = true; return; }
+  if (!pendTimer && ONLINE) pendTimer = setInterval(refreshPend, 30000);
+  const r = await api('GET', '/pending').catch(() => null); if (!r) return;
+  n.textContent = r.count; n.hidden = !r.count;
+  const wh = S.wh, before = pendLast[wh];
+  if (before !== undefined && r.count > before) toast(`Có ${r.count - before} phiếu điều chỉnh mới chờ bạn duyệt (mục Duyệt phiếu).`);
+  pendLast[wh] = r.count;
+}
 async function render() {
   const { path, q } = parseHash();
   document.body.classList.remove('nav-open');
@@ -482,8 +494,10 @@ async function render() {
   if (S.account && !can('kho' + S.wh)) { const other = S.wh === 'TP' ? 'NVL' : 'TP'; if (can('kho' + other)) return switchWh(other); }
   $$('#nav a').forEach(a => {
     const r = a.dataset.route;
-    a.classList.toggle('active', r === '' ? path === '' : (path === r || (path.startsWith(r + '/') && r !== 'phieu') || (r === 'phieu' && /^phieu\/(?!moi$)[\w-]+$/.test(path))));
+    const pend = path === 'phieu' && q.status === 'pending';
+    a.classList.toggle('active', r === 'duyet' ? pend : r === '' ? path === '' : ((path === r && !(r === 'phieu' && pend)) || (path.startsWith(r + '/') && r !== 'phieu') || (r === 'phieu' && /^phieu\/(?!moi$)[\w-]+$/.test(path))));
   });
+  refreshPend();
   const main = $('#main');
   if (!routeOk(path)) { main.innerHTML = '<div class="callout warn">Tài khoản của bạn chưa được cấp quyền vào mục này – nhờ Quản lý phân quyền ở mục <b>Tài khoản nhân viên</b>.</div>'; return; }
   main.innerHTML = '<p class="muted">Đang tải…</p>';
