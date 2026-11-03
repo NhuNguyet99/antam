@@ -2870,12 +2870,12 @@ async function viewBom(main) {
     const none = tps.filter(t => t.active && !has.has(t.code));
     $('#b-list').innerHTML = `<div class="table-wrap"><table class="data"><thead><tr><th>Mã thành phẩm</th><th>Tên thành phẩm</th><th>ĐVT</th><th>Định mức cho 1 ĐVT thành phẩm</th>
       <th class="num">Giá NVL / ĐVT (đ)</th><th>Ghi chú</th><th></th></tr></thead><tbody>
-      ${rows.map(b => `<tr class="clickable" data-code="${esc(b.code)}"><td class="nowrap"><b>${esc(b.code)}</b></td><td>${esc(b.name)}</td><td>${esc(b.unit)}</td>
+      ${rows.map(b => `<tr class="clickable" data-code="${esc(b.code)}"><td class="nowrap"><b>${esc(b.code)}</b>${VIEW ? '' : '<div style="margin-top:6px"><button class="btn sm" data-edit>✏ Sửa định mức</button></div>'}</td><td>${esc(b.name)}</td><td>${esc(b.unit)}</td>
         <td class="small">${(b.lines || []).map(l => { const p = productByCode(l.c); return `${p ? esc(p.name) : `<span class="neg">${esc(l.c)} (không có mã)</span>`}: <b>${fmt(l.q, 6)}</b> ${esc(p ? p.unit : '')}`; }).join('<br>')}</td>
         <td class="num">${money(bomCost(b))}</td><td class="small">${esc(b.note || '')}</td>
         <td class="nowrap"><a class="btn sm primary" href="#/lsx/moi?code=${encodeURIComponent(b.code)}">Lập lệnh SX</a></td></tr>`).join('')}
-      </tbody></table></div><p class="hint">${rows.length} thành phẩm có định mức. Bấm dòng để sửa.${none.length ? ` Chưa có định mức: ${none.map(t => esc(t.code)).join(', ')}.` : ''}</p>`;
-    $$('#b-list tr[data-code]').forEach(tr => tr.onclick = e => { if (!e.target.closest('a,button')) edit(list.find(b => b.code === tr.dataset.code)); });
+      </tbody></table></div><p class="hint">${rows.length} thành phẩm có định mức. Bấm <b>✏ Sửa định mức</b> (hoặc bấm vào dòng) để đổi lượng NVL, thêm / bớt NVL; lệnh sản xuất lập sau đó dùng định mức mới (lệnh đã lập giữ nguyên).${none.length ? ` Chưa có định mức: ${none.map(t => esc(t.code)).join(', ')}.` : ''}</p>`;
+    $$('#b-list tr[data-code]').forEach(tr => tr.onclick = e => { if (!e.target.closest('a') && (!e.target.closest('button') || e.target.closest('[data-edit]'))) edit(list.find(b => b.code === tr.dataset.code)); });
   }
   async function reload() { list = await api('GET', '/bom'); draw(); }
   function edit(b) {
