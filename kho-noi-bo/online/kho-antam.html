@@ -118,6 +118,8 @@ table.data td.num, table.data th.num { text-align: right; white-space: nowrap; f
 table.data input, table.data select { width: 100%; padding: 4px 6px; }
 table.data input.num { width: 110px; }
 table.data td.nm { min-width: 200px; }
+table.data th.tick, table.data td.tick { width: 36px; text-align: center; padding-left: 6px; padding-right: 2px; cursor: pointer; }
+table.data th.tick input, table.data td.tick input { width: 18px; height: 18px; margin: 0; cursor: pointer; vertical-align: middle; }
 table.data tr.row-bad td { background: var(--bad-bg); }
 table.data tr.row-warn td { background: var(--warn-bg); }
 .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 14.5px; font-weight: 600; white-space: nowrap; }
@@ -3636,6 +3638,20 @@ function pickProducts({ title, items, key, okText = '🖨 In', note = '' }) {
   });
 }
 const pickNote = sel => sel ? ` · ${sel.size} sản phẩm đã chọn` : '';
+// Ô tích chọn sản phẩm ở đầu dòng (trước STT): có mã đã tích thì nút In in đúng các mã đó, chưa tích thì hỏi chọn sản phẩm
+const TICK_TH = '<th class="tick"><input type="checkbox" data-tick-all title="Chọn / bỏ tất cả dòng đang hiện" aria-label="Chọn tất cả dòng đang hiện"></th>';
+const tickTd = (set, code) => `<td class="tick"><input type="checkbox" data-tick="${esc(code)}"${set.has(code) ? ' checked' : ''} aria-label="Chọn ${esc(code)}"></td>`;
+function bindTicks(root, set, onChange) {
+  const boxes = $$('input[data-tick]', root), all = $('input[data-tick-all]', root);
+  const sync = () => { const n = boxes.filter(b => b.checked).length; if (all) { all.checked = boxes.length > 0 && n === boxes.length; all.indeterminate = n > 0 && n < boxes.length; } if (onChange) onChange(); };
+  boxes.forEach(b => {
+    b.onchange = () => { if (b.checked) set.add(b.dataset.tick); else set.delete(b.dataset.tick); sync(); };
+    b.closest('td').onclick = e => { e.stopPropagation(); if (e.target !== b) { b.checked = !b.checked; b.onchange(); } }; // bấm ô tích không mở thẻ kho
+  });
+  if (all) all.onchange = () => { boxes.forEach(b => { b.checked = all.checked; if (all.checked) set.add(b.dataset.tick); else set.delete(b.dataset.tick); }); sync(); };
+  sync();
+}
+const pickOrTicks = (set, opts) => set.size ? Promise.resolve(new Set(set)) : pickProducts(opts);
 
 // Hộp xác nhận ngay trong trang (trang online không cho dùng confirm() của trình duyệt)
 function ask(message, okText = 'Đồng ý') {
@@ -4449,6 +4465,7 @@ async function viewNXT(main, m, q) {
   const STOCK_FILTERS = [['', 'Tất cả mã'], ['in', 'Còn tồn trong kho (tồn > 0)'], ['zero', 'Hết hàng (tồn = 0)'], ['neg', 'Tồn âm (< 0)']];
   const f = { from: q.from || isoDate(), to: q.to || isoDate(), grp: '', moved: false, warn: false, q: '', stock: store('nxtStock') || '' };
   const codesKey = 'nxtCodes_' + S.wh; let codes = Array.isArray(store(codesKey)) ? new Set(store(codesKey)) : null; // sản phẩm chọn để xem (null = tất cả)
+  const tickKey = 'nxtTick_' + S.wh, tick = new Set(store(tickKey) || []); // mã đã tích ở đầu dòng
   const groups = Array.from(new Set(S.meta.products.map(p => p.grp).filter(Boolean)));
   const EPS = 1e-9;
   const stockOk = r => !f.stock || (f.stock === 'in' ? r.close > EPS : f.stock === 'zero' ? Math.abs(r.close) <= EPS : r.close < -EPS);
@@ -4463,7 +4480,7 @@ async function viewNXT(main, m, q) {
     <div class="toolbar"><label class="check"><input type="checkbox" id="n-moved"> Chỉ mã có phát sinh</label>
       <label class="check"><input type="checkbox" id="n-warn"> Chỉ mã có cảnh báo</label>
       <button class="btn" id="n-pick">Sản phẩm: <b id="n-pick-l">Tất cả</b></button><button class="btn sm ghost" id="n-pick-x" hidden>✕ Bỏ chọn</button><div class="grow"></div>
-      <button class="btn" id="n-print">🖨 In báo cáo</button></div>
+      <button class="btn sm ghost" id="n-tick-x" hidden></button><button class="btn" id="n-print">🖨 In báo cáo</button></div>
     <div id="n-kpi" class="kpis"></div><div id="n-list"></div>
     <p class="hint">Tồn đầu kỳ = Số dư ban đầu (nhập ở Danh mục hàng) + nhập − xuất + điều chỉnh trước "Từ ngày". Bấm dòng để mở thẻ kho.</p>`;
   let data = [];
@@ -4484,17 +4501,24 @@ async function viewNXT(main, m, q) {
       <div class="kpi ${neg ? 'bad' : ''}"><div class="k-label">Số mã tồn âm</div><div class="k-val">${neg}</div></div>
       <div class="kpi ${low ? 'warn' : ''}"><div class="k-label">Mã dưới tồn tối thiểu</div><div class="k-val">${low}</div></div>
       <div class="kpi"><div class="k-label">Tổng giá trị tồn cuối kỳ (đ)</div><div class="k-val">${money(rows.reduce((a, r) => a + r.value, 0))}</div></div>`;
-    $('#n-list').innerHTML = `<div class="table-wrap"><table class="data"><thead><tr><th>STT</th><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th><th>Nhóm</th>
+    $('#n-list').innerHTML = `<div class="table-wrap"><table class="data"><thead><tr>${TICK_TH}<th>STT</th><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th><th>Nhóm</th>
       <th class="num">Tồn tối thiểu</th><th class="num">Tồn đầu kỳ</th><th class="num">Nhập trong kỳ</th><th class="num">Xuất trong kỳ</th><th class="num">Điều chỉnh</th>
       <th class="num">Tồn cuối kỳ</th><th class="num">Đơn giá</th><th class="num">Giá trị tồn</th><th>Cảnh báo</th></tr></thead><tbody>
-      ${rows.map((r, i) => `<tr class="clickable ${r.warn === 'Tồn âm' ? 'row-bad' : r.warn ? 'row-warn' : ''}" data-code="${esc(r.code)}"><td>${i + 1}</td><td>${esc(r.code)}</td><td class="nm">${esc(r.name)}</td><td>${esc(r.unit)}</td><td class="small">${esc(r.grp)}</td>
+      ${rows.map((r, i) => `<tr class="clickable ${r.warn === 'Tồn âm' ? 'row-bad' : r.warn ? 'row-warn' : ''}" data-code="${esc(r.code)}">${tickTd(tick, r.code)}<td>${i + 1}</td><td>${esc(r.code)}</td><td class="nm">${esc(r.name)}</td><td>${esc(r.unit)}</td><td class="small">${esc(r.grp)}</td>
         <td class="num">${r.min_qty === null ? '' : fmt(r.min_qty)}</td><td class="num">${fmt(r.open)}</td><td class="num">${fmtBlank0(r.in)}</td><td class="num">${fmtBlank0(r.out)}</td>
         <td class="num">${fmtBlank0(r.adj)}</td><td class="num"><b class="${r.close < 0 ? 'neg' : ''}">${fmt(r.close)}</b></td><td class="num">${fmtBlank0(r.price)}</td>
         <td class="num">${fmtBlank0(Math.round(r.value))}</td><td>${r.warn ? `<span class="badge ${r.warn === 'Tồn âm' ? 'bad' : 'warn'}">${esc(r.warn)}</span>` : ''}</td></tr>`).join('')}
-      </tbody><tfoot><tr><td colspan="7">Cộng</td><td class="num">${fmt(rows.reduce((a, r) => a + r.in, 0))}</td><td class="num">${fmt(rows.reduce((a, r) => a + r.out, 0))}</td>
+      </tbody><tfoot><tr><td colspan="8">Cộng</td><td class="num">${fmt(rows.reduce((a, r) => a + r.in, 0))}</td><td class="num">${fmt(rows.reduce((a, r) => a + r.out, 0))}</td>
       <td class="num">${fmt(rows.reduce((a, r) => a + r.adj, 0))}</td><td class="num">${fmt(rows.reduce((a, r) => a + r.close, 0))}</td><td></td><td class="num">${money(rows.reduce((a, r) => a + r.value, 0))}</td><td></td></tr></tfoot></table></div>`;
     $$('#n-list tr[data-code]').forEach(tr => tr.onclick = () => go(`#/the-kho?code=${encodeURIComponent(tr.dataset.code)}&from=${f.from}&to=${f.to}`));
+    bindTicks($('#n-list'), tick, tickLabel);
   }
+  function tickLabel() {
+    store(tickKey, tick.size ? [...tick] : null);
+    $('#n-print').textContent = tick.size ? `🖨 In ${tick.size} mã đã tích` : '🖨 In báo cáo';
+    const x = $('#n-tick-x'); x.hidden = !tick.size; x.textContent = `✕ Bỏ tích (${tick.size})`;
+  }
+  $('#n-tick-x').onclick = () => { tick.clear(); draw(); };
   const upd = () => { f.from = $('#n-from').value; f.to = $('#n-to').value; load(); };
   $('#n-from').onchange = upd; $('#n-to').onchange = upd;
   $$('[data-range]').forEach(b => b.onclick = () => {
@@ -4514,9 +4538,9 @@ async function viewNXT(main, m, q) {
   };
   $('#n-pick-x').onclick = () => { codes = null; store(codesKey, null); draw(); };
   $('#n-print').onclick = async () => {
-    const all = filtered(), sel = await pickProducts({ title: 'Chọn sản phẩm in báo cáo Nhập – Xuất – Tồn', items: all, key: 'nxt', note: 'Danh sách theo bộ lọc đang xem. Bỏ chọn sản phẩm không cần in.' });
+    const all = tick.size ? data.filter(r => tick.has(r.code)) : filtered(), sel = await pickOrTicks(tick, { title: 'Chọn sản phẩm in báo cáo Nhập – Xuất – Tồn', items: all, key: 'nxt', note: 'Danh sách theo bộ lọc đang xem. Bỏ chọn sản phẩm không cần in. (Muốn khỏi hỏi: tích ô đầu dòng trong bảng.)' });
     if (!sel) return;
-    const rows = all.filter(r => sel.has(r.code)), part = sel.size < all.length ? sel : null;
+    const rows = all.filter(r => sel.has(r.code)), part = sel.size < data.length ? sel : null;
     printHtml(`<div class="doc landscape">${docHead('', '')}
       <div class="d-title">Báo cáo nhập – xuất – tồn kho</div><div class="d-sub">${f.from === f.to ? 'Ngày ' + vnDate(f.from) : 'Từ ngày ' + vnDate(f.from) + ' đến ngày ' + vnDate(f.to)}${f.stock ? ' · ' + esc(STOCK_FILTERS.find(x => x[0] === f.stock)[1]) : ''}${f.grp ? ' · Nhóm: ' + esc(f.grp) : ''}${pickNote(part)}</div>
       <table class="t"><thead><tr><th>STT</th><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th><th>Tồn đầu kỳ</th><th>Nhập</th><th>Xuất</th><th>Điều chỉnh</th><th>Tồn cuối kỳ</th><th>Đơn giá</th><th>Giá trị tồn</th><th>Cảnh báo</th></tr></thead>
@@ -4631,6 +4655,7 @@ async function deleteDoc(doc) {
 /* ============================================================ Kiểm kê */
 async function viewStocktake(main, m) {
   const doc = await loadDoc('stocktake', m[1]);
+  const ktick = new Set(); // mã đã tích ở đầu dòng (để in)
   const s = S.meta.settings;
   const d = doc.data;
   d.counter = d.counter || S.user || ''; d.keeper = d.keeper || '';
@@ -4672,7 +4697,7 @@ async function viewStocktake(main, m) {
       <div class="toolbar"><label class="field">Nhóm<select id="k-grp">${options(groups, view.grp, 'Tất cả')}</select></label>
         <label class="field grow">Tìm<input id="k-q" value="${esc(view.q)}"></label>
         <label class="check"><input type="checkbox" id="k-diff" ${view.onlyDiff ? 'checked' : ''}> Chỉ dòng lệch</label></div>
-      <div class="table-wrap"><table class="data"><thead><tr><th>STT</th><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th><th>Nhóm</th><th class="num">Tồn sổ sách</th>
+      <div class="table-wrap"><table class="data" id="k-table"><thead><tr>${TICK_TH}<th>STT</th><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th><th>Nhóm</th><th class="num">Tồn sổ sách</th>
         <th class="num" style="width:120px">Tồn thực tế (đếm/cân)</th><th class="num">Chênh lệch</th><th class="num">% lệch</th><th class="num">Giá trị lệch</th><th>Đánh giá</th><th style="min-width:180px">Nguyên nhân / Hướng xử lý</th></tr></thead>
         <tbody id="k-rows"></tbody></table></div>
       <div class="form-actions">
@@ -4720,7 +4745,7 @@ async function viewStocktake(main, m) {
       if (view.q && !matches(view.q, r.code + ' ' + r.name)) return;
       if (view.onlyDiff) { const c = calc(r); if (c.diff === null || c.diff === 0) return; }
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${i + 1}</td><td>${esc(r.code)}</td><td class="nm">${esc(r.name)}</td><td>${esc(r.unit)}</td><td class="small">${esc(r.grp)}</td>
+      tr.innerHTML = `${tickTd(ktick, r.code)}<td>${i + 1}</td><td>${esc(r.code)}</td><td class="nm">${esc(r.name)}</td><td>${esc(r.unit)}</td><td class="small">${esc(r.grp)}</td>
         <td class="num">${fmt(r.book)}</td><td><input class="num" inputmode="decimal" data-k="actual" value="${r.actual === null || r.actual === undefined ? '' : esc(fmt(r.actual))}"></td>
         <td class="num" data-o="diff"></td><td class="num" data-o="pct"></td><td class="num" data-o="val"></td><td data-o="ev"></td>
         <td><input data-k="cause" value="${esc(r.cause || '')}"></td>`;
@@ -4739,10 +4764,14 @@ async function viewStocktake(main, m) {
       upd();
     });
     drawKpi();
+    bindTicks($('#k-table'), ktick, () => {
+      $('#k-print').textContent = ktick.size ? `🖨 In biên bản (${ktick.size} mã đã tích)` : '🖨 In biên bản';
+      $('#k-print-blank').textContent = ktick.size ? `🖨 In phiếu đếm (${ktick.size} mã đã tích)` : '🖨 In phiếu đếm (ẩn tồn sổ)';
+    });
   }
   async function printStocktake(blind) {
-    const all = d.rows.filter(r => !view.grp || r.grp === view.grp);
-    const sel = await pickProducts({ title: blind ? 'Chọn sản phẩm in phiếu đếm' : 'Chọn sản phẩm in biên bản kiểm kê', items: all, key: blind ? 'kkdem' : 'kk' });
+    const all = ktick.size ? d.rows.filter(r => ktick.has(r.code)) : d.rows.filter(r => !view.grp || r.grp === view.grp);
+    const sel = await pickOrTicks(ktick, { title: blind ? 'Chọn sản phẩm in phiếu đếm' : 'Chọn sản phẩm in biên bản kiểm kê', items: all, key: blind ? 'kkdem' : 'kk' });
     if (!sel) return;
     const rows = all.filter(r => sel.has(r.code));
     const body = rows.map((r, i) => {
@@ -4754,7 +4783,7 @@ async function viewStocktake(main, m) {
           <td class="n">${c.val ? money(c.val) : ''}</td><td>${c.diff === null ? '' : esc(c.ev)}</td><td>${esc(r.cause || '')}</td></tr>`;
     }).join('');
     printHtml(`<div class="doc ${blind ? '' : 'landscape'}">${docHead('', '')}<div class="d-title">${blind ? 'Phiếu đếm kiểm kê kho' : 'Biên bản kiểm kê kho'}</div>
-      <div class="d-sub">Thời điểm kiểm kê: ngày ${vnDate(doc.date)}${pickNote(rows.length < all.length ? sel : null)}</div>
+      <div class="d-sub">Thời điểm kiểm kê: ngày ${vnDate(doc.date)}${pickNote(rows.length < d.rows.length ? sel : null)}</div>
       <div class="d-info"><div>Người kiểm kê: <b>${esc(d.counter)}</b> &nbsp;&nbsp; Thủ kho: <b>${esc(d.keeper)}</b>${blind ? '' : ` &nbsp;&nbsp; Ngưỡng lệch cho phép: ${fmt(d.threshold * 100)}%`}</div></div>
       <table class="t"><thead><tr>${blind ? '<th>STT</th><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th><th style="width:22%">Tồn thực tế (đếm/cân)</th><th style="width:20%">Ghi chú</th>'
         : '<th>STT</th><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th><th>Tồn sổ sách</th><th>Tồn thực tế</th><th>Chênh lệch</th><th>% lệch</th><th>Giá trị lệch (đ)</th><th>Đánh giá</th><th>Nguyên nhân / Hướng xử lý</th>'}</tr></thead>
@@ -4779,6 +4808,7 @@ async function viewStocktake(main, m) {
 /* ============================================================ Bàn giao kho */
 async function viewHandover(main, m) {
   const doc = await loadDoc('handover', m[1]);
+  const htick = new Set(); // mã đã tích ở đầu dòng (để in)
   const d = doc.data;
   Object.assign(d, Object.assign({ warehouse: S.meta.warehouse.name, giver_name: S.user, giver_title: '', receiver_name: '', receiver_title: '', witness: '',
     reason: 'Bàn giao ca', scope: 'Tất cả', conclusion: '', rows: [] }, d));
@@ -4812,7 +4842,7 @@ async function viewHandover(main, m) {
       </div>${datalist('dl-people', S.meta.people)}
       <p class="hint">Danh sách gồm các mã có tồn sổ ≠ 0 tính đến hết ngày bàn giao. Đổi ngày / phạm vi rồi bấm "Lấy lại danh sách tồn".</p></div>
       <div id="h-kpi" class="kpis"></div>
-      <div class="table-wrap"><table class="data"><thead><tr><th>STT</th><th>Mã hàng</th><th>Tên hàng hóa</th><th>ĐVT</th><th class="num">Tồn sổ sách</th>
+      <div class="table-wrap"><table class="data" id="h-table"><thead><tr>${TICK_TH}<th>STT</th><th>Mã hàng</th><th>Tên hàng hóa</th><th>ĐVT</th><th class="num">Tồn sổ sách</th>
       <th class="num" style="width:120px">SL thực tế bàn giao</th><th class="num">Chênh lệch</th><th class="num">Giá trị tồn</th><th>Tình trạng hàng</th><th>Ghi chú</th></tr></thead><tbody id="h-rows"></tbody></table></div>
       <div class="form-actions"><button class="btn primary" id="h-save">💾 Lưu biên bản</button><button class="btn" id="h-print">🖨 In biên bản</button>
       <button class="btn" id="h-refresh">↻ Lấy lại danh sách tồn</button>${doc.id ? '<button class="btn danger" id="h-del">Xóa</button>' : ''}<a class="btn ghost" href="#/ban-giao">← Danh sách</a></div>`;
@@ -4845,7 +4875,7 @@ async function viewHandover(main, m) {
     tb.innerHTML = '';
     d.rows.forEach((r, i) => {
       const tr = document.createElement('tr');
-      tr.innerHTML = `<td>${i + 1}</td><td>${esc(r.code)}</td><td class="nm">${esc(r.name)}</td><td>${esc(r.unit)}</td><td class="num">${fmt(r.book)}</td>
+      tr.innerHTML = `${tickTd(htick, r.code)}<td>${i + 1}</td><td>${esc(r.code)}</td><td class="nm">${esc(r.name)}</td><td>${esc(r.unit)}</td><td class="num">${fmt(r.book)}</td>
         <td><input class="num" inputmode="decimal" data-k="actual" value="${r.actual === null || r.actual === undefined ? '' : esc(fmt(r.actual))}"></td>
         <td class="num" data-o="diff"></td><td class="num" data-o="val"></td><td><select data-k="status">${options(ITEM_STATUS, r.status)}</select></td>
         <td><input data-k="note" value="${esc(r.note)}"></td>`;
@@ -4863,11 +4893,12 @@ async function viewHandover(main, m) {
       tb.appendChild(tr);
       upd();
     });
-    if (!d.rows.length) tb.innerHTML = '<tr><td colspan="10" class="muted">Không có mã nào còn tồn trong phạm vi này.</td></tr>';
+    if (!d.rows.length) tb.innerHTML = '<tr><td colspan="11" class="muted">Không có mã nào còn tồn trong phạm vi này.</td></tr>';
     drawKpi();
+    bindTicks($('#h-table'), htick, () => { $('#h-print').textContent = htick.size ? `🖨 In biên bản (${htick.size} mã đã tích)` : '🖨 In biên bản'; });
   }
   async function printIt() {
-    const sel = await pickProducts({ title: 'Chọn sản phẩm in biên bản bàn giao', items: d.rows, key: 'bg' });
+    const sel = await pickOrTicks(htick, { title: 'Chọn sản phẩm in biên bản bàn giao', items: d.rows, key: 'bg' });
     if (!sel) return;
     const rows = d.rows.filter(r => sel.has(r.code)), counted = rows.filter(r => r.actual !== null && r.actual !== undefined);
     const st = { n: rows.length, counted: counted.length, off: counted.filter(r => Math.abs(r.actual - r.book) > 1e-9).length,

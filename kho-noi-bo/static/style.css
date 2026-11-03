@@ -116,6 +116,8 @@ table.data td.num, table.data th.num { text-align: right; white-space: nowrap; f
 table.data input, table.data select { width: 100%; padding: 4px 6px; }
 table.data input.num { width: 110px; }
 table.data td.nm { min-width: 200px; }
+table.data th.tick, table.data td.tick { width: 36px; text-align: center; padding-left: 6px; padding-right: 2px; cursor: pointer; }
+table.data th.tick input, table.data td.tick input { width: 18px; height: 18px; margin: 0; cursor: pointer; vertical-align: middle; }
 table.data tr.row-bad td { background: var(--bad-bg); }
 table.data tr.row-warn td { background: var(--warn-bg); }
 .badge { display: inline-block; padding: 1px 8px; border-radius: 999px; font-size: 14.5px; font-weight: 600; white-space: nowrap; }
