@@ -10,6 +10,7 @@
 > - Trang cũ **Đóng hàng An Tâm** (FGE3VTLud2r3LnEjm5nkLK) và **Giao hàng An Tâm** (6bVzsWLxPdkdCKF687Bnky) chỉ còn trang báo chuyển
 >   (dữ liệu cũ giữ nguyên, đã chép sang trang chung kèm 75 ảnh giao hàng). Các mục dưới nói về `dhin`, `giaoin`, `giaokq`, `giaoanh`,
 >   tác vụ chép giữa các trang là cách làm **trước khi gộp**.
+> - Web Kho: mọi nút **In** báo cáo (Nhập – Xuất – Tồn, Thẻ kho, Sổ nhập – xuất, Kiểm kê, Phiếu đếm, Bàn giao, Kế hoạch mua ngày / tuần / tháng) mở hộp **chọn sản phẩm** (tìm, lọc nhóm, chọn / bỏ tất cả; nhớ lần chọn theo từng báo cáo, từng kho). Nhập – Xuất – Tồn và Sổ nhập – xuất có nút **Sản phẩm** để lọc khi xem; Thẻ kho có **In nhiều thẻ kho** (mỗi sản phẩm một trang).
 > - Web Kho: mục **Duyệt phiếu** trên menu (chỉ tài khoản có quyền duyệt) kèm số phiếu điều chỉnh đang chờ, tự cập nhật mỗi 30 giây và báo khi có phiếu mới.
 > - Mời nhân viên đóng hàng và người giao vào trang chung (email, quyền **Contributor**, chỉ người được mời).
 

@@ -231,6 +231,56 @@ function openModal({ title, body, saveText = 'Lưu', onSave, wide, onClose }) {
   return { root: back, close };
 }
 
+// Chọn sản phẩm để in / xem báo cáo: danh sách ô đánh dấu (tìm, lọc nhóm, chọn / bỏ tất cả), nhớ lần chọn trước theo từng báo cáo và từng kho.
+// items: [{code, name, unit, grp}] (trùng mã thì lấy 1). Trả về Set mã đã chọn, null khi bấm Đóng.
+function pickProducts({ title, items, key, okText = '🖨 In', note = '' }) {
+  const seen = new Set(), list = [];
+  for (const it of items || []) { const c = String((it && it.code) || ''); if (c && !seen.has(c)) { seen.add(c); list.push({ code: c, name: it.name || '', unit: it.unit || '', grp: it.grp || '' }); } }
+  const memo = 'pick_' + key + '_' + S.wh, prev = store(memo);
+  let sel = new Set(Array.isArray(prev) ? prev.filter(c => seen.has(c)) : []);
+  if (!sel.size) sel = new Set(seen); // chưa chọn lần nào (hoặc mã cũ không còn): chọn tất cả
+  const groups = Array.from(new Set(list.map(x => x.grp).filter(Boolean))).sort();
+  const v = { q: '', grp: '' };
+  return new Promise(resolve => {
+    let done = false;
+    const m = openModal({
+      title, wide: true, saveText: okText,
+      onClose: () => { if (!done) resolve(null); },
+      body: `${note ? `<p class="hint" style="margin:0 0 8px">${note}</p>` : ''}
+        <div class="toolbar" style="margin-bottom:8px">
+          <label class="field grow">Tìm (mã, tên không dấu)<input id="pk-q" autocomplete="off"></label>
+          ${groups.length ? `<label class="field">Nhóm hàng<select id="pk-grp">${options(groups, '', 'Tất cả')}</select></label>` : ''}
+          <button class="btn sm" type="button" id="pk-all">Chọn tất cả đang hiện</button><button class="btn sm" type="button" id="pk-none">Bỏ chọn tất cả đang hiện</button>
+        </div>
+        <p class="small" id="pk-n" style="margin:0 0 6px"></p>
+        <div id="pk-list" style="max-height:min(56vh,520px);overflow:auto;border:1px solid var(--line);border-radius:8px;padding:4px 8px"></div>`,
+      onSave: () => {
+        if (!sel.size) throw new Error('Chọn ít nhất 1 sản phẩm');
+        store(memo, sel.size === seen.size ? null : [...sel]); done = true; resolve(new Set(sel)); return true;
+      },
+    });
+    const root = m.root, shown = () => list.filter(x => (!v.grp || x.grp === v.grp) && (!v.q || matches(v.q, x.code + ' ' + x.name)));
+    const count = () => {
+      $('#pk-n', root).innerHTML = `Đã chọn <b>${sel.size}</b> / ${list.length} sản phẩm${sel.size === list.length ? ' (tất cả)' : ''}`;
+      const b = $('[data-save]', root); if (b) b.textContent = `${okText} (${sel.size} mã)`;
+    };
+    const draw = () => {
+      const rows = shown();
+      $('#pk-list', root).innerHTML = rows.length ? rows.map(x => `<label class="check" style="display:flex;gap:8px;padding:5px 2px;border-bottom:1px solid var(--line)">
+          <input type="checkbox" data-c="${esc(x.code)}"${sel.has(x.code) ? ' checked' : ''}><span><b>${esc(x.code)}</b> ${esc(x.name)}${x.unit ? ` <span class="muted small">· ${esc(x.unit)}</span>` : ''}${x.grp ? ` <span class="muted small">· ${esc(x.grp)}</span>` : ''}</span></label>`).join('')
+        : '<p class="muted">Không có sản phẩm nào khớp.</p>';
+      $$('#pk-list input[data-c]', root).forEach(i => i.onchange = () => { if (i.checked) sel.add(i.dataset.c); else sel.delete(i.dataset.c); count(); });
+      count();
+    };
+    $('#pk-q', root).oninput = debounce(() => { v.q = $('#pk-q', root).value; draw(); }, 150);
+    const g = $('#pk-grp', root); if (g) g.onchange = () => { v.grp = g.value; draw(); };
+    $('#pk-all', root).onclick = () => { shown().forEach(x => sel.add(x.code)); draw(); };
+    $('#pk-none', root).onclick = () => { shown().forEach(x => sel.delete(x.code)); draw(); };
+    draw();
+  });
+}
+const pickNote = sel => sel ? ` · ${sel.size} sản phẩm đã chọn` : '';
+
 // Hộp xác nhận ngay trong trang (trang online không cho dùng confirm() của trình duyệt)
 function ask(message, okText = 'Đồng ý') {
   return new Promise(resolve => {
@@ -984,11 +1034,16 @@ async function viewLedger(main) {
       <label class="field">Loại<select id="l-type">${options([['N', 'Nhập'], ['X', 'Xuất'], ['D', 'Điều chỉnh']], f.type, 'Tất cả')}</select></label>
       <label class="field grow">Tìm nhanh (mã, tên hàng không dấu, số phiếu, ghi chú…)<input id="l-q" value="${esc(f.q)}"></label>
       ${ONLINE ? '<button class="btn" id="l-csv">⬇ Xuất Excel (CSV)</button>' : '<a class="btn" id="l-csv">⬇ Xuất Excel (CSV)</a>'}
-    </div><div id="l-sum" class="kpis"></div><div id="l-list"></div>`;
+    </div><div class="toolbar"><button class="btn" id="l-pick">Sản phẩm: <b id="l-pick-l">Tất cả</b></button><button class="btn sm ghost" id="l-pick-x" hidden>✕ Bỏ chọn</button>
+      <div class="grow"></div><button class="btn" id="l-print">🖨 In sổ nhập – xuất</button></div>
+    <div id="l-sum" class="kpis"></div><div id="l-list"></div>`;
+  const codesKey = 'ledgerCodes_' + S.wh; let codes = Array.isArray(store(codesKey)) ? new Set(store(codesKey)) : null, shownRows = [];
   async function load() {
     const p = new URLSearchParams({ from: f.from, to: f.to, type: f.type });
     let rows = await guard(() => api('GET', '/lines?' + p)) || [];
     if (f.q) rows = rows.filter(r => matches(f.q, [r.no, r.product_code, r.name, r.note, r.reason, r.giver, r.receiver, r.to_party].join(' ')));
+    if (codes) rows = rows.filter(r => codes.has(r.product_code));
+    shownRows = rows; $('#l-pick-l').textContent = codes ? codes.size + ' sản phẩm' : 'Tất cả'; $('#l-pick-x').hidden = !codes;
     if (ONLINE) $('#l-csv').onclick = () => guard(async () => saveTextFile(`so-nhap-xuat-${S.wh.toLowerCase()}-${f.from}-${f.to}.csv`, await api('GET', '/export/lines.csv?' + new URLSearchParams({ from: f.from, to: f.to }))));
     else $('#l-csv').href = withToken('/api/export/lines.csv?' + new URLSearchParams({ wh: S.wh, from: f.from, to: f.to }));
     const sum = { N: 0, X: 0, D: 0 };
@@ -1009,6 +1064,24 @@ async function viewLedger(main) {
     $$('#l-list tr[data-id]').forEach(tr => tr.onclick = () => go('#/phieu/' + tr.dataset.id));
   }
   const upd = () => { f.from = $('#l-from').value; f.to = $('#l-to').value; f.type = $('#l-type').value; f.q = $('#l-q').value; store('ledgerFilter', f); load(); };
+  $('#l-pick').onclick = async () => {
+    const s_ = await pickProducts({ title: 'Chọn sản phẩm xem sổ nhập – xuất', items: S.meta.products, key: 'ledgerview', okText: 'Áp dụng' });
+    if (!s_) return; codes = s_.size === new Set(S.meta.products.map(p => p.code)).size ? null : s_; store(codesKey, codes ? [...codes] : null); load();
+  };
+  $('#l-pick-x').onclick = () => { codes = null; store(codesKey, null); load(); };
+  $('#l-print').onclick = async () => {
+    const all = shownRows; if (!all.length) return toast('Không có dòng nào để in', true);
+    const sel = await pickProducts({ title: 'Chọn sản phẩm in sổ nhập – xuất', items: all.map(r => ({ code: r.product_code, name: r.name, unit: r.unit, grp: (productByCode(r.product_code) || {}).grp })), key: 'ledger', note: 'Danh sách theo bộ lọc đang xem.' });
+    if (!sel) return;
+    const rows = all.filter(r => sel.has(r.product_code)), part = sel.size < new Set(all.map(r => r.product_code)).size ? sel : null;
+    printHtml(`<div class="doc landscape">${docHead('', '')}<div class="d-title">Sổ nhập – xuất kho</div>
+      <div class="d-sub">Từ ngày ${vnDate(f.from)} đến ngày ${vnDate(f.to)}${f.type ? ' · ' + TYPE_LABEL[f.type] : ''}${pickNote(part)}</div>
+      <table class="t" style="font-size:9.5pt"><thead><tr><th>STT</th><th>Ngày</th><th>Số phiếu</th><th>Loại</th><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th><th>Số lượng</th><th>Đơn giá</th><th>Thành tiền</th><th>Bên giao → nhận</th><th>Lý do / Diễn giải</th></tr></thead>
+      <tbody>${rows.map((r, i) => `<tr><td class="c">${i + 1}</td><td class="c">${vnDate(r.date)}</td><td>${esc(r.no)}</td><td class="c">${TYPE_LABEL[r.type]}</td><td>${esc(r.product_code)}</td><td>${esc(r.name)}</td>
+        <td class="c">${esc(r.unit)}</td><td class="n">${fmt(r.qty)}</td><td class="n">${fmtBlank0(r.price)}</td><td class="n">${r.price ? money(r.qty * r.price) : ''}</td><td>${esc(r.from_party)} → ${esc(r.to_party)}</td><td>${esc(r.reason)}</td></tr>`).join('')}
+      ${['N', 'X', 'D'].map(t => { const l = rows.filter(r => r.type === t); return l.length ? `<tr class="sum"><td colspan="7" class="c">CỘNG ${TYPE_LABEL[t].toUpperCase()} (${l.length} dòng)</td><td class="n">${fmt(l.reduce((a, r) => a + r.qty, 0))}</td><td></td><td class="n">${money(l.reduce((a, r) => a + r.qty * (r.price || 0), 0))}</td><td colspan="2"></td></tr>` : ''; }).join('')}
+      </tbody></table>${signBlock([['Người lập', S.user], ['Thủ kho', ''], ['Kế toán', '']])}</div>`, 'landscape', `so-nhap-xuat-${S.wh}-${f.from}-${f.to}`);
+  };
   ['#l-from', '#l-to', '#l-type'].forEach(id => $(id).addEventListener('change', upd));
   $('#l-q').addEventListener('input', debounce(upd, 300));
   await load();
@@ -1019,6 +1092,7 @@ async function viewNXT(main, m, q) {
   setTitle('Báo cáo Nhập – Xuất – Tồn');
   const STOCK_FILTERS = [['', 'Tất cả mã'], ['in', 'Còn tồn trong kho (tồn > 0)'], ['zero', 'Hết hàng (tồn = 0)'], ['neg', 'Tồn âm (< 0)']];
   const f = { from: q.from || isoDate(), to: q.to || isoDate(), grp: '', moved: false, warn: false, q: '', stock: store('nxtStock') || '' };
+  const codesKey = 'nxtCodes_' + S.wh; let codes = Array.isArray(store(codesKey)) ? new Set(store(codesKey)) : null; // sản phẩm chọn để xem (null = tất cả)
   const groups = Array.from(new Set(S.meta.products.map(p => p.grp).filter(Boolean)));
   const EPS = 1e-9;
   const stockOk = r => !f.stock || (f.stock === 'in' ? r.close > EPS : f.stock === 'zero' ? Math.abs(r.close) <= EPS : r.close < -EPS);
@@ -1031,7 +1105,8 @@ async function viewNXT(main, m, q) {
       <label class="field grow">Tìm<input id="n-q"></label>
     </div>
     <div class="toolbar"><label class="check"><input type="checkbox" id="n-moved"> Chỉ mã có phát sinh</label>
-      <label class="check"><input type="checkbox" id="n-warn"> Chỉ mã có cảnh báo</label><div class="grow"></div>
+      <label class="check"><input type="checkbox" id="n-warn"> Chỉ mã có cảnh báo</label>
+      <button class="btn" id="n-pick">Sản phẩm: <b id="n-pick-l">Tất cả</b></button><button class="btn sm ghost" id="n-pick-x" hidden>✕ Bỏ chọn</button><div class="grow"></div>
       <button class="btn" id="n-print">🖨 In báo cáo</button></div>
     <div id="n-kpi" class="kpis"></div><div id="n-list"></div>
     <p class="hint">Tồn đầu kỳ = Số dư ban đầu (nhập ở Danh mục hàng) + nhập − xuất + điều chỉnh trước "Từ ngày". Bấm dòng để mở thẻ kho.</p>`;
@@ -1041,10 +1116,11 @@ async function viewNXT(main, m, q) {
     draw();
   }
   function filtered() {
-    return data.filter(r => (!f.grp || r.grp === f.grp) && stockOk(r) && (!f.moved || r.moved) && (!f.warn || r.warn) && (!f.q || matches(f.q, r.code + ' ' + r.name)));
+    return data.filter(r => (!codes || codes.has(r.code)) && (!f.grp || r.grp === f.grp) && stockOk(r) && (!f.moved || r.moved) && (!f.warn || r.warn) && (!f.q || matches(f.q, r.code + ' ' + r.name)));
   }
   function draw() {
     const rows = filtered();
+    $('#n-pick-l').textContent = codes ? codes.size + ' sản phẩm' : 'Tất cả'; $('#n-pick-x').hidden = !codes;
     const neg = data.filter(r => r.warn === 'Tồn âm').length, low = data.filter(r => r.warn === 'Dưới tồn tối thiểu').length;
     const inStock = data.filter(r => r.close > EPS).length;
     $('#n-kpi').innerHTML = `<div class="kpi"><div class="k-label">${f.from === f.to ? 'Xem ngày ' + vnDate(f.from) : 'Kỳ ' + vnDate(f.from) + ' – ' + vnDate(f.to)}</div><div class="k-val">${rows.length} mã</div></div>
@@ -1076,10 +1152,17 @@ async function viewNXT(main, m, q) {
   $('#n-warn').onchange = () => { f.warn = $('#n-warn').checked; draw(); };
   $('#n-stock').onchange = () => { f.stock = $('#n-stock').value; store('nxtStock', f.stock); draw(); };
   $('#n-q').oninput = debounce(() => { f.q = $('#n-q').value; draw(); }, 200);
-  $('#n-print').onclick = () => {
-    const rows = filtered();
+  $('#n-pick').onclick = async () => {
+    const s_ = await pickProducts({ title: 'Chọn sản phẩm xem báo cáo Nhập – Xuất – Tồn', items: data, key: 'nxtview', okText: 'Áp dụng' });
+    if (!s_) return; codes = s_.size === new Set(data.map(r => r.code)).size ? null : s_; store(codesKey, codes ? [...codes] : null); draw();
+  };
+  $('#n-pick-x').onclick = () => { codes = null; store(codesKey, null); draw(); };
+  $('#n-print').onclick = async () => {
+    const all = filtered(), sel = await pickProducts({ title: 'Chọn sản phẩm in báo cáo Nhập – Xuất – Tồn', items: all, key: 'nxt', note: 'Danh sách theo bộ lọc đang xem. Bỏ chọn sản phẩm không cần in.' });
+    if (!sel) return;
+    const rows = all.filter(r => sel.has(r.code)), part = sel.size < all.length ? sel : null;
     printHtml(`<div class="doc landscape">${docHead('', '')}
-      <div class="d-title">Báo cáo nhập – xuất – tồn kho</div><div class="d-sub">${f.from === f.to ? 'Ngày ' + vnDate(f.from) : 'Từ ngày ' + vnDate(f.from) + ' đến ngày ' + vnDate(f.to)}${f.stock ? ' · ' + esc(STOCK_FILTERS.find(x => x[0] === f.stock)[1]) : ''}${f.grp ? ' · Nhóm: ' + esc(f.grp) : ''}</div>
+      <div class="d-title">Báo cáo nhập – xuất – tồn kho</div><div class="d-sub">${f.from === f.to ? 'Ngày ' + vnDate(f.from) : 'Từ ngày ' + vnDate(f.from) + ' đến ngày ' + vnDate(f.to)}${f.stock ? ' · ' + esc(STOCK_FILTERS.find(x => x[0] === f.stock)[1]) : ''}${f.grp ? ' · Nhóm: ' + esc(f.grp) : ''}${pickNote(part)}</div>
       <table class="t"><thead><tr><th>STT</th><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th><th>Tồn đầu kỳ</th><th>Nhập</th><th>Xuất</th><th>Điều chỉnh</th><th>Tồn cuối kỳ</th><th>Đơn giá</th><th>Giá trị tồn</th><th>Cảnh báo</th></tr></thead>
       <tbody>${rows.map((r, i) => `<tr><td class="c">${i + 1}</td><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td class="c">${esc(r.unit)}</td><td class="n">${fmt(r.open)}</td>
         <td class="n">${fmtBlank0(r.in)}</td><td class="n">${fmtBlank0(r.out)}</td><td class="n">${fmtBlank0(r.adj)}</td><td class="n"><b>${fmt(r.close)}</b></td>
@@ -1098,7 +1181,7 @@ async function viewStockCard(main, m, q) {
       <label class="field grow" style="min-width:320px">Mặt hàng<div id="c-prod"></div></label>
       <label class="field">Từ ngày<input type="date" id="c-from" value="${f.from}"></label>
       <label class="field">Đến ngày<input type="date" id="c-to" value="${f.to}"></label>
-      <button class="btn" id="c-print">🖨 In thẻ kho</button></div><div id="c-body"></div>`;
+      <button class="btn" id="c-print">🖨 In thẻ kho</button><button class="btn" id="c-print-many">🖨 In nhiều thẻ kho…</button></div><div id="c-body"></div>`;
   $('#c-prod').appendChild(productCombo(f.code, p => { f.code = p ? p.code : ''; store('cardCode_' + S.wh, f.code); load(); }, { includeInactive: true }));
   let data = null;
   async function load() {
@@ -1129,18 +1212,26 @@ async function viewStockCard(main, m, q) {
   }
   $('#c-from').onchange = () => { f.from = $('#c-from').value; load(); };
   $('#c-to').onchange = () => { f.to = $('#c-to').value; load(); };
-  $('#c-print').onclick = () => {
-    if (!data) return;
-    const p = productByCode(f.code) || {};
-    printHtml(`<div class="doc">${docHead('', '')}<div class="d-title">Thẻ kho</div>
+  const cardDoc = (code, dt) => {
+    const p = productByCode(code) || {};
+    return `<div class="doc">${docHead('', '')}<div class="d-title">Thẻ kho</div>
       <div class="d-sub">Từ ngày ${vnDate(f.from)} đến ngày ${vnDate(f.to)}</div>
-      <div class="d-info"><div>Mặt hàng: <b>${esc(f.code)} – ${esc(p.name || '')}</b> &nbsp; ĐVT: ${esc(p.unit || '')}</div></div>
+      <div class="d-info"><div>Mặt hàng: <b>${esc(code)} – ${esc(p.name || '')}</b> &nbsp; ĐVT: ${esc(p.unit || '')}</div></div>
       <table class="t"><thead><tr><th>STT</th><th>Ngày</th><th>Số phiếu</th><th>Diễn giải</th><th>Nhập</th><th>Xuất</th><th>Điều chỉnh</th><th>Tồn</th></tr></thead><tbody>
-      <tr><td colspan="7"><b>TỒN ĐẦU KỲ</b></td><td class="n"><b>${fmt(data.opening)}</b></td></tr>
-      ${data.lines.map((l, i) => `<tr><td class="c">${i + 1}</td><td class="c">${vnDate(l.date)}</td><td>${esc(l.no)}</td><td>${esc(l.reason || (l.from_party + ' → ' + l.to_party))}</td>
+      <tr><td colspan="7"><b>TỒN ĐẦU KỲ</b></td><td class="n"><b>${fmt(dt.opening)}</b></td></tr>
+      ${dt.lines.map((l, i) => `<tr><td class="c">${i + 1}</td><td class="c">${vnDate(l.date)}</td><td>${esc(l.no)}</td><td>${esc(l.reason || (l.from_party + ' → ' + l.to_party))}</td>
         <td class="n">${l.type === 'N' ? fmt(l.qty) : ''}</td><td class="n">${l.type === 'X' ? fmt(l.qty) : ''}</td><td class="n">${l.type === 'D' ? fmt(l.qty) : ''}</td><td class="n">${fmt(l.balance)}</td></tr>`).join('')}
-      <tr class="sum"><td colspan="7" class="c">TỒN CUỐI KỲ</td><td class="n">${fmt(data.closing)}</td></tr></tbody></table>
-      ${signBlock([['Người lập thẻ', S.user], ['Thủ kho', ''], ['Kế toán', '']])}</div>`, 'portrait', `the-kho-${f.code}`);
+      <tr class="sum"><td colspan="7" class="c">TỒN CUỐI KỲ</td><td class="n">${fmt(dt.closing)}</td></tr></tbody></table>
+      ${signBlock([['Người lập thẻ', S.user], ['Thủ kho', ''], ['Kế toán', '']])}</div>`;
+  };
+  $('#c-print').onclick = () => { if (data) printHtml(cardDoc(f.code, data), 'portrait', `the-kho-${f.code}`); };
+  // in nhiều thẻ kho: mỗi sản phẩm một trang
+  $('#c-print-many').onclick = async () => {
+    const sel = await pickProducts({ title: 'Chọn sản phẩm in thẻ kho', items: S.meta.products, key: 'card', note: `Mỗi sản phẩm in một thẻ kho (một trang), kỳ ${vnDate(f.from)} – ${vnDate(f.to)}.` });
+    if (!sel) return;
+    const codesSel = S.meta.products.map(p => p.code).filter(c => sel.has(c)), docs = [];
+    for (const c of codesSel) { const dt = await guard(() => api('GET', `/report/card?code=${encodeURIComponent(c)}&from=${f.from}&to=${f.to}`)); if (dt) docs.push(cardDoc(c, dt)); }
+    if (docs.length) printHtml(docs.join(''), 'portrait', `the-kho-${S.wh}-${f.from}-${f.to}`);
   };
   await load();
 }
@@ -1293,8 +1384,11 @@ async function viewStocktake(main, m) {
     });
     drawKpi();
   }
-  function printStocktake(blind) {
-    const rows = d.rows.filter(r => !view.grp || r.grp === view.grp);
+  async function printStocktake(blind) {
+    const all = d.rows.filter(r => !view.grp || r.grp === view.grp);
+    const sel = await pickProducts({ title: blind ? 'Chọn sản phẩm in phiếu đếm' : 'Chọn sản phẩm in biên bản kiểm kê', items: all, key: blind ? 'kkdem' : 'kk' });
+    if (!sel) return;
+    const rows = all.filter(r => sel.has(r.code));
     const body = rows.map((r, i) => {
       const c = calc(r);
       return blind
@@ -1304,7 +1398,7 @@ async function viewStocktake(main, m) {
           <td class="n">${c.val ? money(c.val) : ''}</td><td>${c.diff === null ? '' : esc(c.ev)}</td><td>${esc(r.cause || '')}</td></tr>`;
     }).join('');
     printHtml(`<div class="doc ${blind ? '' : 'landscape'}">${docHead('', '')}<div class="d-title">${blind ? 'Phiếu đếm kiểm kê kho' : 'Biên bản kiểm kê kho'}</div>
-      <div class="d-sub">Thời điểm kiểm kê: ngày ${vnDate(doc.date)}</div>
+      <div class="d-sub">Thời điểm kiểm kê: ngày ${vnDate(doc.date)}${pickNote(rows.length < all.length ? sel : null)}</div>
       <div class="d-info"><div>Người kiểm kê: <b>${esc(d.counter)}</b> &nbsp;&nbsp; Thủ kho: <b>${esc(d.keeper)}</b>${blind ? '' : ` &nbsp;&nbsp; Ngưỡng lệch cho phép: ${fmt(d.threshold * 100)}%`}</div></div>
       <table class="t"><thead><tr>${blind ? '<th>STT</th><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th><th style="width:22%">Tồn thực tế (đếm/cân)</th><th style="width:20%">Ghi chú</th>'
         : '<th>STT</th><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th><th>Tồn sổ sách</th><th>Tồn thực tế</th><th>Chênh lệch</th><th>% lệch</th><th>Giá trị lệch (đ)</th><th>Đánh giá</th><th>Nguyên nhân / Hướng xử lý</th>'}</tr></thead>
@@ -1416,8 +1510,12 @@ async function viewHandover(main, m) {
     if (!d.rows.length) tb.innerHTML = '<tr><td colspan="10" class="muted">Không có mã nào còn tồn trong phạm vi này.</td></tr>';
     drawKpi();
   }
-  function printIt() {
-    const st = stats();
+  async function printIt() {
+    const sel = await pickProducts({ title: 'Chọn sản phẩm in biên bản bàn giao', items: d.rows, key: 'bg' });
+    if (!sel) return;
+    const rows = d.rows.filter(r => sel.has(r.code)), counted = rows.filter(r => r.actual !== null && r.actual !== undefined);
+    const st = { n: rows.length, counted: counted.length, off: counted.filter(r => Math.abs(r.actual - r.book) > 1e-9).length,
+      bad: rows.filter(r => r.status && r.status !== 'Tốt').length, value: rows.reduce((a, r) => a + val(r), 0) };
     const no = 'BG-' + doc.date.replace(/-/g, '');
     printHtml(`<div class="doc landscape">${docHead('Biên bản nội bộ', 'Số: ' + no)}<div class="d-title">Biên bản bàn giao hàng tồn kho</div>
       <div class="d-info"><div>Ngày: <b>${vnDate(doc.date)}</b> &nbsp;&nbsp; Kho: <b>${esc(d.warehouse)}</b></div>
@@ -1426,7 +1524,7 @@ async function viewHandover(main, m) {
       <div>CHỨNG KIẾN: ${esc(d.witness)}</div><div>Lý do bàn giao: ${esc(d.reason)} &nbsp;&nbsp; Phạm vi hàng: ${esc(d.scope)}</div>
       <div>→ Hai bên cùng kiểm đếm và bàn giao ${st.n} mã hàng có tồn như sau:</div></div>
       <table class="t"><thead><tr><th>STT</th><th>Mã hàng</th><th>Tên hàng hóa</th><th>ĐVT</th><th>Tồn sổ sách</th><th>SL thực tế bàn giao</th><th>Chênh lệch</th><th>Giá trị tồn (đ)</th><th>Tình trạng hàng</th><th>Ghi chú</th></tr></thead>
-      <tbody>${d.rows.map((r, i) => { const has = r.actual !== null && r.actual !== undefined; return `<tr><td class="c">${i + 1}</td><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td class="c">${esc(r.unit)}</td>
+      <tbody>${rows.map((r, i) => { const has = r.actual !== null && r.actual !== undefined; return `<tr><td class="c">${i + 1}</td><td>${esc(r.code)}</td><td>${esc(r.name)}</td><td class="c">${esc(r.unit)}</td>
         <td class="n">${fmt(r.book)}</td><td class="n">${has ? fmt(r.actual) : ''}</td><td class="n">${has ? fmt(+(r.actual - r.book).toFixed(6)) : ''}</td><td class="n">${fmtBlank0(Math.round(val(r)))}</td>
         <td>${esc(r.status)}</td><td>${esc(r.note)}</td></tr>`; }).join('')}
       <tr class="sum"><td colspan="4" class="c">CỘNG</td><td class="n">${st.n} mã</td><td class="n">Đã đếm ${st.counted}</td><td class="n">${st.off} mã lệch</td><td class="n">${money(st.value)}</td><td>${st.bad} mã có vấn đề</td><td></td></tr></tbody></table>
@@ -2585,8 +2683,11 @@ async function viewPlanDaily(main) {
   const upd = () => { st.month = +$('#pm-m').value; st.year = +$('#pm-y').value; store('planMonth', { year: st.year, month: st.month }); load(); };
   $('#pm-m').onchange = upd; $('#pm-y').onchange = upd;
   $('#pm-q').oninput = debounce(() => { st.q = $('#pm-q').value; draw(); }, 200);
-  $('#pm-print').onclick = () => {
-    const list = filtered().slice().reverse();
+  $('#pm-print').onclick = async () => {
+    const all = filtered().slice().reverse();
+    const sel = await pickProducts({ title: 'Chọn sản phẩm in kế hoạch mua theo ngày', items: all.map(r => ({ code: r.product_code, name: r.name, unit: r.unit, grp: (productByCode(r.product_code) || {}).grp })), key: 'pm' });
+    if (!sel) return;
+    const list = all.filter(r => sel.has(r.product_code));
     printHtml(`<div class="doc landscape">${docHead('', '')}<div class="d-title">Kế hoạch mua hàng theo ngày</div><div class="d-sub">Tháng ${st.month}/${st.year}</div>
       <table class="t"><thead><tr><th>STT</th><th>Ngày đặt</th><th>Bộ phận</th><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th><th>Số lượng</th><th>Đơn giá (đ)</th><th>Thành tiền (đ)</th><th>Ngày cần hàng</th><th>Người đề xuất</th><th>Ghi chú</th></tr></thead>
       <tbody>${list.map((r, i) => `<tr><td class="c">${i + 1}</td><td class="c">${vnDate(r.date)}</td><td>${esc(r.dept)}</td><td>${esc(r.product_code)}</td><td>${esc(r.name)}</td><td class="c">${esc(r.unit)}</td>
@@ -2638,9 +2739,11 @@ async function viewPlanWeekly(main) {
   const upd = () => { st.month = +$('#pm-m').value; st.year = +$('#pm-y').value; store('planMonth', { year: st.year, month: st.month }); load(); };
   $('#pm-m').onchange = upd; $('#pm-y').onchange = upd;
   $('#pw-all').onchange = () => { st.all = $('#pw-all').checked; draw(); };
-  $('#pw-print').onclick = () => {
+  $('#pw-print').onclick = async () => {
     const { weeks } = data;
-    const items = list();
+    const sel = await pickProducts({ title: 'Chọn sản phẩm in kế hoạch mua theo tuần', items: list().map(r => r.p), key: 'pw' });
+    if (!sel) return;
+    const items = list().filter(r => sel.has(r.p.code));
     printHtml(`<div class="doc landscape">${docHead('', '')}<div class="d-title">Kế hoạch mua hàng theo tuần</div><div class="d-sub">Tháng ${st.month}/${st.year}</div>
       <table class="t" style="font-size:9.5pt"><thead><tr><th rowspan="2">Mã hàng</th><th rowspan="2">Tên hàng</th><th rowspan="2">ĐVT</th>${weeks.map(w => `<th colspan="2">${esc(w.label)}</th>`).join('')}<th colspan="2">TỔNG THÁNG</th></tr>
       <tr>${weeks.map(() => '<th>SL</th><th>Thành tiền</th>').join('')}<th>SL</th><th>Thành tiền</th></tr></thead><tbody>
@@ -2665,8 +2768,8 @@ async function viewPlanMonthly(main) {
     const rows = await guard(() => api('GET', `/plans?from=${f}&to=${t}`)) || [];
     const per = {};
     rows.forEach(r => {
-      const p = per[r.product_code] = per[r.product_code] || { dept: {}, tq: 0, ta: 0 };
-      p.dept[r.dept] = (p.dept[r.dept] || 0) + r.qty;
+      const p = per[r.product_code] = per[r.product_code] || { dept: {}, damt: {}, tq: 0, ta: 0 };
+      p.dept[r.dept] = (p.dept[r.dept] || 0) + r.qty; p.damt[r.dept] = (p.damt[r.dept] || 0) + r.qty * r.price;
       p.tq += r.qty; p.ta += r.qty * r.price;
     });
     deptAmt = {};
@@ -2691,8 +2794,11 @@ async function viewPlanMonthly(main) {
   const upd = () => { st.month = +$('#pm-m').value; st.year = +$('#pm-y').value; store('planMonth', { year: st.year, month: st.month }); load(); };
   $('#pm-m').onchange = upd; $('#pm-y').onchange = upd;
   $('#pt-all').onchange = () => { st.all = $('#pt-all').checked; draw(); };
-  $('#pt-print').onclick = () => {
-    const list = shown();
+  $('#pt-print').onclick = async () => {
+    const sel = await pickProducts({ title: 'Chọn sản phẩm in kế hoạch mua tháng', items: shown().map(r => r.p), key: 'pt' });
+    if (!sel) return;
+    const list = shown().filter(r => sel.has(r.p.code)), da = {};
+    list.forEach(r => Object.entries(r.damt || {}).forEach(([k, v]) => { da[k] = (da[k] || 0) + v; }));
     const z = n => String(n).padStart(2, '0');
     printHtml(`<div class="doc landscape">${docHead('', '')}<div class="d-title">Kế hoạch mua hàng tháng</div><div class="d-sub">Tháng ${z(st.month)}/${st.year}</div>
       <div class="d-info" style="display:flex;justify-content:space-between"><div>Bộ phận lập: <b>Kho</b></div><div>Gửi: <b>Phòng Kế toán</b></div></div>
@@ -2700,7 +2806,7 @@ async function viewPlanMonthly(main) {
       <tbody>${list.map((r, i) => `<tr><td class="c">${i + 1}</td><td>${esc(r.p.code)}</td><td>${esc(r.p.name)}</td><td class="c">${esc(r.p.unit)}</td><td>${esc(r.p.grp)}</td>
         ${depts.map(d => `<td class="n">${fmtBlank0(r.dept[d])}</td>`).join('')}<td class="n">${fmtBlank0(r.tq)}</td><td class="n">${fmtBlank0(Math.round(avg(r)))}</td><td class="n">${fmtBlank0(Math.round(r.ta))}</td><td>${esc(r.p.supplier)}</td><td></td></tr>`).join('')}
       <tr class="sum"><td colspan="${7 + depts.length}" class="c">TỔNG CỘNG</td><td class="n">${money(list.reduce((a, r) => a + r.ta, 0))}</td><td colspan="2"></td></tr></tbody></table>
-      <div class="d-foot">${depts.map(d => `Tổng tiền ${esc(d)}: <b>${money(deptAmt[d] || 0)}</b>`).join(' &nbsp;·&nbsp; ')}</div>
+      <div class="d-foot">${depts.map(d => `Tổng tiền ${esc(d)}: <b>${money(da[d] || 0)}</b>`).join(' &nbsp;·&nbsp; ')}</div>
       <div class="d-date-right">Ngày ..... tháng ${st.month} năm ${st.year}</div>
       ${signBlock([['Người lập (Thủ kho)', S.user], ['Kế toán', ''], ['Giám đốc duyệt', '']])}</div>`, 'landscape');
   };
