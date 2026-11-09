@@ -32,3 +32,10 @@ duyệt phiếu, sửa mọi phiếu, đổi cài đặt; **Viewer** chỉ xem. 
 | `duyet/<yyyy-mm>` | `{d: {<mã phiếu>: {ok, boi, luc}}}` | Editor (rules `write: admin`) |
 | `kiemquy/<yyyy-mm>` | `{k: {<mã>: {ngay, luc, quy, so_sach, thuc_te, chenh, to, thanhphan, ghichu, boi}}}` | Contributor |
 | `khoa/so` | khóa ngắn (lease) khi đánh số phiếu để 2 người lập cùng lúc không trùng số | trang tự ghi |
+
+## Đăng nhập bằng nick
+Trang khóa bằng nick + mật khẩu (phần dùng chung `shared/nick-gate.html`, chép vào trang bằng `python3 shared/sync_gate.py`).
+Chủ trang vào thẳng, bấm nút 👤 trên đầu trang › **+ Thêm tài khoản** để tạo nick cho từng người; nhân viên đăng nhập bằng nick đó
+(nhớ 30 ngày trên máy). Danh sách ở `auth/accounts` `{a: {id: {user, name, salt, pw (PBKDF2), active, at}}, ep}` – chỉ chủ trang / Editor
+sửa được (rules `auth write: admin`). Khóa tài khoản, đổi mật khẩu hoặc "Đăng xuất tất cả máy" thì máy đang dùng nick đó bị đăng xuất ngay.
+Phiếu ghi thêm tên nick người lập / sửa / hủy (`tao_nick`, `sua_nick`, `huy.nick`), biên bản kiểm quỹ ghi `nick`.

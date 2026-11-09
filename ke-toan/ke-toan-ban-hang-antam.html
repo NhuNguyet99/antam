@@ -1,0 +1,1265 @@
+<title>Kế toán bán hàng An Tâm</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Roboto+Mono:wght@400;500&display=swap">
+<style>
+/* Layout: bàn làm việc của kế toán — thanh menu trái, vùng việc chính bên phải; mức độ gấp thể hiện bằng màu nhãn */
+:root {
+  --bg: #f2f4f1; --surface: #ffffff; --raise: #f7f9f6; --fg: #18211d; --muted: #5b6862; --line: #dce2dc;
+  --accent: #1c6b5a; --accent-fg: #ffffff; --accent-soft: #e0eee8;
+  --crit: #b42318; --crit-soft: #fbe8e5; --warn: #9a5b06; --warn-soft: #fbefd9; --ok: #2b7a3d; --ok-soft: #e3f1e5; --info: #3f5a91; --info-soft: #e7ebf5;
+  --f-body: "Be Vietnam Pro", "Segoe UI", system-ui, sans-serif;
+  --f-mono: "Roboto Mono", ui-monospace, Consolas, monospace;
+  --r: 8px;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #111614; --surface: #19201d; --raise: #1f2723; --fg: #e3eae6; --muted: #98a59f; --line: #2b3531;
+  --accent: #5cbfa3; --accent-fg: #0d1a16; --accent-soft: #1b332d;
+  --crit: #f08a7e; --crit-soft: #3a1f1c; --warn: #e5b05c; --warn-soft: #352916; --ok: #7cc98a; --ok-soft: #1b3120; --info: #a6b6e6; --info-soft: #222a40;
+  color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #111614; --surface: #19201d; --raise: #1f2723; --fg: #e3eae6; --muted: #98a59f; --line: #2b3531;
+  --accent: #5cbfa3; --accent-fg: #0d1a16; --accent-soft: #1b332d;
+  --crit: #f08a7e; --crit-soft: #3a1f1c; --warn: #e5b05c; --warn-soft: #352916; --ok: #7cc98a; --ok-soft: #1b3120; --info: #a6b6e6; --info-soft: #222a40;
+  color-scheme: dark }
+* { box-sizing: border-box; }
+body { background: var(--bg); color: var(--fg); font-family: var(--f-body); font-size: 17px; line-height: 1.5; }
+button, input, select, textarea { font: inherit; color: inherit; }
+h1, h2, h3 { margin: 0; text-wrap: balance; }
+h1 { font-size: 26.5px; font-weight: 700; letter-spacing: -0.01em; }
+h2 { font-size: 20.5px; font-weight: 700; }
+h3 { font-size: 17px; font-weight: 600; }
+p { margin: 0; }
+.mono { font-family: var(--f-mono); font-size: 0.92em; }
+.num { font-variant-numeric: tabular-nums; }
+.muted { color: var(--muted); }
+.small { font-size: 15px; }
+.app { display: grid; grid-template-columns: 216px minmax(0, 1fr); min-height: 100%; }
+.side { position: sticky; top: env(safe-area-inset-top, 0px); align-self: start; height: 100vh; padding-block: 18px; padding-left: max(14px, env(safe-area-inset-left, 0px)); padding-right: 10px; display: flex; flex-direction: column; gap: 14px; border-right: 1px solid var(--line); background: var(--surface); overflow-y: auto; }
+.brand { display: grid; gap: 2px; padding: 0 6px; }
+.brand b { font-size: 18px; }
+.brand span { font-size: 14.5px; color: var(--muted); }
+.nav { display: grid; gap: 2px; }
+.nav button { text-align: left; border: 0; background: none; padding: 8px 10px; border-radius: 6px; cursor: pointer; display: flex; justify-content: space-between; align-items: center; gap: 8px; color: var(--fg); }
+.nav button:hover { background: var(--raise); }
+.nav button[aria-current="page"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.nav .badge { font-size: 13px; font-weight: 600; background: var(--crit); color: var(--surface); border-radius: 999px; padding: 0 7px; line-height: 18px; }
+.who { margin-top: auto; padding: 10px 8px; border-top: 1px solid var(--line); display: grid; gap: 6px; font-size: 15px; color: var(--muted); }
+.main { min-width: 0; padding-block: 22px 60px; padding-left: max(20px, env(safe-area-inset-left, 0px)); padding-right: max(20px, env(safe-area-inset-right, 0px)); display: grid; gap: 18px; align-content: start; max-width: 1240px; }
+@media (max-width: 900px) {
+  .app { grid-template-columns: minmax(0, 1fr); }
+  .side { position: sticky; top: env(safe-area-inset-top, 0px); z-index: 20; height: auto; flex-direction: row; align-items: center; padding-block: 8px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); border-right: 0; border-bottom: 1px solid var(--line); overflow-x: auto; overflow-y: hidden; }
+  .brand, .who { display: none; }
+  .nav { display: flex; gap: 4px; }
+  .nav button { white-space: nowrap; padding: 6px 10px; }
+  .main { padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+}
+.head { display: flex; flex-wrap: wrap; gap: 10px 16px; align-items: flex-end; justify-content: space-between; }
+.head .sub { color: var(--muted); font-size: 15.5px; }
+.row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.grow { flex: 1 1 auto; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--r); padding: 16px; display: grid; gap: 12px; min-width: 0; align-content: start; }
+.grid2 { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 16px; }
+.grid3 { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 16px; }
+@media (max-width: 1000px) { .grid3 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (max-width: 720px) { .grid2, .grid3 { grid-template-columns: minmax(0, 1fr); } }
+.kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(160px, 1fr)); gap: 1px; background: var(--line); border: 1px solid var(--line); border-radius: var(--r); overflow: hidden; }
+.kpi { background: var(--surface); padding: 12px 14px; display: grid; gap: 2px; align-content: start; }
+.kpi .l { font-size: 15px; color: var(--muted); }
+.kpi .v { font-size: 24px; font-weight: 700; font-variant-numeric: tabular-nums; }
+.kpi .s { font-size: 14.5px; color: var(--muted); }
+.kpi.alert .v { color: var(--crit); }
+.btn { border: 1px solid var(--line); background: var(--surface); padding: 7px 12px; border-radius: 6px; cursor: pointer; font-weight: 500; white-space: nowrap; }
+.btn:hover { border-color: var(--accent); }
+.btn.pri { background: var(--accent); border-color: var(--accent); color: var(--accent-fg); }
+.btn.sm { padding: 4px 9px; font-size: 15px; }
+.btn.ghost { border-color: transparent; background: none; color: var(--accent); }
+.btn:disabled { opacity: .5; cursor: default; }
+button:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible, a:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+input[type="text"], input[type="search"], input[type="date"], input[type="time"], input[type="number"], select, textarea { border: 1px solid var(--line); background: var(--surface); border-radius: 6px; padding: 6px 9px; min-width: 0; max-width: 100%; }
+textarea { width: 100%; resize: vertical; }
+label.f { display: grid; gap: 3px; font-size: 15px; color: var(--muted); }
+.seg { display: inline-flex; border: 1px solid var(--line); border-radius: 6px; overflow: hidden; flex-wrap: wrap; }
+.seg button { border: 0; background: var(--surface); padding: 6px 11px; cursor: pointer; font-size: 15.5px; }
+.seg button + button { border-left: 1px solid var(--line); }
+.seg button[aria-pressed="true"] { background: var(--accent-soft); color: var(--accent); font-weight: 600; }
+.pill { display: inline-block; font-size: 14px; font-weight: 600; padding: 1px 8px; border-radius: 999px; white-space: nowrap; background: var(--raise); color: var(--muted); }
+.pill.red { background: var(--crit-soft); color: var(--crit); }
+.pill.yellow { background: var(--warn-soft); color: var(--warn); }
+.pill.green { background: var(--ok-soft); color: var(--ok); }
+.pill.blue { background: var(--info-soft); color: var(--info); }
+.tbl { overflow-x: auto; border: 1px solid var(--line); border-radius: var(--r); background: var(--surface); }
+.tbl.tall { max-height: 620px; overflow-y: auto; }
+table { border-collapse: collapse; width: 100%; font-size: 15.5px; }
+th, td { padding: 7px 10px; text-align: left; border-bottom: 1px solid var(--line); white-space: nowrap; vertical-align: top; }
+th { position: sticky; top: 0; background: var(--surface); font-size: 14px; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; z-index: 1; }
+td.n, th.n { text-align: right; font-variant-numeric: tabular-nums; }
+td.w { white-space: normal; min-width: 180px; }
+tr.click { cursor: pointer; }
+tr.click:hover td { background: var(--accent-soft); }
+tfoot td { font-weight: 700; background: var(--raise); }
+.neg { color: var(--crit); }
+.empty { padding: 28px 16px; text-align: center; color: var(--muted); display: grid; gap: 8px; justify-items: center; }
+.banner { border-radius: var(--r); padding: 12px 14px; display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between; background: var(--info-soft); color: var(--fg); }
+.banner.warn { background: var(--warn-soft); }
+.banner.crit { background: var(--crit-soft); }
+.tl { display: grid; gap: 0; }
+.tli { display: grid; grid-template-columns: 48px 22px minmax(0, 1fr); gap: 10px; align-items: start; padding: 10px 0; border-bottom: 1px solid var(--line); }
+.tli:last-child { border-bottom: 0; }
+.tli .t { font-family: var(--f-mono); font-size: 15.5px; padding-top: 1px; }
+.tli.due .t { color: var(--crit); font-weight: 600; }
+.tli.done .tt { text-decoration: line-through; color: var(--muted); }
+.tli .tt { font-weight: 500; }
+.tli .nt { font-size: 15px; color: var(--muted); }
+.chk { width: 20px; height: 20px; accent-color: var(--accent); margin-top: 1px; cursor: pointer; }
+.list { display: grid; }
+.li { display: grid; grid-template-columns: minmax(0, 1fr) auto; gap: 4px 12px; padding: 9px 0; border-bottom: 1px solid var(--line); align-items: center; }
+.li:last-child { border-bottom: 0; }
+.li .a { min-width: 0; }
+.li .a b { font-weight: 600; }
+.bars { width: 100%; height: auto; display: block; }
+.agebar { display: flex; height: 14px; border-radius: 4px; overflow: hidden; background: var(--raise); }
+.agebar span { display: block; height: 100%; }
+.legend { display: flex; flex-wrap: wrap; gap: 6px 14px; font-size: 15px; color: var(--muted); }
+.legend i { display: inline-block; width: 10px; height: 10px; border-radius: 2px; margin-right: 5px; vertical-align: -1px; }
+.drop { border: 2px dashed var(--line); border-radius: var(--r); padding: 26px 16px; text-align: center; display: grid; gap: 8px; justify-items: center; background: var(--surface); }
+.drop.over { border-color: var(--accent); background: var(--accent-soft); }
+.drawer-bg { position: fixed; inset: 0; background: rgba(10, 16, 14, .38); z-index: 40; }
+.drawer { position: fixed; top: 0; right: 0; bottom: 0; width: min(720px, 100%); background: var(--bg); z-index: 41; overflow-y: auto; padding-block: max(18px, env(safe-area-inset-top, 0px)) 40px; padding-left: 20px; padding-right: max(20px, env(safe-area-inset-right, 0px)); display: grid; grid-auto-rows: max-content; gap: 14px; align-content: start; box-shadow: -8px 0 24px rgba(0,0,0,.18); }
+.toasts { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: max(16px, env(safe-area-inset-bottom, 0px)); z-index: 60; display: grid; gap: 8px; width: min(380px, calc(100% - 32px)); }
+.toast { background: var(--surface); border: 1px solid var(--line); border-left: 4px solid var(--accent); border-radius: var(--r); padding: 12px 14px; display: grid; gap: 6px; box-shadow: 0 6px 18px rgba(0,0,0,.16); }
+.toast.rem { border-left-color: var(--warn); }
+.toast .row { justify-content: flex-end; }
+.msg { white-space: pre-wrap; background: var(--raise); border: 1px solid var(--line); border-radius: 6px; padding: 10px; font-size: 15.5px; }
+.ed td { padding: 4px 6px; }
+.ed input[type="text"] { width: 100%; }
+hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
+@media (prefers-reduced-motion: no-preference) { .toast { animation: tin .25s ease; } @keyframes tin { from { transform: translateY(8px); opacity: .4; } } }
+</style>
+<style>
+/* chữ to hơn 15% trên máy tính */
+@media (min-width: 1024px) {
+  body { font-size: 19.5px; }
+  h1 { font-size: 30.5px; }
+  h2 { font-size: 23.5px; }
+  h3 { font-size: 19.5px; }
+  .small { font-size: 17px; }
+  .brand b { font-size: 20.5px; }
+  .brand span { font-size: 16.5px; }
+  .nav .badge { font-size: 15px; }
+  .who { font-size: 17px; }
+  .head .sub { font-size: 18px; }
+  .kpi .l { font-size: 17px; }
+  .kpi .v { font-size: 27.5px; }
+  .kpi .s { font-size: 16.5px; }
+  .btn.sm { font-size: 17px; }
+  label.f { font-size: 17px; }
+  .seg button { font-size: 18px; }
+  .pill { font-size: 16px; }
+  table { font-size: 18px; }
+  th { font-size: 16px; }
+  .tli .t { font-size: 18px; }
+  .tli .nt { font-size: 17px; }
+  .legend { font-size: 17px; }
+  .msg { font-size: 18px; }
+}
+</style>
+<!-- nick-gate:start -->
+<script>window.NICK_GATE = {"site": "ktbh", "title": "Kế toán bán hàng An Tâm", "slot": "#gate-slot"};</script>
+<style id="nick-gate-css">
+/* Khóa trang bằng nick + mật khẩu: chưa đăng nhập thì ẩn toàn bộ trang, chỉ hiện ô đăng nhập */
+html.ng-locked body > *:not([id^="ng-"]):not(script):not(style):not(link):not(title):not(meta) { display: none !important; }
+#ng-gate { position: fixed; inset: 0; z-index: 9000; display: grid; place-items: center; overflow: auto; background: var(--bg, #f2f4f1); color: var(--fg, var(--ink, #18211d));
+  padding: max(24px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(24px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+#ng-gate[hidden], #ng-panel[hidden] { display: none !important; }
+.ng-card { width: min(420px, 100%); background: var(--surface, #fff); border: 1px solid var(--line, #dce2dc); border-radius: 14px; padding: 22px; display: grid; gap: 12px; box-shadow: 0 6px 24px rgba(0, 0, 0, .08); }
+.ng-card h1 { margin: 0; font-size: 1.35em; line-height: 1.25; }
+.ng-card p { margin: 0; color: var(--muted, #5b6862); font-size: .92em; }
+.ng-f { display: grid; gap: 4px; font-size: .9em; color: var(--muted, #5b6862); }
+.ng-f input, .ng-f select { font: inherit; color: var(--fg, var(--ink, #18211d)); border: 1px solid var(--line, #dce2dc); background: var(--surface, #fff); border-radius: 8px; padding: 9px 11px; min-width: 0; width: 100%; }
+.ng-btn { font: inherit; border: 1px solid var(--line, #dce2dc); background: var(--surface, #fff); color: inherit; border-radius: 8px; padding: 8px 14px; cursor: pointer; font-weight: 600; white-space: nowrap; }
+.ng-btn.pri { background: var(--accent, #1c6b5a); border-color: var(--accent, #1c6b5a); color: var(--accent-fg, var(--accent-ink, #fff)); }
+.ng-btn.sm { padding: 4px 10px; font-size: .88em; }
+.ng-btn:disabled { opacity: .55; cursor: default; }
+.ng-err { color: var(--crit, var(--chi, #b42318)); font-size: .9em; min-height: 1.2em; }
+.ng-me { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--line, #dce2dc); background: var(--surface, #fff); color: inherit; border-radius: 999px; padding: 4px 11px; font: inherit; font-size: .86em; cursor: pointer; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+#ng-fixed { position: fixed; left: calc(10px + env(safe-area-inset-left, 0px)); bottom: calc(10px + env(safe-area-inset-bottom, 0px)); z-index: 8000; }
+#ng-panel { position: fixed; inset: 0; z-index: 9100; background: rgba(10, 16, 14, .42); display: grid; place-items: start center; overflow-y: auto;
+  padding: max(24px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) max(24px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); }
+#ng-panel .ng-card { width: min(680px, 100%); color: var(--fg, var(--ink, #18211d)); }
+.ng-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ng-grow { flex: 1 1 auto; }
+.ng-tbl { overflow-x: auto; border: 1px solid var(--line, #dce2dc); border-radius: 8px; }
+.ng-tbl table { border-collapse: collapse; width: 100%; font-size: .92em; }
+.ng-tbl th, .ng-tbl td { padding: 7px 9px; text-align: left; border-bottom: 1px solid var(--line, #dce2dc); white-space: nowrap; }
+.ng-tbl th { font-size: .8em; text-transform: uppercase; letter-spacing: .04em; color: var(--muted, #5b6862); }
+.ng-tbl tr.off td { color: var(--muted, #5b6862); }
+.ng-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 10px; }
+.ng-chk { display: inline-flex; gap: 6px; align-items: center; font-size: .92em; }
+</style>
+<script id="nick-gate">
+(function () {
+  'use strict';
+  const C = window.NICK_GATE || {}, SITE = C.site || 'site', TITLE = C.title || document.title;
+  const KEY = 'ng-' + SITE + '-sess', DAYS = 30, root = document.documentElement;
+  root.classList.add('ng-locked');
+  const $ = (s, r) => (r || document).querySelector(s);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  const norm = v => String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().replace(/[^a-z0-9._-]/g, '');
+  const hex = b => Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2, '0')).join('');
+  // mật khẩu băm PBKDF2 (ai được mời vào trang cũng đọc được danh sách tài khoản – không lưu mật khẩu gốc)
+  async function hash(salt, pw) {
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(pw)), 'PBKDF2', false, ['deriveBits']);
+    return hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: new TextEncoder().encode(salt), iterations: 120000, hash: 'SHA-256' }, key, 256));
+  }
+  const rid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const sess = { get() { try { return JSON.parse(localStorage.getItem(KEY)); } catch (e) { return null; } }, set(v) { try { if (v) localStorage.setItem(KEY, JSON.stringify(v)); else localStorage.removeItem(KEY); } catch (e) { /* trình duyệt chặn lưu */ } } };
+  const nowStr = () => { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+  const G = { db: null, user: null, owner: false, admin: false, acc: {}, ep: 0, loaded: false, nodb: false, me: null };
+  window.ANTAM_NICK = null;
+
+  const gate = document.createElement('div'); gate.id = 'ng-gate'; document.body.appendChild(gate);
+  const panel = document.createElement('div'); panel.id = 'ng-panel'; panel.hidden = true; document.body.appendChild(panel);
+
+  function current() {
+    const s = sess.get(), a = s && G.acc[s.id];
+    return a && a.active !== false && a.pw && s.sig === a.pw.slice(0, 24) && s.exp > Date.now() && (s.iat || 0) >= (G.ep || 0) ? Object.assign({ id: s.id }, a) : null;
+  }
+  function apply() {
+    if (!G.loaded) { drawGate(); return; }
+    const me = current();
+    if (sess.get() && !me) sess.set(null);
+    G.me = me;
+    window.ANTAM_NICK = me ? { id: me.id, user: me.user, name: me.name || me.user } : G.owner ? { id: 'owner', user: '', name: 'Chủ trang' } : null;
+    const open = !!(me || G.owner);
+    root.classList.toggle('ng-locked', !open); gate.hidden = open;
+    if (!open) drawGate();
+    drawSlot();
+    window.dispatchEvent(new Event('antam-nick'));
+  }
+  function drawGate() {
+    const hasAcc = Object.values(G.acc).some(a => a && a.active !== false);
+    const state = G.nodb ? 'nodb' : !G.loaded ? 'loading' : hasAcc ? 'form' : 'empty';
+    if (gate.dataset.state === state && state === 'form') return; // đang gõ: giữ nguyên ô đăng nhập
+    gate.dataset.state = state;
+    const body = state === 'nodb' ? '<p>Trang cần mở trên claude.ai khi đã đăng nhập, bằng link chủ trang gửi.</p>'
+      : state === 'loading' ? '<p>Đang tải…</p>'
+      : state === 'empty' ? '<p>Trang chưa có tài khoản nào. Chủ trang mở trang để tạo tài khoản đăng nhập cho nhân viên.</p>'
+      : `<p>Đăng nhập bằng nick và mật khẩu do quản lý cấp.</p>
+        <label class="ng-f">Nick<input id="ng-user" autocomplete="username" autocapitalize="none" spellcheck="false" value="${esc(localStorage.getItem('ng-' + SITE + '-last') || '')}"></label>
+        <label class="ng-f">Mật khẩu<input id="ng-pw" type="password" autocomplete="current-password"></label>
+        <button class="ng-btn pri" type="submit">Đăng nhập</button><div class="ng-err" id="ng-err" role="alert"></div>
+        <p>Quên mật khẩu: nhờ quản lý đặt lại.</p>`;
+    gate.innerHTML = `<form class="ng-card" id="ng-form" novalidate><h1>${esc(TITLE)}</h1>${body}</form>`;
+    const f = $('#ng-form', gate), u = $('#ng-user', gate), pw = $('#ng-pw', gate);
+    if (u) (u.value ? pw : u).focus();
+    f.onsubmit = async e => {
+      e.preventDefault(); if (!u) return;
+      const btn = $('button[type=submit]', f), err = $('#ng-err', f);
+      btn.disabled = true; btn.textContent = 'Đang đăng nhập…'; err.textContent = '';
+      const hit = Object.entries(G.acc).find(([, a]) => a && a.active !== false && norm(a.user) === norm(u.value));
+      const ok = hit && (await hash(hit[1].salt, pw.value)) === hit[1].pw;
+      if (!ok) { await new Promise(r => setTimeout(r, 600)); err.textContent = 'Sai nick hoặc mật khẩu.'; btn.disabled = false; btn.textContent = 'Đăng nhập'; pw.select(); return; }
+      sess.set({ id: hit[0], sig: hit[1].pw.slice(0, 24), iat: Date.now(), exp: Date.now() + DAYS * 864e5 });
+      try { localStorage.setItem('ng-' + SITE + '-last', hit[1].user); } catch (x) { /* trình duyệt chặn lưu */ }
+      gate.dataset.state = ''; apply();
+    };
+  }
+  function drawSlot() {
+    let host = C.slot && $(C.slot);
+    if (!host) { host = $('#ng-fixed') || Object.assign(document.createElement('div'), { id: 'ng-fixed' }); if (!host.parentNode) document.body.appendChild(host); }
+    const who = window.ANTAM_NICK;
+    host.innerHTML = who ? `<button type="button" class="ng-me" title="Tài khoản đăng nhập">👤 ${esc(who.name)}</button>` : '';
+    const b = $('.ng-me', host); if (b) b.onclick = openPanel;
+  }
+
+  // ---------- tài khoản của tôi / quản lý tài khoản ----------
+  let edit = null;
+  function closePanel() { panel.hidden = true; panel.innerHTML = ''; edit = null; }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !panel.hidden) closePanel(); });
+  panel.addEventListener('mousedown', e => { if (e.target === panel) closePanel(); });
+  function openPanel() { panel.hidden = false; drawPanel(); }
+  function drawPanel() {
+    if (panel.hidden) return;
+    const me = G.me, list = Object.entries(G.acc).filter(([, a]) => a).sort((x, y) => norm(x[1].user) < norm(y[1].user) ? -1 : 1);
+    const mine = me ? `<div class="ng-row"><div class="ng-grow"><b>${esc(me.name || me.user)}</b> <span style="color:var(--muted,#5b6862)">· nick ${esc(me.user)}</span></div><button class="ng-btn" type="button" id="ng-out">Đăng xuất</button></div>`
+      : `<p>Bạn là <b>chủ trang</b>: vào trang không cần đăng nhập và quản lý được tài khoản.</p>`;
+    const mgr = G.admin ? `<hr style="border:0;border-top:1px solid var(--line,#dce2dc);margin:4px 0">
+      <div class="ng-row"><h2 class="ng-grow" style="margin:0;font-size:1.1em">Tài khoản đăng nhập</h2><button class="ng-btn sm" type="button" id="ng-add">+ Thêm tài khoản</button><button class="ng-btn sm" type="button" id="ng-epoch" title="Bắt mọi người đăng nhập lại">Đăng xuất tất cả máy</button></div>
+      ${edit ? `<form id="ng-edit" class="ng-grid" novalidate style="background:var(--raise,var(--sunk,#f7f9f6));padding:12px;border-radius:10px">
+          <label class="ng-f">Nick<input id="ng-e-user" value="${esc(edit.user)}" autocapitalize="none" spellcheck="false" maxlength="40"></label>
+          <label class="ng-f">Họ tên<input id="ng-e-name" value="${esc(edit.name)}" maxlength="60"></label>
+          <label class="ng-f">${edit.id ? 'Mật khẩu mới (để trống = giữ nguyên)' : 'Mật khẩu (ít nhất 4 ký tự)'}<input id="ng-e-pw" type="text" autocomplete="new-password"></label>
+          <label class="ng-chk"><input type="checkbox" id="ng-e-on"${edit.active !== false ? ' checked' : ''}> Đang dùng (bỏ tích = khóa tài khoản)</label>
+          <div class="ng-row" style="grid-column:1/-1"><button class="ng-btn pri" type="submit">Lưu tài khoản</button><button class="ng-btn" type="button" id="ng-e-x">Hủy</button><span class="ng-err" id="ng-e-err"></span></div>
+        </form>` : ''}
+      <div class="ng-tbl"><table><thead><tr><th>Nick</th><th>Họ tên</th><th>Trạng thái</th><th>Sửa lúc</th><th></th></tr></thead><tbody>
+        ${list.length ? list.map(([id, a]) => `<tr class="${a.active === false ? 'off' : ''}"><td><b>${esc(a.user)}</b></td><td>${esc(a.name)}</td><td>${a.active === false ? 'Đã khóa' : 'Đang dùng'}</td><td>${esc(a.at || '')}</td><td><button class="ng-btn sm" type="button" data-ng-edit="${esc(id)}">Sửa</button></td></tr>`).join('')
+          : '<tr><td colspan="5" style="color:var(--muted,#5b6862)">Chưa có tài khoản nào. Bấm “+ Thêm tài khoản”.</td></tr>'}
+      </tbody></table></div>
+      <p>Mỗi người một nick. Khóa tài khoản hoặc đổi mật khẩu thì máy đang đăng nhập bằng nick đó bị đăng xuất ngay.</p>` : '';
+    panel.innerHTML = `<div class="ng-card" role="dialog" aria-modal="true"><div class="ng-row"><h1 class="ng-grow">Tài khoản · ${esc(TITLE)}</h1><button class="ng-btn sm" type="button" id="ng-x">Đóng</button></div>${mine}${mgr}</div>`;
+    $('#ng-x', panel).onclick = closePanel;
+    const out = $('#ng-out', panel); if (out) out.onclick = () => { sess.set(null); closePanel(); apply(); };
+    const add = $('#ng-add', panel); if (add) add.onclick = () => { edit = { id: '', user: '', name: '', active: true }; drawPanel(); const i = $('#ng-e-user', panel); if (i) i.focus(); };
+    panel.querySelectorAll('[data-ng-edit]').forEach(b => b.onclick = () => { const a = G.acc[b.dataset.ngEdit]; edit = Object.assign({ id: b.dataset.ngEdit }, a); drawPanel(); });
+    const ep = $('#ng-epoch', panel); if (ep) ep.onclick = async () => {
+      if (ep.dataset.sure !== '1') { ep.dataset.sure = '1'; ep.textContent = 'Bấm lần nữa để đăng xuất tất cả'; return; }
+      try { await save(null, null, Date.now()); ep.textContent = 'Đã đăng xuất tất cả máy'; } catch (e) { ep.textContent = 'Không lưu được: ' + (e.message || e.code); }
+    };
+    const f = $('#ng-edit', panel); if (f) {
+      $('#ng-e-x', panel).onclick = () => { edit = null; drawPanel(); };
+      f.onsubmit = async e => {
+        e.preventDefault();
+        const err = $('#ng-e-err', panel), user = $('#ng-e-user', panel).value.trim(), name = $('#ng-e-name', panel).value.trim(), pw = $('#ng-e-pw', panel).value, on = $('#ng-e-on', panel).checked;
+        const dup = Object.entries(G.acc).some(([id, a]) => a && id !== edit.id && norm(a.user) === norm(user));
+        const bad = !norm(user) ? 'Nhập nick (chữ, số, dấu chấm, gạch dưới).' : dup ? 'Nick này đã có người dùng.' : (!edit.id || pw) && pw.length < 4 ? 'Mật khẩu cần ít nhất 4 ký tự.' : '';
+        if (bad) { err.textContent = bad; return; }
+        const id = edit.id || rid('a'), old = G.acc[id] || {};
+        const rec = { user: norm(user), name, active: on, at: nowStr(), salt: old.salt || '', pw: old.pw || '' };
+        if (pw) { rec.salt = rid('s'); rec.pw = await hash(rec.salt, pw); }
+        try { await save(id, rec); edit = null; drawPanel(); } catch (x) { err.textContent = 'Không lưu được: ' + (x.message || x.code) + (x.code === 'invalid_argument' ? ' (chỉ chủ trang / Editor sửa được tài khoản)' : ''); }
+      };
+    }
+  }
+  async function save(id, rec, ep) {
+    const ref = G.db.doc('auth/accounts'), s = await ref.get(), cur = s.exists ? s.data() : { a: {} };
+    const next = { a: Object.assign({}, cur.a || {}), ep: cur.ep || 0 };
+    if (id) next.a[id] = rec;
+    if (ep) next.ep = ep;
+    await ref.set(next);
+  }
+
+  // ---------- khởi động ----------
+  (async function boot() {
+    drawGate();
+    const c = window.claude;
+    const [db, user] = c && c.use ? await Promise.all([c.use('db').catch(() => null), c.use('user').catch(() => null)]) : [null, null];
+    G.db = db; G.user = user;
+    if (!db) { G.nodb = true; G.loaded = true; gate.dataset.state = ''; drawGate(); return; }
+    if (user) {
+      try { G.owner = !!(await user.isOwner()); } catch (e) { /* không rõ */ }
+      try { G.admin = !!(await user.canEdit()); } catch (e) { /* không rõ */ }
+    }
+    db.doc('auth/accounts').onSnapshot(s => {
+      const d = s.exists ? s.data() : {};
+      G.acc = d.a || {}; G.ep = d.ep || 0; G.loaded = true;
+      apply(); drawPanel();
+    }, () => { G.loaded = true; apply(); });
+  })();
+})();
+</script>
+<!-- nick-gate:end -->
+
+<div class="app">
+  <aside class="side">
+    <div class="brand"><b>Kế toán bán hàng</b><span>Công ty TNHH SX-TM Ẩm Thực An Tâm</span></div>
+    <div id="gate-slot"></div>
+    <nav class="nav" id="nav"></nav>
+    <div class="who" id="who">Đang kết nối dữ liệu…</div>
+  </aside>
+  <main class="main" id="view"><div class="empty">Đang tải…</div></main>
+</div>
+<div id="drawerHost"></div>
+<div class="toasts" id="toasts" aria-live="polite"></div>
+
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script>
+"use strict";
+/* ============ Tiện ích ============ */
+const $ = s => document.querySelector(s);
+const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]));
+const nf = new Intl.NumberFormat('vi-VN');
+const N = v => nf.format(Math.round(v || 0));
+const M = v => { const x = (v || 0) / 1e6; if (Math.abs(x) >= 1000) return (x / 1000).toLocaleString('vi-VN', { maximumFractionDigits: 2 }) + ' tỷ'; return x.toLocaleString('vi-VN', { maximumFractionDigits: Math.abs(x) >= 100 ? 0 : 1 }) + ' tr'; };
+const pad = n => String(n).padStart(2, '0');
+const isoOf = dt => dt.getFullYear() + '-' + pad(dt.getMonth() + 1) + '-' + pad(dt.getDate());
+/* Ngày làm việc đổi lúc 05:00: từ 00:00 đến 04:59 vẫn tính là ngày hôm trước (ca đêm kết thúc sau nửa đêm) */
+const DAY_START = '05:00';
+const today = () => { const d = new Date(); if (pad(d.getHours()) + ':' + pad(d.getMinutes()) < DAY_START) d.setDate(d.getDate() - 1); return isoOf(d); };
+const tkey = hm => (hm < DAY_START ? '1' : '0') + hm;
+const tmin = hm => +hm.slice(0, 2) * 60 + +hm.slice(3, 5) + (hm < DAY_START ? 1440 : 0);
+const parseISO = s => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+const addDays = (s, n) => { const d = parseISO(s); d.setDate(d.getDate() + n); return isoOf(d); };
+const diff = (a, b) => Math.round((parseISO(b) - parseISO(a)) / 864e5);
+const dm = s => s ? s.slice(8, 10) + '/' + s.slice(5, 7) : '';
+const dmy = s => s ? s.slice(8, 10) + '/' + s.slice(5, 7) + '/' + s.slice(0, 4) : '';
+const fold = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase();
+const nowHM = () => { const d = new Date(); return pad(d.getHours()) + ':' + pad(d.getMinutes()); };
+const monthStart = s => s.slice(0, 8) + '01';
+const monthEnd = s => { const d = parseISO(monthStart(s)); d.setMonth(d.getMonth() + 1); d.setDate(0); return isoOf(d); };
+const DOW = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
+const ls = { get(k, d) { try { const v = localStorage.getItem('ktbh-' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem('ktbh-' + k, JSON.stringify(v)); } catch (e) {} } };
+
+/* ============ Cài đặt mặc định (theo quy trình công nợ) ============ */
+const DEF = {
+  shifts: [{ id: 'sang', name: 'Ca sáng', from: '07:30', to: '12:00' }, { id: 'chieu', name: 'Ca chiều', from: '13:00', to: '17:30' }, { id: 'dem', name: 'Ca đêm', from: '17:00', to: '01:00' }],
+  terms: { days: 7, stopAfter: 3, limit: 10000000, red: 20000000, yellow: 5000000 },
+  bank: 'ACB 7848888888, Công ty TNHH SX-TM Ẩm Thực An Tâm',
+  tasks: [
+    { id: 't01', t: '08:00', s: 'sang', r: 'd', title: 'Đối chiếu sao kê ACB và tiền mặt hôm qua', note: 'Lập phiếu thu trong MISA, chọn đúng hóa đơn khách trả theo mã đơn CRMDH. Tiền chưa rõ khách ghi vào danh sách chờ, không ghi vào 02KVL hay TEMPLE.', go: 'payments' },
+    { id: 't02', t: '08:30', s: 'sang', r: 'd', title: 'Nhập dữ liệu MISA vào web', note: 'MISA › Báo cáo › Chi tiết công nợ phải thu khách hàng, TK 131, từ ngày đầu tháng đến hôm nay. Xuất Excel rồi kéo file vào trang Nhập MISA.', go: 'import' },
+    { id: 't03', t: '09:00', s: 'sang', r: 'd', title: 'Gửi danh sách chặn giao nợ cho kho', note: 'Copy danh sách ở Công nợ › Chặn giao nợ, gửi nhóm Zalo kho và điều phối trước giờ xuất hàng.', go: 'debt' },
+    { id: 't04', t: '09:15', s: 'sang', r: 'd', title: 'Nhắn và gọi khách cần liên hệ hôm nay', note: 'Làm hết danh sách “Cần liên hệ hôm nay”. Mỗi lần liên hệ ghi kết quả và ngày hẹn trả.', go: 'home' },
+    { id: 't05', t: '11:30', s: 'sang', r: 'd', title: 'Kiểm tra đơn buổi sáng đã có hóa đơn', note: 'Đơn đã giao phải có số hóa đơn, ngày hóa đơn trùng ngày giao.', go: 'invoices' },
+    { id: 't06', t: '14:00', s: 'chieu', r: 'd', title: 'Kiểm tra tiền về và khách hẹn trả hôm nay', note: 'Gọi lại khách hẹn trả hôm nay mà chưa thấy tiền. Lỡ hẹn lần hai thì báo quản lý.', go: 'home' },
+    { id: 't07', t: '15:00', s: 'chieu', r: 'd', title: 'Theo dõi đơn giao buổi chiều', note: 'Khách lẻ thu tiền khi giao. Khách trong danh sách chặn chỉ giao khi trả tiền ngay.', go: 'orders' },
+    { id: 't08', t: '16:30', s: 'chieu', r: 'd', title: 'Kiểm tra hóa đơn của mọi đơn giao trong ngày', note: 'Không còn đơn giao nào chưa có hóa đơn trước khi về.', go: 'invoices' },
+    { id: 't09', t: '17:00', s: 'chieu', r: 'd', title: 'Bàn giao cho ca đêm', note: 'Nhắn nhóm Zalo: đơn chưa có hóa đơn, khách hẹn trả chiều nay chưa thấy tiền, khách mới bị chặn giao nợ.', go: 'checklist' },
+    { id: 'n01', t: '17:00', s: 'dem', r: 'd', title: 'Nhận bàn giao từ ca chiều', note: 'Đọc tin bàn giao và checklist ca sáng, ca chiều. Việc nào ca trước chưa xong thì ca đêm làm tiếp.', go: 'checklist' },
+    { id: 'n02', t: '17:30', s: 'dem', r: 'd', title: 'Gửi lại danh sách chặn giao nợ cho đơn buổi tối', note: 'Copy danh sách ở Công nợ › Chặn giao nợ, gửi người giao hàng ca tối trước khi xuất hàng.', go: 'debt' },
+    { id: 'n03', t: '18:30', s: 'dem', r: 'd', title: 'Đối chiếu tiền chuyển khoản về buổi chiều', note: 'Xem sao kê ACB từ 13:00, lập phiếu thu trong MISA, chọn đúng hóa đơn khách trả theo mã đơn CRMDH.', go: 'payments' },
+    { id: 'n04', t: '19:30', s: 'dem', r: 'd', title: 'Gọi khách hẹn trả hôm nay mà chưa thấy tiền', note: 'Làm tiếp danh sách “Cần liên hệ hôm nay” còn lại của ca ngày. Ghi kết quả và ngày hẹn mới.', go: 'home' },
+    { id: 'n05', t: '20:30', s: 'dem', r: 'd', title: 'Theo dõi đơn giao buổi tối', note: 'Khách lẻ thu tiền khi giao. Khách trong danh sách chặn chỉ giao khi trả tiền ngay.', go: 'orders' },
+    { id: 'n06', t: '22:00', s: 'dem', r: 'd', title: 'Xuất hóa đơn cho đơn giao buổi tối', note: 'Mọi đơn đã giao trong ngày phải có số hóa đơn, ngày hóa đơn trùng ngày giao. Không để sang ngày sau.', go: 'invoices' },
+    { id: 'n07', t: '23:30', s: 'dem', r: 'd', title: 'Thu và đối chiếu tiền mặt của người giao hàng', note: 'Tiền mặt thu được phải khớp các đơn giao trả tiền mặt. Lập phiếu thu tiền mặt trong MISA.', go: 'payments' },
+    { id: 'n08', t: '00:30', s: 'dem', r: 'd', title: 'Gửi báo cáo cuối ngày và bàn giao ca sáng', note: 'Kiểm tra lần cuối: đơn trong ngày đã có hóa đơn, tiền đã lập phiếu thu. Copy báo cáo cuối ngày ở trang Checklist, gửi nhóm Zalo.', go: 'checklist' },
+    { id: 't10', t: '08:00', s: 'sang', r: 'w', wd: 1, title: 'Xếp lại nhóm khách đỏ, vàng, xanh', note: 'Web tự xếp theo bill cũ nhất. Kiểm tra lại và phân công người phụ trách.', go: 'debt' },
+    { id: 't11', t: '09:30', s: 'sang', r: 'w', wd: 1, title: 'Họp công nợ đầu tuần với quản lý', note: 'Duyệt danh sách đỏ và vàng, quyết định dừng hoặc mở giao hàng.', go: 'debt' },
+    { id: 't12', t: '16:00', s: 'chieu', r: 'w', wd: 5, title: 'Báo cáo công nợ tuần', note: 'Tiền thu trong tuần, nợ quá hạn so với tuần trước, khách hẹn trả tuần sau.', go: 'debt' },
+    { id: 't13', t: '09:00', s: 'sang', r: 'm', md: 25, title: 'Gửi biên bản đối chiếu công nợ', note: 'Khách nợ từ 5 triệu và khách đang dư Có. Nhận lại xác nhận trước ngày 5 tháng sau.', go: 'debt' },
+    { id: 't14', t: '15:00', s: 'chieu', r: 'm', md: -1, title: 'Bù trừ mã trùng, xử lý dư Có và số dư lẻ', note: 'Ngày cuối tháng. Không để khoản treo ở 02KVL và TEMPLE.', go: 'debt' },
+  ],
+};
+const MILESTONES = [3, 7, 10, 15, 30, 60, 90];
+
+/* ============ Trạng thái ============ */
+const S = {
+  db: null, user: null, uid: null, canWrite: null, isAdmin: false, ready: false,
+  settings: null, meta: null, months: {}, days: {}, checks: {}, roster: {}, contacts: [], people: {}, assign: { owners: {}, limits: {} },
+  otherChecks: {}, view: 'home', f: {}, ver: 0, D: null, Dver: -1, today: today(), sound: ls.get('sound', false), drawer: null, readOnly: false,
+};
+const cfg = () => {
+  const s = S.settings || {};
+  return { shifts: s.shifts || DEF.shifts, tasks: s.tasks || DEF.tasks, terms: Object.assign({}, DEF.terms, s.terms || {}), bank: s.bank || DEF.bank };
+};
+
+/* ============ Đọc file MISA ============ */
+function cellNum(v) { if (typeof v === 'number') return v; if (v == null || v === '') return 0; const s = String(v).trim().replace(/\s/g, ''); if (!s) return 0; const t = /,\d{1,2}$/.test(s) ? s.replace(/\./g, '').replace(',', '.') : s.replace(/[.,](?=\d{3}(\D|$))/g, ''); const n = parseFloat(t); return isNaN(n) ? 0 : n; }
+function cellDate(v) {
+  if (v == null || v === '') return '';
+  if (v instanceof Date) return isoOf(v);
+  if (typeof v === 'number') { const d = new Date(Math.round((v - 25569) * 864e5)); return d.getUTCFullYear() + '-' + pad(d.getUTCMonth() + 1) + '-' + pad(d.getUTCDate()); }
+  const m = String(v).trim().match(/^(\d{1,2})[\/\-.](\d{1,2})[\/\-.](\d{4})/); if (m) return m[3] + '-' + pad(m[2]) + '-' + pad(m[1]);
+  const m2 = String(v).trim().match(/^(\d{4})-(\d{2})-(\d{2})/); return m2 ? m2[0] : '';
+}
+const cellStr = v => (v == null ? '' : String(v)).replace(/\s+/g, ' ').trim();
+function parseMisa(rows, fileName) {
+  let h = -1;
+  for (let i = 0; i < Math.min(rows.length, 40); i++) if ((rows[i] || []).some(c => cellStr(c) === 'Số chứng từ')) { h = i; break; }
+  if (h < 0) throw new Error('Không thấy dòng tiêu đề có cột “Số chứng từ”. Hãy xuất báo cáo “Chi tiết công nợ phải thu khách hàng” từ MISA.');
+  const hr = rows[h].map(cellStr), col = {};
+  const names = { 'Tên khách hàng': 'name', 'Ngày hạch toán': 'dHT', 'Ngày chứng từ': 'dCT', 'Số chứng từ': 'no', 'Ngày hóa đơn': 'dHD', 'Số hóa đơn': 'inv', 'Diễn giải': 'desc', 'TK công nợ': 'tk', 'TK đối ứng': 'du', 'Phát sinh': 'ps', 'Số dư': 'sd', 'Mã hàng': 'item', 'Tên hàng': 'itemName', 'Số lượng': 'qty' };
+  hr.forEach((c, j) => { if (names[c] && col[names[c]] == null) col[names[c]] = j; });
+  ['no', 'desc', 'ps', 'sd', 'dHT'].forEach(k => { if (col[k] == null) throw new Error('Báo cáo thiếu cột ' + Object.keys(names).find(x => names[x] === k) + '.'); });
+  let title = '', acct = '', pFrom = '', pTo = '';
+  for (let i = 0; i < h; i++) for (const c of rows[i] || []) {
+    const s = cellStr(c); if (!s) continue;
+    if (!title && /CÔNG NỢ/i.test(s)) title = s;
+    let m = s.match(/Tài khoản:\s*([\d, ]+)/); if (m) acct = m[1].replace(/[, ]+$/, '');
+    m = s.match(/Tháng\s+(\d{1,2})\s+năm\s+(\d{4})/i); if (m) { pFrom = m[2] + '-' + pad(m[1]) + '-01'; pTo = monthEnd(pFrom); }
+    m = s.match(/Từ ngày\s+(\d{1,2}\/\d{1,2}\/\d{4})\s+đến ngày\s+(\d{1,2}\/\d{1,2}\/\d{4})/i); if (m) { pFrom = cellDate(m[1]); pTo = cellDate(m[2]); }
+    m = s.match(/Quý\s+(\d)\s+năm\s+(\d{4})/i); if (m) { const q = +m[1]; pFrom = m[2] + '-' + pad(q * 3 - 2) + '-01'; pTo = monthEnd(m[2] + '-' + pad(q * 3) + '-01'); }
+  }
+  const cust = {}, sales = {}, pays = {}, others = [];
+  let cur = null, grand = null, minD = '', maxD = '', lines = 0;
+  for (let i = h + 2; i < rows.length; i++) {
+    const r = rows[i] || []; const texts = r.map(cellStr);
+    const first = texts.find(x => x) || '';
+    if (!first && !r.some(x => typeof x === 'number')) continue;
+    const mk = texts.find(x => x.startsWith('Mã khách hàng:'));
+    if (mk) { const code = mk.slice(14).trim(); cur = cust[code] = cust[code] || { n: '', o: 0, z: 0, dr: 0, cr: 0 }; cur.code = code; continue; }
+    const tk = texts.find(x => x.startsWith('Tên khách hàng:'));
+    if (tk) { if (cur) cur.n = tk.slice(15).trim(); continue; }
+    if (texts.includes('Tổng cộng')) { grand = { dr: cellNum(r[col.ps]), cr: cellNum(r[col.ps + 1]) }; continue; }
+    if (!cur) continue;
+    const desc = texts[col.desc] || '';
+    if (desc === 'Số dư đầu kỳ') { cur.o = cellNum(r[col.sd]) - cellNum(r[col.sd + 1]); if (col.name != null && texts[col.name]) cur.n = texts[col.name]; continue; }
+    if (desc === 'Cộng') { cur.z = cellNum(r[col.sd]) - cellNum(r[col.sd + 1]); cur.closed = true; continue; }
+    const no = texts[col.no]; if (!no) continue;
+    if (col.name != null && !cur.n && texts[col.name]) cur.n = texts[col.name];
+    const d = cellDate(r[col.dHT]); if (!d) continue;
+    lines++;
+    if (!minD || d < minD) minD = d; if (!maxD || d > maxD) maxD = d;
+    const dr = cellNum(r[col.ps]), cr = cellNum(r[col.ps + 1]), du = texts[col.du] || '';
+    cur.dr += dr; cur.cr += cr;
+    const isSale = /^(511|521|3331)/.test(du);
+    if (isSale) {
+      const key = no + '|' + cur.code;
+      const s = sales[key] = sales[key] || { n: no, c: cur.code, d, i: col.inv != null ? texts[col.inv] : '', id: col.dHD != null ? cellDate(r[col.dHD]) : '', a: 0, k: 0, v: 0, t: 0, l: [] };
+      s.t += dr - cr;
+      if (/^511/.test(du)) { s.a += dr - cr; s.l.push([col.item != null ? texts[col.item] : '', col.itemName != null ? texts[col.itemName] : desc, col.qty != null ? cellNum(r[col.qty]) : 0, dr - cr, du]); }
+      else if (/^521/.test(du)) s.k += cr - dr;
+      else s.v += dr - cr;
+    } else if (cr > 0 && dr === 0) {
+      const key = no + '|' + cur.code;
+      const p = pays[key] = pays[key] || { n: no, c: cur.code, d, a: 0, acc: du, x: desc.slice(0, 140), big: 0 };
+      p.a += cr; if (cr > p.big) { p.big = cr; p.acc = du; }
+    } else {
+      others.push({ n: no, c: cur.code, d, dr, cr, acc: du, x: desc.slice(0, 140) });
+    }
+  }
+  let bad = 0; const badList = [];
+  for (const c of Object.values(cust)) if (c.closed && Math.abs(c.o + c.dr - c.cr - c.z) > 1) { bad++; if (badList.length < 10) badList.push(c.code); }
+  const sumDr = Object.values(cust).reduce((a, c) => a + c.dr, 0), sumCr = Object.values(cust).reduce((a, c) => a + c.cr, 0);
+  const grandOk = !grand || (Math.abs(grand.dr - sumDr) < 2 && Math.abs(grand.cr - sumCr) < 2);
+  const salesArr = Object.values(sales), paysArr = Object.values(pays).map(p => { delete p.big; return p; });
+  if (!Object.keys(cust).length) throw new Error('Không đọc được khách hàng nào. File có đúng báo cáo chi tiết công nợ phải thu không?');
+  return {
+    file: fileName, title, acct, pFrom, pTo, from: pFrom && minD && pFrom < minD ? pFrom : (minD || pFrom), to: maxD || pTo, minD, maxD, lines,
+    cust, sales: salesArr, pays: paysArr, others, bad, badList, grandOk, grand, sumDr, sumCr,
+    rev: salesArr.reduce((a, s) => a + s.a - s.k, 0), vat: salesArr.reduce((a, s) => a + s.v, 0), paid: paysArr.reduce((a, p) => a + p.a, 0),
+  };
+}
+
+/* ============ Kết nối dữ liệu chung ============ */
+async function init() {
+  render();
+  let db = null, user = null;
+  try { db = await window.claude?.use?.('db'); } catch (e) { db = null; }
+  try { user = await window.claude?.use?.('user'); } catch (e) { user = null; }
+  S.db = db; S.user = user;
+  if (user) {
+    try { S.uid = await user.id(); } catch (e) {}
+    try { S.canWrite = await user.can('data.write'); } catch (e) { S.canWrite = null; }
+    try { S.isAdmin = await user.canEdit(); } catch (e) {}
+  }
+  S.ready = true;
+  if (!db) { render(); return; }
+  const fail = e => { if (e && e.code === 'revoked') { S.db = null; render(); } };
+  db.doc('settings/app').onSnapshot(s => { S.settings = s.exists ? s.data() : null; bump(); }, fail);
+  db.doc('meta/index').onSnapshot(s => { S.meta = s.exists ? s.data() : null; bump(); }, fail);
+  db.doc('meta/people').onSnapshot(s => { S.people = s.exists ? s.data() : {}; bump(); registerMe(); }, fail);
+  db.doc('assign/owners').onSnapshot(s => { const d = s.exists ? s.data() : {}; S.assign = { owners: d.owners || {}, limits: d.limits || {} }; bump(); }, fail);
+  db.collection('months').onSnapshot(q => { const m = {}; q.docs.forEach(d => { m[d.id] = d.data(); }); S.months = m; bump(); }, fail);
+  const now = parseISO(today()); now.setMonth(now.getMonth() - 2); const minM = isoOf(now).slice(0, 7);
+  db.collection('days').where('m', '>=', minM).onSnapshot(q => { const m = {}; q.docs.forEach(d => { m[d.id] = d.data(); }); S.days = m; bump(); }, fail);
+  db.collection('contacts').orderBy('at', 'desc').limit(1000).onSnapshot(q => { S.contacts = q.docs.map(d => Object.assign({ _id: d.id }, d.data())); bump(); }, fail);
+  subscribeDay();
+}
+let unsubDay = [];
+function subscribeDay() {
+  unsubDay.forEach(u => u()); unsubDay = [];
+  const d = S.today = today();
+  unsubDay.push(S.db.doc('checks/' + d).onSnapshot(s => { S.checks = s.exists ? s.data() : {}; bump(); }));
+  unsubDay.push(S.db.doc('roster/' + d).onSnapshot(s => { S.roster = s.exists ? s.data() : {}; bump(); }));
+}
+async function registerMe() {
+  if (!S.uid || S.canWrite === false || S.readOnly || registerMe.done) return;
+  if (S.people && S.people[S.uid]) { registerMe.done = true; return; }
+  registerMe.done = true;
+  try { await upsert('meta/people', { [S.uid]: { since: today() } }); } catch (e) {}
+}
+const queues = {};
+function upsert(path, patch) {
+  const run = async () => {
+    const ref = S.db.doc(path);
+    try { await ref.update(patch); }
+    catch (e) {
+      if (e && e.code === 'invalid_argument') { const s = await ref.get(); if (!s.exists) { await ref.set(patch); return; } }
+      throw e;
+    }
+  };
+  const p = (queues[path] || Promise.resolve()).then(run, run);
+  queues[path] = p.catch(() => {});
+  return p;
+}
+function writeFail(e) {
+  if (e && e.code === 'invalid_argument' && S.canWrite !== true) { S.readOnly = true; toast('Bạn chỉ có quyền xem trang này. Nhờ chủ trang chia sẻ quyền Contributor để ghi dữ liệu.'); render(); return; }
+  if (e && e.code === 'quota_exceeded') { toast('Kho dữ liệu đã đầy. Báo quản lý xóa bớt dữ liệu cũ.'); return; }
+  toast('Chưa lưu được: ' + ((e && e.message) || 'lỗi kết nối') + '. Thử lại sau ít phút.');
+}
+const canW = () => S.db && S.canWrite !== false && !S.readOnly;
+let raf = 0;
+function bump() { S.ver++; if (raf) return; raf = requestAnimationFrame(() => { raf = 0; render(); }); }
+
+/* ============ Tính toán ============ */
+function derive() {
+  if (S.Dver === S.ver && S.D) return S.D;
+  const T = cfg().terms, td = S.today;
+  const mkeys = Object.keys(S.months).sort();
+  const lastM = mkeys.length ? S.months[mkeys[mkeys.length - 1]] : null;
+  const dkeys = Object.keys(S.days).sort();
+  const firstDay = dkeys[0] || '', lastDay = dkeys[dkeys.length - 1] || '';
+  const asOf = lastM ? (lastM.to || lastDay) : lastDay;
+  const names = {};
+  mkeys.forEach(k => { const c = S.months[k].cust || {}; for (const code in c) if (c[code].n) names[code] = c[code].n; });
+  const sales = [], pays = [], others = [];
+  for (const d of dkeys) { const x = S.days[d]; (x.s || []).forEach(s => sales.push(s)); (x.p || []).forEach(p => pays.push(p)); (x.o || []).forEach(o => others.push(o)); }
+  const C = {};
+  const ensure = code => C[code] || (C[code] = { code, name: names[code] || '', close: null, open: null, sales: [], pays: [], others: [], rev: 0, orders: 0, lastSale: '', lastPay: '', bills: [], prior: 0, age: 0, grp: 'none', contacts: [] });
+  if (lastM) for (const code in (lastM.cust || {})) { const c = ensure(code); c.close = lastM.cust[code].z; c.open = lastM.cust[code].o; }
+  sales.forEach(s => { const c = ensure(s.c); c.sales.push(s); c.rev += s.a - s.k; c.orders++; if (s.d > c.lastSale) c.lastSale = s.d; });
+  pays.forEach(p => { const c = ensure(p.c); c.pays.push(p); if (p.d > c.lastPay) c.lastPay = p.d; });
+  others.forEach(o => ensure(o.c).others.push(o));
+  S.contacts.forEach(k => { const c = C[k.c]; if (c) c.contacts.push(k); });
+  const unpaid = {};
+  for (const c of Object.values(C)) {
+    c.lastContact = c.contacts.reduce((m, k) => (k.d > m ? k.d : m), '');
+    const pr = c.contacts.filter(k => k.pd && !k.ok).sort((a, b) => (a.pd < b.pd ? -1 : 1));
+    c.promise = pr.length ? pr[pr.length - 1] : null;
+    c.broken = c.contacts.filter(k => k.pd && !k.ok && k.pd < td).length;
+    if (c.close == null) { c.grp = 'none'; continue; }
+    if (c.close < -0.5) { c.grp = 'co'; continue; }
+    if (c.close <= 0.5) { c.grp = 'none'; continue; }
+    const items = c.sales.filter(s => s.d <= asOf).map(s => ({ n: s.n, d: s.d, i: s.i, amt: s.t, k: 'bh' }))
+      .concat(c.others.filter(o => o.dr > 0 && o.d <= asOf).map(o => ({ n: o.n, d: o.d, i: '', amt: o.dr - o.cr, k: 'o' })))
+      .sort((a, b) => (a.d === b.d ? (a.n < b.n ? -1 : 1) : (a.d < b.d ? -1 : 1)));
+    let remain = c.close; const bills = [];
+    for (let j = items.length - 1; j >= 0 && remain > 0.5; j--) { const it = items[j]; if (it.amt <= 0) continue; const take = Math.min(it.amt, remain); remain -= take; bills.unshift(Object.assign({}, it, { unpaid: take, age: diff(it.d, td) })); if (it.k === 'bh') unpaid[it.n] = (unpaid[it.n] || 0) + take; }
+    c.bills = bills; c.prior = remain > 0.5 ? Math.round(remain) : 0;
+    c.oldest = c.prior ? (firstDay ? addDays(firstDay, -1) : '') : (bills[0] ? bills[0].d : '');
+    c.age = c.oldest ? diff(c.oldest, td) : 0;
+    c.grp = (c.prior > 0 || c.age > 30 || c.close >= T.red) ? 'red' : (c.age >= 8 || c.close >= T.yellow) ? 'yellow' : 'green';
+    const lim = S.assign.limits[c.code] || T.limit;
+    const due = T.days + T.stopAfter;
+    c.stopWhy = c.prior ? 'Còn nợ từ trước ' + dm(firstDay) : c.age > due ? 'Bill quá hạn ' + (c.age - T.days) + ' ngày' : c.close > lim ? 'Vượt hạn mức ' + M(lim) : c.broken >= 2 ? 'Lỡ hẹn ' + c.broken + ' lần' : '';
+    c.need = needContact(c, td);
+  }
+  const custs = Object.values(C);
+  S.D = { asOf, firstDay, lastDay, lastM, C, custs, sales, pays, others, unpaid, names };
+  S.Dver = S.ver;
+  return S.D;
+}
+function needContact(c, td) {
+  const since = c.lastContact ? diff(c.lastContact, td) : 999;
+  if (c.promise) {
+    if (c.promise.pd < td) return { why: 'Quá hẹn trả ' + dm(c.promise.pd) + (c.promise.pa ? ' (' + M(c.promise.pa) + ')' : ''), pri: 0 };
+    if (c.promise.pd === td) return { why: 'Hẹn trả hôm nay' + (c.promise.pa ? ' ' + M(c.promise.pa) : ''), pri: 0 };
+    return null;
+  }
+  if (since === 0) return null;
+  if (c.grp === 'red' && since >= 3) return { why: 'Nhóm đỏ, ' + (c.lastContact ? since + ' ngày chưa liên hệ' : 'chưa liên hệ lần nào'), pri: 1 };
+  if (c.grp === 'yellow' && since >= 7) return { why: 'Nhóm vàng, ' + (c.lastContact ? since + ' ngày chưa liên hệ' : 'chưa liên hệ lần nào'), pri: 2 };
+  if (c.oldest && c.age >= 3) {
+    const m = MILESTONES.filter(x => x <= c.age).pop();
+    const md = addDays(c.oldest, m);
+    if (!c.lastContact || c.lastContact < md) return { why: 'Bill ' + c.age + ' ngày, tới mốc ' + m + ' ngày', pri: 3 };
+  }
+  return null;
+}
+function tasksOn(date) {
+  const d = parseISO(date), w = d.getDay(), day = d.getDate(), last = monthEnd(date) === date;
+  return cfg().tasks.filter(t => t.r === 'w' ? w === t.wd : t.r === 'm' ? (t.md === day || (t.md === -1 && last)) : w !== 0).sort((a, b) => (tkey(a.t) < tkey(b.t) ? -1 : tkey(a.t) > tkey(b.t) ? 1 : 0));
+}
+function myShifts() { const r = S.roster || {}; return cfg().shifts.filter(s => r[s.id] && S.uid && r[s.id][S.uid]).map(s => s.id); }
+const grpPill = g => g === 'red' ? '<span class="pill red">Đỏ</span>' : g === 'yellow' ? '<span class="pill yellow">Vàng</span>' : g === 'green' ? '<span class="pill green">Xanh</span>' : g === 'co' ? '<span class="pill blue">Dư Có</span>' : '<span class="pill">Hết nợ</span>';
+const custLabel = (code, D) => { const n = (D || derive()).names[code] || ''; return '<span class="mono">' + esc(code) + '</span> ' + esc(n); };
+const person = uid => uid === 'auto' ? 'Claude (tự động)' : uid ? '<span data-uid="' + esc(uid) + '">…</span>' : '<span class="muted">Chưa giao</span>';
+async function fillNames() {
+  const els = [...document.querySelectorAll('[data-uid]')]; if (!els.length || !S.user) { els.forEach(e => { e.textContent = 'Thành viên'; }); return; }
+  const ids = [...new Set(els.map(e => e.dataset.uid))];
+  let ps = {}; try { ps = await S.user.profiles(ids); } catch (e) {}
+  els.forEach(e => { const p = ps[e.dataset.uid]; e.textContent = (p && p.name) || (p && p.isMe ? 'Bạn' : 'Thành viên'); });
+  document.querySelectorAll('option[data-uopt]').forEach(o => { const p = ps[o.value]; if (p) o.textContent = p.name || (p.isMe ? 'Bạn' : 'Thành viên'); });
+}
+
+/* ============ Khung trang ============ */
+const VIEWS = [['home', 'Hôm nay'], ['checklist', 'Checklist'], ['orders', 'Đơn hàng'], ['invoices', 'Hóa đơn'], ['revenue', 'Doanh thu'], ['payments', 'Thu tiền'], ['debt', 'Công nợ'], ['customers', 'Khách hàng'], ['import', 'Nhập MISA'], ['settings', 'Cài đặt']];
+{ const h = (location.hash || '').slice(1); const saved = ls.get('view', 'home'); S.view = VIEWS.some(v => v[0] === h) ? h : VIEWS.some(v => v[0] === saved) ? saved : 'home'; }
+function go(v) { S.view = v; S.f = {}; ls.set('view', v); render(); window.scrollTo(0, 0); }
+function render() {
+  const ae = document.activeElement, aid = ae && ae.id, sel = ae && 'selectionStart' in ae ? [ae.selectionStart, ae.selectionEnd] : null;
+  if (S.today !== today() && S.db) subscribeDay();
+  const D = derive();
+  const td = S.today, mine = myShifts();
+  const pending = tasksOn(td).filter(t => (t.s === 'all' || mine.includes(t.s)) && !(S.checks[t.id] && S.checks[t.id].by) && tkey(t.t) <= tkey(nowHM())).length;
+  const needN = D.custs.filter(c => c.need).length;
+  $('#nav').innerHTML = VIEWS.map(([k, l]) => '<button data-act="go" data-arg="' + k + '"' + (S.view === k ? ' aria-current="page"' : '') + '><span>' + l + '</span>' + (k === 'checklist' && pending ? '<span class="badge">' + pending + '</span>' : k === 'home' && needN ? '<span class="badge">' + needN + '</span>' : '') + '</button>').join('');
+  $('#who').innerHTML = !S.ready ? 'Đang kết nối dữ liệu…' : !S.db ? 'Chưa kết nối dữ liệu chung.' :
+    (S.uid ? 'Bạn: ' + person(S.uid) : 'Khách') + (S.isAdmin ? ' · quản lý' : '') + (!canW() ? '<br>Chỉ xem' : '') +
+    '<br>Dữ liệu MISA đến: <b>' + (D.asOf ? dmy(D.asOf) : 'chưa có') + '</b>' +
+    '<button class="btn sm" data-act="sound">' + (S.sound ? 'Tắt âm báo' : 'Bật âm báo') + '</button>';
+  const V = { home: vHome, checklist: vChecklist, orders: vOrders, invoices: vInvoices, revenue: vRevenue, payments: vPayments, debt: vDebt, customers: vCustomers, import: vImport, settings: vSettings }[S.view] || vHome;
+  $('#view').innerHTML = V(D);
+  renderDrawer();
+  if (aid) { const el = document.getElementById(aid); if (el) { el.focus(); if (sel && el.setSelectionRange) try { el.setSelectionRange(sel[0], sel[1]); } catch (e) {} } }
+  fillNames();
+}
+function noData(msg) {
+  if (!S.ready) return '<div class="empty">Đang tải…</div>';
+  if (!S.db) return '<div class="card"><div class="empty"><h2>Chưa kết nối được dữ liệu chung</h2><p>Mở trang này trên claude.ai khi đã đăng nhập. Dữ liệu nhập từ MISA, checklist và lịch sử liên hệ khách được lưu chung cho cả nhóm kế toán.</p></div></div>';
+  return '<div class="card"><div class="empty"><h2>Chưa có dữ liệu MISA</h2><p>' + (msg || 'Xuất báo cáo Chi tiết công nợ phải thu khách hàng từ MISA rồi nhập vào web.') + '</p><button class="btn pri" data-act="go" data-arg="import">Nhập dữ liệu MISA</button></div></div>';
+}
+function freshBanner(D) {
+  if (!D.asOf) return '';
+  const lag = diff(D.asOf, S.today);
+  const imp = S.meta && S.meta.last;
+  const who = imp ? ' · nhập lúc ' + new Date(imp.at).toLocaleString('vi-VN', { hour: '2-digit', minute: '2-digit', day: '2-digit', month: '2-digit' }) + (imp.by ? ' bởi ' + person(imp.by) : '') : '';
+  if (lag >= 2) return '<div class="banner warn"><span>Dữ liệu MISA mới đến <b>' + dmy(D.asOf) + '</b>, đã ' + lag + ' ngày chưa cập nhật' + who + '.</span><button class="btn sm" data-act="go" data-arg="import">Nhập dữ liệu mới</button></div>';
+  return '<div class="banner"><span>Số liệu MISA đến hết ngày <b>' + dmy(D.asOf) + '</b>' + who + '.</span></div>';
+}
+function rangeBar(def, extra) {
+  const f = S.f; if (!f.from) { f.from = def[0]; f.to = def[1]; }
+  return '<div class="row"><label class="f">Từ ngày<input type="date" id="fFrom" value="' + f.from + '"></label><label class="f">Đến ngày<input type="date" id="fTo" value="' + f.to + '"></label>' +
+    '<div class="seg" style="align-self:flex-end"><button data-act="range" data-arg="day">Ngày cuối</button><button data-act="range" data-arg="week">7 ngày</button><button data-act="range" data-arg="month">Tháng này</button><button data-act="range" data-arg="prev">Tháng trước</button></div>' + (extra || '') + '</div>';
+}
+const inRange = d => d >= S.f.from && d <= S.f.to;
+
+/* ============ Trang Hôm nay ============ */
+function vHome(D) {
+  const td = S.today, mine = myShifts(), sh = cfg().shifts, now = nowHM();
+  const shiftCard = '<div class="card"><div class="row"><h2 class="grow">Ca hôm nay, ' + DOW[parseISO(td).getDay()] + ' ' + dmy(td) + '</h2></div>' +
+    '<div class="list">' + sh.map(s => { const ppl = Object.keys((S.roster || {})[s.id] || {}).filter(u => S.roster[s.id][u]); const me = mine.includes(s.id);
+      return '<div class="li"><div class="a"><b>' + esc(s.name) + '</b> <span class="muted">' + esc(s.from) + '–' + esc(s.to) + '</span><div class="small">' + (ppl.length ? ppl.map(person).join(', ') : '<span class="muted">Chưa ai nhận ca</span>') + '</div></div>' +
+        (canW() && S.uid ? '<button class="btn sm' + (me ? '' : ' pri') + '" data-act="shift" data-arg="' + esc(s.id) + '">' + (me ? 'Rời ca' : 'Nhận ca') + '</button>' : '') + '</div>'; }).join('') + '</div>' +
+    (!mine.length && S.uid ? '<p class="small muted">Nhận ca để web nhắc việc đúng giờ cho bạn.</p>' : '') + '</div>';
+  const tasks = tasksOn(td).filter(t => !mine.length || t.s === 'all' || mine.includes(t.s));
+  const tl = '<div class="card"><div class="row"><h2 class="grow">Việc theo giờ</h2><button class="btn sm ghost" data-act="go" data-arg="checklist">Mở checklist</button></div><div class="tl">' +
+    (tasks.length ? tasks.map(t => taskRow(t, S.checks, td, now)).join('') : '<div class="empty">Không có việc nào hôm nay.</div>') + '</div></div>';
+  if (!D.asOf) return '<div class="head"><div><h1>Hôm nay</h1></div></div>' + noData() + '<div class="grid2">' + shiftCard + tl + '</div>';
+  const need = D.custs.filter(c => c.need).sort((a, b) => a.need.pri - b.need.pri || b.close - a.close);
+  const mineNeed = S.uid ? need.filter(c => S.assign.owners[c.code] === S.uid) : [];
+  const showNeed = S.f.allNeed || !mineNeed.length ? need : mineNeed;
+  const lastSales = D.sales.filter(s => s.d === D.asOf), mStart = monthStart(D.asOf);
+  const mSales = D.sales.filter(s => s.d >= mStart && s.d <= D.asOf), mPays = D.pays.filter(p => p.d >= mStart && p.d <= D.asOf && /^11/.test(p.acc));
+  const debt = D.custs.filter(c => c.close > 0.5), over = debt.filter(c => c.age > cfg().terms.days);
+  const kp = '<div class="kpis">' +
+    kpi('Doanh thu ' + dm(D.asOf), M(sum(lastSales, s => s.a - s.k)), lastSales.length + ' đơn') +
+    kpi('Doanh thu tháng ' + D.asOf.slice(5, 7), M(sum(mSales, s => s.a - s.k)), mSales.length + ' đơn, chưa gồm VAT') +
+    kpi('Tiền thu tháng', M(sum(mPays, p => p.a)), 'Ngân hàng và tiền mặt') +
+    kpi('Công nợ phải thu', M(sum(debt, c => c.close)), debt.length + ' khách') +
+    kpi('Quá hạn ' + cfg().terms.days + ' ngày', M(sum(over, c => c.close)), over.length + ' khách', over.length > 0) + '</div>';
+  const needCard = '<div class="card"><div class="row"><h2 class="grow">Cần liên hệ hôm nay (' + showNeed.length + ')</h2>' +
+    (mineNeed.length ? '<div class="seg"><button data-act="allNeed" data-arg="0" aria-pressed="' + !S.f.allNeed + '">Khách của tôi</button><button data-act="allNeed" data-arg="1" aria-pressed="' + !!S.f.allNeed + '">Tất cả</button></div>' : '') + '</div>' +
+    (showNeed.length ? '<div class="tbl tall"><table><thead><tr><th>Khách</th><th>Lý do</th><th class="n">Công nợ</th><th>Nhóm</th><th>Phụ trách</th><th></th></tr></thead><tbody>' +
+      showNeed.slice(0, 80).map(c => '<tr class="click" data-act="cust" data-arg="' + esc(c.code) + '"><td class="w">' + custLabel(c.code, D) + '</td><td class="w">' + esc(c.need.why) + '</td><td class="n">' + N(c.close) + '</td><td>' + grpPill(c.grp) + '</td><td>' + person(S.assign.owners[c.code]) + '</td><td><button class="btn sm">Ghi liên hệ</button></td></tr>').join('') +
+      '</tbody></table></div>' : '<div class="empty">Đã liên hệ đủ khách cần theo dõi hôm nay.</div>') + '</div>';
+  return '<div class="head"><div><h1>Hôm nay</h1><div class="sub">' + DOW[parseISO(td).getDay()] + ', ' + dmy(td) + ' · ' + now + '</div></div></div>' + freshBanner(D) + kp +
+    '<div class="grid2">' + shiftCard + tl + '</div>' + needCard;
+}
+const sum = (a, f) => a.reduce((x, y) => x + (f(y) || 0), 0);
+const kpi = (l, v, s, alert) => '<div class="kpi' + (alert ? ' alert' : '') + '"><span class="l">' + esc(l) + '</span><span class="v">' + v + '</span><span class="s">' + esc(s || '') + '</span></div>';
+function taskRow(t, checks, date, now) {
+  const c = checks[t.id] && checks[t.id].by ? checks[t.id] : null;
+  const due = !c && date === S.today && tkey(t.t) <= tkey(now);
+  const sh = cfg().shifts.find(s => s.id === t.s);
+  return '<div class="tli' + (c ? ' done' : due ? ' due' : '') + '"><span class="t">' + esc(t.t) + '</span>' +
+    '<input type="checkbox" class="chk" id="ck-' + date + '-' + t.id + '" data-act="check" data-arg="' + esc(t.id) + '" data-date="' + date + '"' + (c ? ' checked' : '') + (canW() ? '' : ' disabled') + ' aria-label="Đánh dấu xong: ' + esc(t.title) + '">' +
+    '<div><div class="tt">' + esc(t.title) + ' ' + (sh ? '<span class="pill">' + esc(sh.name) + '</span>' : '') + (t.r === 'w' ? ' <span class="pill blue">Hằng tuần</span>' : t.r === 'm' ? ' <span class="pill blue">Hằng tháng</span>' : '') + (t.go && t.go !== S.view ? ' <button class="btn sm ghost" data-act="go" data-arg="' + esc(t.go) + '">Mở trang</button>' : '') + '</div><div class="nt">' + esc(t.note || '') + '</div>' +
+    (c ? '<div class="nt">Xong lúc ' + new Date(c.at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + ' · ' + person(c.by) + (c.note ? ' · ' + esc(c.note) : '') + '</div>' : due ? '<div class="nt" style="color:var(--crit)">Đã đến giờ, chưa làm</div>' : '') + '</div></div>';
+}
+
+/* ============ Checklist ============ */
+function vChecklist(D) {
+  const date = S.f.date || S.today; S.f.date = date;
+  const checks = date === S.today ? S.checks : (S.otherChecks[date] || {});
+  if (date !== S.today && !S.otherChecks[date] && S.db) { S.otherChecks[date] = {}; S.db.doc('checks/' + date).get().then(s => { S.otherChecks[date] = s.exists ? s.data() : {}; bump(); }).catch(() => {}); }
+  const sh = S.f.shift || 'all';
+  const tasks = tasksOn(date).filter(t => sh === 'all' || t.s === sh || t.s === 'all');
+  const done = tasks.filter(t => checks[t.id] && checks[t.id].by).length;
+  const now = nowHM();
+  return '<div class="head"><div><h1>Checklist công việc</h1><div class="sub">' + done + '/' + tasks.length + ' việc đã xong · ' + DOW[parseISO(date).getDay()] + ' ' + dmy(date) + '</div></div>' +
+    '<div class="row"><input type="date" id="ckDate" value="' + date + '" aria-label="Ngày"><div class="seg"><button data-act="ckShift" data-arg="all" aria-pressed="' + (sh === 'all') + '">Tất cả ca</button>' + cfg().shifts.map(s => '<button data-act="ckShift" data-arg="' + esc(s.id) + '" aria-pressed="' + (sh === s.id) + '">' + esc(s.name) + '</button>').join('') + '</div>' + (S.isAdmin ? '<button class="btn" data-act="go" data-arg="settings">Sửa danh sách việc</button>' : '') + '</div></div>' +
+    '<div class="card"><div class="tl">' + (tasks.length ? tasks.map(t => taskRow(t, checks, date, now)).join('') : '<div class="empty">Không có việc nào trong ngày này.</div>') + '</div></div>' +
+    '<div class="card"><div class="row"><h2 class="grow">Báo cáo cuối ngày</h2><button class="btn" data-act="copy" data-arg="eod">Copy báo cáo</button></div><div class="msg" id="eod">' + esc(eodText(D, date)) + '</div></div>';
+}
+function eodText(D, date) {
+  const checks = date === S.today ? S.checks : (S.otherChecks[date] || {});
+  const tasks = tasksOn(date); const done = tasks.filter(t => checks[t.id] && checks[t.id].by);
+  const ct = S.contacts.filter(k => k.d === date);
+  const prom = ct.filter(k => k.pd);
+  const pays = D.pays.filter(p => p.d === date && /^11/.test(p.acc)), sales = D.sales.filter(s => s.d === date);
+  const lines = ['BÁO CÁO CUỐI NGÀY ' + dmy(date) + ' - KẾ TOÁN BÁN HÀNG',
+    '1. Checklist: ' + done.length + '/' + tasks.length + ' việc đã xong' + (done.length < tasks.length ? '. Chưa xong: ' + tasks.filter(t => !done.includes(t)).map(t => t.t + ' ' + t.title).join('; ') : '') + '.',
+    '2. Đơn hàng trong ngày (theo MISA): ' + (sales.length ? sales.length + ' đơn, doanh thu ' + N(sum(sales, s => s.a - s.k)) + ' đ' : (date > D.asOf ? 'chưa nhập dữ liệu MISA ngày này' : 'không có')) + '.',
+    '3. Tiền thu (theo MISA): ' + (pays.length ? N(sum(pays, p => p.a)) + ' đ từ ' + pays.length + ' khoản' : (date > D.asOf ? 'chưa nhập dữ liệu MISA ngày này' : '0 đ')) + '.',
+    '4. Đã liên hệ ' + new Set(ct.map(k => k.c)).size + ' khách, ' + prom.length + ' khách hẹn trả' + (prom.length ? ': ' + prom.map(k => k.c + ' ' + dm(k.pd) + (k.pa ? ' ' + M(k.pa) : '')).join(', ') : '') + '.',
+    '5. Khách cần liên hệ còn lại: ' + D.custs.filter(c => c.need).length + '.'];
+  const refuse = ct.filter(k => /từ chối|không nghe|ko nghe|khong nghe/i.test(k.res || ''));
+  if (refuse.length) lines.push('6. Khách từ chối hoặc không nghe máy: ' + refuse.map(k => k.c).join(', ') + '.');
+  return lines.join('\n');
+}
+
+/* ============ Đơn hàng ============ */
+function orderStatus(s, D) {
+  const c = D.C[s.c]; const st = [];
+  if (c && c.close != null) { const u = D.unpaid[s.n] || 0; st.push(u > 0.5 ? (u < s.t - 0.5 ? '<span class="pill yellow">Còn ' + N(u) + '</span>' : '<span class="pill yellow">Chưa thu</span>') : '<span class="pill green">Đã thu</span>'); }
+  if (!s.i) st.push('<span class="pill red">Chưa có HĐ</span>'); else if (s.id && s.id > s.d) st.push('<span class="pill red">HĐ trễ ' + diff(s.d, s.id) + ' ngày</span>');
+  return st.join(' ');
+}
+function vOrders(D) {
+  if (!D.asOf) return '<div class="head"><h1>Đơn hàng</h1></div>' + noData();
+  const st = S.f.st || 'all', q = fold(S.f.q || '');
+  const bar = rangeBar([D.asOf, D.asOf], '<input type="search" id="fQ" placeholder="Tìm số đơn, số HĐ, mã hoặc tên khách" value="' + esc(S.f.q || '') + '" style="align-self:flex-end;width:260px">');
+  let list = D.sales.filter(s => inRange(s.d));
+  if (q) list = list.filter(s => fold(s.n + ' ' + s.i + ' ' + s.c + ' ' + (D.names[s.c] || '')).includes(q));
+  const isUnpaid = s => (D.unpaid[s.n] || 0) > 0.5;
+  const cnt = { all: list.length, unpaid: list.filter(isUnpaid).length, noinv: list.filter(s => !s.i).length, late: list.filter(s => s.i && s.id && s.id > s.d).length };
+  if (st === 'unpaid') list = list.filter(isUnpaid); else if (st === 'noinv') list = list.filter(s => !s.i); else if (st === 'late') list = list.filter(s => s.i && s.id && s.id > s.d);
+  list.sort((a, b) => (a.d === b.d ? (a.n < b.n ? 1 : -1) : (a.d < b.d ? 1 : -1)));
+  const seg = '<div class="seg">' + [['all', 'Tất cả'], ['unpaid', 'Chưa thu'], ['noinv', 'Chưa có HĐ'], ['late', 'HĐ trễ']].map(([k, l]) => '<button data-act="fSt" data-arg="' + k + '" aria-pressed="' + (st === k) + '">' + l + ' (' + cnt[k] + ')</button>').join('') + '</div>';
+  return '<div class="head"><div><h1>Đơn hàng</h1><div class="sub">' + list.length + ' đơn · ' + N(sum(list, s => s.t)) + ' đ gồm VAT</div></div><button class="btn" data-act="export" data-arg="orders">Xuất Excel</button></div>' + freshBanner(D) + bar + seg +
+    (list.length ? '<div class="tbl tall"><table><thead><tr><th>Ngày</th><th>Số đơn</th><th>Số HĐ</th><th>Khách</th><th>Mặt hàng</th><th class="n">Tiền hàng</th><th class="n">Tổng gồm VAT</th><th>Trạng thái</th></tr></thead><tbody>' +
+      list.slice(0, 600).map(s => '<tr class="click" data-act="order" data-arg="' + esc(s.n) + '"><td>' + dm(s.d) + '</td><td class="mono">' + esc(s.n) + '</td><td class="mono">' + esc(s.i || '') + '</td><td class="w">' + custLabel(s.c, D) + '</td><td class="w small">' + esc(s.l.map(l => l[1] + ' ×' + nf.format(l[2])).join(', ')) + '</td><td class="n">' + N(s.a - s.k) + '</td><td class="n">' + N(s.t) + '</td><td>' + orderStatus(s, D) + '</td></tr>').join('') +
+      '</tbody></table></div>' + (list.length > 600 ? '<p class="small muted">Đang hiện 600/' + list.length + ' đơn. Thu hẹp khoảng ngày hoặc xuất Excel để xem hết.</p>' : '') : '<div class="card"><div class="empty">Không có đơn nào khớp bộ lọc.</div></div>');
+}
+
+/* ============ Hóa đơn ============ */
+function vInvoices(D) {
+  if (!D.asOf) return '<div class="head"><h1>Hóa đơn</h1></div>' + noData();
+  const bar = rangeBar([monthStart(D.asOf), D.asOf]);
+  const list = D.sales.filter(s => inRange(s.d));
+  const noinv = list.filter(s => !s.i), late = list.filter(s => s.i && s.id && s.id > s.d), late2 = late.filter(s => diff(s.d, s.id) >= 2);
+  const byDay = {};
+  list.forEach(s => { const x = byDay[s.d] = byDay[s.d] || { n: 0, ok: 0, late: 0, no: 0, amt: 0, v: 0 }; x.n++; x.amt += s.a - s.k; x.v += s.v; if (!s.i) x.no++; else if (s.id && s.id > s.d) x.late++; else x.ok++; });
+  const issues = noinv.concat(late).sort((a, b) => (a.d < b.d ? 1 : -1));
+  return '<div class="head"><div><h1>Hóa đơn</h1><div class="sub">Hóa đơn phải lập cùng ngày giao hàng</div></div><button class="btn" data-act="export" data-arg="invoices">Xuất Excel</button></div>' + bar +
+    '<div class="kpis">' + kpi('Đơn trong kỳ', N(list.length), 'Thuế GTGT ' + M(sum(list, s => s.v))) + kpi('Hóa đơn đúng ngày', N(list.length - noinv.length - late.length), list.length ? Math.round((list.length - noinv.length - late.length) / list.length * 100) + '%' : '') +
+    kpi('Hóa đơn trễ', N(late.length), late2.length + ' đơn trễ từ 2 ngày', late.length > 0) + kpi('Chưa có số hóa đơn', N(noinv.length), noinv.length ? 'Cần xuất ngay' : 'Không có', noinv.length > 0) + '</div>' +
+    '<div class="grid2"><div class="card"><h2>Đơn cần xử lý hóa đơn</h2>' + (issues.length ? '<div class="tbl tall"><table><thead><tr><th>Ngày giao</th><th>Số đơn</th><th>Khách</th><th>Vấn đề</th><th class="n">Tổng</th></tr></thead><tbody>' +
+      issues.slice(0, 400).map(s => '<tr class="click" data-act="order" data-arg="' + esc(s.n) + '"><td>' + dm(s.d) + '</td><td class="mono">' + esc(s.n) + '</td><td class="w">' + custLabel(s.c, D) + '</td><td>' + (!s.i ? '<span class="pill red">Chưa có số HĐ</span>' : '<span class="pill ' + (diff(s.d, s.id) >= 2 ? 'red' : 'yellow') + '">HĐ ' + esc(s.i) + ' ngày ' + dm(s.id) + ', trễ ' + diff(s.d, s.id) + ' ngày</span>') + '</td><td class="n">' + N(s.t) + '</td></tr>').join('') + '</tbody></table></div>' : '<div class="empty">Mọi đơn trong kỳ đều có hóa đơn đúng ngày.</div>') + '</div>' +
+    '<div class="card"><h2>Theo ngày</h2><div class="tbl tall"><table><thead><tr><th>Ngày</th><th class="n">Đơn</th><th class="n">Đúng ngày</th><th class="n">Trễ</th><th class="n">Chưa có</th><th class="n">Thuế GTGT</th></tr></thead><tbody>' +
+      Object.keys(byDay).sort().reverse().map(d => { const x = byDay[d]; return '<tr><td>' + DOW[parseISO(d).getDay()] + ' ' + dm(d) + '</td><td class="n">' + x.n + '</td><td class="n">' + x.ok + '</td><td class="n' + (x.late ? ' neg' : '') + '">' + x.late + '</td><td class="n' + (x.no ? ' neg' : '') + '">' + x.no + '</td><td class="n">' + N(x.v) + '</td></tr>'; }).join('') + '</tbody></table></div></div></div>';
+}
+
+/* ============ Doanh thu ============ */
+function vRevenue(D) {
+  if (!D.asOf) return '<div class="head"><h1>Doanh thu</h1></div>' + noData();
+  const bar = rangeBar([monthStart(D.asOf), D.asOf]);
+  const list = D.sales.filter(s => inRange(s.d));
+  const rev = sum(list, s => s.a), disc = sum(list, s => s.k), vat = sum(list, s => s.v);
+  const byDay = {}, byItem = {}, byCust = {}, byAcc = {};
+  list.forEach(s => {
+    byDay[s.d] = (byDay[s.d] || 0) + s.a - s.k;
+    const c = byCust[s.c] = byCust[s.c] || { a: 0, n: 0 }; c.a += s.a - s.k; c.n++;
+    s.l.forEach(l => { const k = l[0] || l[1]; const it = byItem[k] = byItem[k] || { code: l[0], name: l[1], q: 0, a: 0 }; it.q += l[2]; it.a += l[3]; byAcc[l[4]] = (byAcc[l[4]] || 0) + l[3]; });
+  });
+  const days = []; for (let d = S.f.from; d <= S.f.to; d = addDays(d, 1)) days.push(d);
+  const items = Object.values(byItem).sort((a, b) => b.a - a.a), custs = Object.entries(byCust).sort((a, b) => b[1].a - a[1].a);
+  const accName = { '5111': 'Bán hàng hóa', '5112': 'Bán thành phẩm', '5113': 'Cung cấp dịch vụ', '5118': 'Doanh thu khác' };
+  return '<div class="head"><div><h1>Doanh thu</h1><div class="sub">Theo dữ liệu MISA, doanh thu chưa gồm thuế GTGT</div></div><button class="btn" data-act="export" data-arg="revenue">Xuất Excel</button></div>' + bar +
+    '<div class="kpis">' + kpi('Doanh thu thuần', M(rev - disc), N(rev - disc) + ' đ') + kpi('Chiết khấu', M(disc), N(disc) + ' đ') + kpi('Thuế GTGT', M(vat), N(vat) + ' đ') + kpi('Số đơn', N(list.length), N(new Set(list.map(s => s.c)).size) + ' khách mua') + kpi('Bình quân một đơn', M(list.length ? (rev - disc) / list.length : 0), '') + '</div>' +
+    '<div class="card"><h2>Doanh thu theo ngày</h2>' + barChart(days, byDay) + '</div>' +
+    '<div class="grid2"><div class="card"><div class="row"><h2 class="grow">Theo mặt hàng</h2></div><div class="tbl tall"><table><thead><tr><th>Mặt hàng</th><th class="n">Số lượng</th><th class="n">Doanh thu</th><th class="n">Tỷ trọng</th></tr></thead><tbody>' +
+      items.map(it => '<tr><td class="w"><span class="mono">' + esc(it.code) + '</span> ' + esc(it.name) + '</td><td class="n">' + nf.format(Math.round(it.q * 100) / 100) + '</td><td class="n">' + N(it.a) + '</td><td class="n">' + (rev ? (it.a / rev * 100).toFixed(1) : 0) + '%</td></tr>').join('') + '</tbody></table></div>' +
+      '<div class="legend">' + Object.entries(byAcc).sort().map(([k, v]) => '<span>TK ' + esc(k) + ' ' + esc(accName[k] || '') + ': <b>' + M(v) + '</b></span>').join('') + '</div></div>' +
+    '<div class="card"><h2>Theo khách hàng</h2><div class="tbl tall"><table><thead><tr><th>Khách</th><th class="n">Đơn</th><th class="n">Doanh thu</th><th class="n">Công nợ</th></tr></thead><tbody>' +
+      custs.slice(0, 200).map(([c, v]) => '<tr class="click" data-act="cust" data-arg="' + esc(c) + '"><td class="w">' + custLabel(c, D) + '</td><td class="n">' + v.n + '</td><td class="n">' + N(v.a) + '</td><td class="n">' + (D.C[c] && D.C[c].close ? N(D.C[c].close) : '') + '</td></tr>').join('') + '</tbody></table></div></div></div>';
+}
+function barChart(days, map) {
+  if (!days.length) return '';
+  const W = 760, H = 230, L = 46, B = 30, T = 28, R = 8; const vals = days.map(d => map[d] || 0); const max = Math.max(1, ...vals);
+  const step = Math.pow(10, Math.floor(Math.log10(max))); const nice = [1, 2, 2.5, 5, 10].map(x => x * step).find(x => max / x <= 5) || step * 10;
+  const top = Math.ceil(max / nice) * nice; const bw = (W - L - R) / days.length;
+  const y = v => T + (H - T - B) * (1 - v / top);
+  let g = '';
+  for (let v = 0; v <= top + 1; v += nice) g += '<line x1="' + L + '" x2="' + (W - R) + '" y1="' + y(v) + '" y2="' + y(v) + '" stroke="var(--line)"/><text x="' + (L - 6) + '" y="' + (y(v) + 4) + '" text-anchor="end" font-size="11" fill="var(--muted)">' + (v / 1e6).toLocaleString('vi-VN', { maximumFractionDigits: 1 }) + '</text>';
+  const every = Math.ceil(days.length / 16);
+  days.forEach((d, i) => { const v = vals[i], x = L + i * bw; const sun = parseISO(d).getDay() === 0;
+    g += '<rect x="' + (x + bw * 0.15) + '" y="' + y(v) + '" width="' + (bw * 0.7) + '" height="' + Math.max(0, y(0) - y(v)) + '" rx="2" fill="' + (sun ? 'var(--muted)' : 'var(--accent)') + '"><title>' + dmy(d) + ': ' + N(v) + ' đ</title></rect>';
+    if (i % every === 0) g += '<text x="' + (x + bw / 2) + '" y="' + (H - 10) + '" text-anchor="middle" font-size="11" fill="var(--muted)">' + d.slice(8, 10) + '</text>'; });
+  return '<svg class="bars" viewBox="0 0 ' + W + ' ' + H + '" role="img" aria-label="Doanh thu theo ngày, đơn vị triệu đồng">' + g + '<text x="4" y="12" font-size="11" fill="var(--muted)">triệu đồng</text></svg><div class="legend"><span><i style="background:var(--accent)"></i>Ngày thường</span><span><i style="background:var(--muted)"></i>Chủ nhật</span><span>Rê chuột lên cột để xem số tiền</span></div>';
+}
+
+/* ============ Thu tiền ============ */
+function vPayments(D) {
+  if (!D.asOf) return '<div class="head"><h1>Thu tiền</h1></div>' + noData();
+  const bar = rangeBar([monthStart(D.asOf), D.asOf], '<input type="search" id="fQ" placeholder="Tìm khách, số chứng từ, nội dung" value="' + esc(S.f.q || '') + '" style="align-self:flex-end;width:240px">');
+  const q = fold(S.f.q || '');
+  let list = D.pays.filter(p => inRange(p.d));
+  const bank = list.filter(p => /^112/.test(p.acc)), cash = list.filter(p => /^111/.test(p.acc)), oth = list.filter(p => !/^11/.test(p.acc));
+  const unk = list.filter(p => ['02KVL', 'TEMPLE'].includes(p.c));
+  if (q) list = list.filter(p => fold(p.n + ' ' + p.c + ' ' + (D.names[p.c] || '') + ' ' + p.x).includes(q));
+  list.sort((a, b) => (a.d < b.d ? 1 : -1));
+  return '<div class="head"><div><h1>Thu tiền</h1><div class="sub">Phiếu thu, báo có ghi giảm công nợ trong MISA</div></div><button class="btn" data-act="export" data-arg="payments">Xuất Excel</button></div>' + bar +
+    '<div class="kpis">' + kpi('Ngân hàng (TK 112)', M(sum(bank, p => p.a)), bank.length + ' khoản') + kpi('Tiền mặt (TK 111)', M(sum(cash, p => p.a)), cash.length + ' khoản') + kpi('Bù trừ khác', M(sum(oth, p => p.a)), oth.length + ' khoản') + kpi('Chưa rõ khách', M(sum(unk, p => p.a)), unk.length ? 'Ghi vào 02KVL hoặc TEMPLE' : 'Không có', unk.length > 0) + '</div>' +
+    (list.length ? '<div class="tbl tall"><table><thead><tr><th>Ngày</th><th>Chứng từ</th><th>Khách</th><th>TK</th><th class="n">Số tiền</th><th>Nội dung</th></tr></thead><tbody>' +
+      list.slice(0, 600).map(p => '<tr class="click" data-act="cust" data-arg="' + esc(p.c) + '"><td>' + dm(p.d) + '</td><td class="mono">' + esc(p.n) + '</td><td class="w">' + custLabel(p.c, D) + '</td><td class="mono">' + esc(p.acc) + '</td><td class="n">' + N(p.a) + '</td><td class="w small muted">' + esc(p.x) + '</td></tr>').join('') + '</tbody><tfoot><tr><td colspan="4">Cộng</td><td class="n">' + N(sum(list, p => p.a)) + '</td><td></td></tr></tfoot></table></div>' : '<div class="card"><div class="empty">Không có khoản thu nào trong kỳ.</div></div>');
+}
+
+/* ============ Công nợ ============ */
+function vDebt(D) {
+  if (!D.asOf) return '<div class="head"><h1>Công nợ</h1></div>' + noData();
+  const tab = S.f.tab || 'list', T = cfg().terms;
+  const debt = D.custs.filter(c => c.close > 0.5), co = D.custs.filter(c => c.close != null && c.close < -0.5);
+  const stop = debt.filter(c => c.stopWhy).sort((a, b) => b.close - a.close);
+  const tot = sum(debt, c => c.close);
+  const buckets = [['0–7 ngày', 0, 7, 'var(--ok)'], ['8–15 ngày', 8, 15, 'var(--warn)'], ['16–30 ngày', 16, 30, 'var(--warn)'], ['Trên 30 ngày', 31, 1e9, 'var(--crit)']];
+  const bAmt = buckets.map(() => 0); let priorAmt = 0;
+  debt.forEach(c => { priorAmt += c.prior; c.bills.forEach(b => { const i = buckets.findIndex(x => b.age >= x[1] && b.age <= x[2]); bAmt[i < 0 ? 3 : i] += b.unpaid; }); });
+  const segs = buckets.map((b, i) => [b[0], bAmt[i], b[3]]).concat([['Nợ trước ' + dm(D.firstDay), priorAmt, 'var(--fg)']]);
+  const ageBar = '<div class="agebar">' + segs.map(s => '<span style="width:' + (tot ? s[1] / tot * 100 : 0) + '%;background:' + s[2] + '" title="' + esc(s[0]) + ': ' + N(s[1]) + ' đ"></span>').join('') + '</div><div class="legend">' + segs.map(s => '<span><i style="background:' + s[2] + '"></i>' + esc(s[0]) + ': <b>' + M(s[1]) + '</b></span>').join('') + '</div>';
+  const tabs = '<div class="seg">' + [['list', 'Khách còn nợ (' + debt.length + ')'], ['stop', 'Chặn giao nợ (' + stop.length + ')'], ['co', 'Dư Có (' + co.length + ')'], ['promise', 'Hẹn trả'], ['log', 'Nhật ký liên hệ']].map(([k, l]) => '<button data-act="tab" data-arg="' + k + '" aria-pressed="' + (tab === k) + '">' + l + '</button>').join('') + '</div>';
+  let body = '';
+  if (tab === 'list') {
+    const g = S.f.grp || 'all', own = S.f.own || 'all', q = fold(S.f.q || '');
+    let l = debt.slice();
+    if (g !== 'all') l = l.filter(c => c.grp === g);
+    if (own === 'me') l = l.filter(c => S.assign.owners[c.code] === S.uid); else if (own === 'none') l = l.filter(c => !S.assign.owners[c.code]);
+    if (q) l = l.filter(c => fold(c.code + ' ' + c.name).includes(q));
+    l.sort((a, b) => b.close - a.close);
+    const people = Object.keys(S.people || {});
+    body = '<div class="row"><div class="seg">' + [['all', 'Tất cả'], ['red', 'Đỏ'], ['yellow', 'Vàng'], ['green', 'Xanh']].map(([k, lb]) => '<button data-act="fGrp" data-arg="' + k + '" aria-pressed="' + (g === k) + '">' + lb + ' (' + (k === 'all' ? debt.length : debt.filter(c => c.grp === k).length) + ')</button>').join('') + '</div>' +
+      '<div class="seg">' + [['all', 'Mọi người'], ['me', 'Khách của tôi'], ['none', 'Chưa giao']].map(([k, lb]) => '<button data-act="fOwn" data-arg="' + k + '" aria-pressed="' + (own === k) + '">' + lb + '</button>').join('') + '</div>' +
+      '<input type="search" id="fQ" placeholder="Tìm mã hoặc tên khách" value="' + esc(S.f.q || '') + '" style="width:220px"></div>' +
+      '<div class="tbl tall"><table><thead><tr><th>Khách</th><th>Nhóm</th><th class="n">Công nợ</th><th class="n">Nợ cũ</th><th class="n">Bill chưa thu</th><th class="n">Nợ lâu nhất</th><th>Liên hệ gần nhất</th><th>Hẹn trả</th><th>Phụ trách</th></tr></thead><tbody>' +
+      l.map(c => '<tr class="click" data-act="cust" data-arg="' + esc(c.code) + '"><td class="w">' + custLabel(c.code, D) + '</td><td>' + grpPill(c.grp) + '</td><td class="n"><b>' + N(c.close) + '</b></td><td class="n">' + (c.prior ? N(c.prior) : '') + '</td><td class="n">' + c.bills.length + '</td><td class="n">' + (c.prior ? '> ' + c.age : c.age) + ' ngày</td><td>' + (c.lastContact ? dm(c.lastContact) : '<span class="muted">Chưa</span>') + '</td><td>' + (c.promise ? dm(c.promise.pd) + (c.promise.pd < S.today ? ' <span class="pill red">Quá hẹn</span>' : '') : '') + '</td><td>' + (canW() ? ownerSelect(c.code, people) : person(S.assign.owners[c.code])) + '</td></tr>').join('') +
+      '</tbody><tfoot><tr><td colspan="2">' + l.length + ' khách</td><td class="n">' + N(sum(l, c => c.close)) + '</td><td class="n">' + N(sum(l, c => c.prior)) + '</td><td class="n">' + sum(l, c => c.bills.length) + '</td><td colspan="4"></td></tr></tfoot></table></div>';
+  } else if (tab === 'stop') {
+    body = '<div class="card"><div class="row"><p class="grow">Khách có bill quá hạn ' + (T.days + T.stopAfter) + ' ngày, vượt hạn mức hoặc lỡ hẹn 2 lần. Chỉ giao hàng khi khách trả tiền ngay.</p><button class="btn pri" data-act="copy" data-arg="stopText">Copy gửi kho</button></div><div class="msg" id="stopText">' + esc(stopText(stop, D)) + '</div></div>' +
+      '<div class="tbl tall"><table><thead><tr><th>Khách</th><th>Lý do</th><th class="n">Công nợ</th><th>Nhóm</th></tr></thead><tbody>' + stop.map(c => '<tr class="click" data-act="cust" data-arg="' + esc(c.code) + '"><td class="w">' + custLabel(c.code, D) + '</td><td>' + esc(c.stopWhy) + '</td><td class="n">' + N(c.close) + '</td><td>' + grpPill(c.grp) + '</td></tr>').join('') + '</tbody></table></div>';
+  } else if (tab === 'co') {
+    co.sort((a, b) => a.close - b.close);
+    body = '<p class="muted">Khách trả thừa hoặc trả trước. Trừ vào đơn sau, hoàn tiền, hoặc bù trừ với mã khác của cùng khách.</p><div class="tbl tall"><table><thead><tr><th>Khách</th><th class="n">Dư Có</th><th>Mua gần nhất</th><th>Trả gần nhất</th></tr></thead><tbody>' +
+      co.map(c => '<tr class="click" data-act="cust" data-arg="' + esc(c.code) + '"><td class="w">' + custLabel(c.code, D) + '</td><td class="n neg">' + N(-c.close) + '</td><td>' + dm(c.lastSale) + '</td><td>' + dm(c.lastPay) + '</td></tr>').join('') + '</tbody><tfoot><tr><td>' + co.length + ' khách</td><td class="n">' + N(-sum(co, c => c.close)) + '</td><td colspan="2"></td></tr></tfoot></table></div>';
+  } else if (tab === 'promise') {
+    const pr = S.contacts.filter(k => k.pd && !k.ok).sort((a, b) => (a.pd < b.pd ? -1 : 1));
+    body = pr.length ? '<div class="tbl tall"><table><thead><tr><th>Hẹn ngày</th><th>Khách</th><th class="n">Số tiền hẹn</th><th>Ghi bởi</th><th>Kết quả liên hệ</th><th class="n">Công nợ</th><th></th></tr></thead><tbody>' +
+      pr.map(k => '<tr><td>' + dm(k.pd) + (k.pd < S.today ? ' <span class="pill red">Quá hẹn</span>' : k.pd === S.today ? ' <span class="pill yellow">Hôm nay</span>' : '') + '</td><td class="w click" data-act="cust" data-arg="' + esc(k.c) + '">' + custLabel(k.c, D) + '</td><td class="n">' + (k.pa ? N(k.pa) : '') + '</td><td>' + person(k.by) + ' ' + dm(k.d) + '</td><td class="w">' + esc(k.res || '') + '</td><td class="n">' + (D.C[k.c] ? N(D.C[k.c].close) : '') + '</td><td>' + (canW() ? '<button class="btn sm" data-act="promiseOk" data-arg="' + esc(k._id) + '">Đã trả</button>' : '') + '</td></tr>').join('') + '</tbody></table></div>' : '<div class="card"><div class="empty">Chưa có hẹn trả nào đang chờ.</div></div>';
+  } else {
+    const lg = S.contacts.slice(0, 300);
+    body = lg.length ? '<div class="tbl tall"><table><thead><tr><th>Ngày</th><th>Khách</th><th>Kênh</th><th>Kết quả</th><th>Hẹn trả</th><th>Người ghi</th></tr></thead><tbody>' +
+      lg.map(k => '<tr class="click" data-act="cust" data-arg="' + esc(k.c) + '"><td>' + dm(k.d) + ' ' + new Date(k.at).toLocaleTimeString('vi-VN', { hour: '2-digit', minute: '2-digit' }) + '</td><td class="w">' + custLabel(k.c, D) + '</td><td>' + esc(k.ch || '') + '</td><td class="w">' + esc(k.res || '') + '</td><td>' + (k.pd ? dm(k.pd) + (k.pa ? ' · ' + N(k.pa) : '') + (k.ok ? ' <span class="pill green">Đã trả</span>' : '') : '') + '</td><td>' + person(k.by) + '</td></tr>').join('') + '</tbody></table></div>' : '<div class="card"><div class="empty">Chưa có lần liên hệ nào được ghi.</div></div>';
+  }
+  return '<div class="head"><div><h1>Công nợ phải thu</h1><div class="sub">Bill chưa thu xác định theo nguyên tắc tiền trả trừ vào bill cũ nhất trước</div></div><button class="btn" data-act="export" data-arg="debt">Xuất Excel bill chưa thu</button></div>' + freshBanner(D) +
+    '<div class="kpis">' + kpi('Tổng dư Nợ', M(tot), debt.length + ' khách') + kpi('Nhóm đỏ', M(sum(debt.filter(c => c.grp === 'red'), c => c.close)), debt.filter(c => c.grp === 'red').length + ' khách', true) + kpi('Nhóm vàng', M(sum(debt.filter(c => c.grp === 'yellow'), c => c.close)), debt.filter(c => c.grp === 'yellow').length + ' khách') + kpi('Dư Có', M(-sum(co, c => c.close)), co.length + ' khách') + kpi('Chặn giao nợ', N(stop.length), 'khách', stop.length > 0) + '</div>' +
+    '<div class="card"><h3>Tuổi nợ</h3>' + ageBar + '</div>' + tabs + body;
+}
+function ownerSelect(code, people) {
+  const cur = S.assign.owners[code] || '';
+  const ids = [...new Set(people.concat(cur ? [cur] : []))];
+  return '<select data-act="owner" data-arg="' + esc(code) + '" aria-label="Người phụ trách ' + esc(code) + '"><option value="">Chưa giao</option>' + ids.map(u => '<option data-uopt value="' + esc(u) + '"' + (u === cur ? ' selected' : '') + '>Thành viên</option>').join('') + '</select>';
+}
+function stopText(stop, D) {
+  return 'DANH SÁCH CHẶN GIAO NỢ ' + dmy(S.today) + '\nCác khách sau chỉ giao hàng khi trả tiền ngay:\n' + (stop.length ? stop.map((c, i) => (i + 1) + '. ' + c.code + ' ' + (c.name || '') + ' - nợ ' + N(c.close) + ' đ (' + c.stopWhy + ')').join('\n') : 'Không có khách nào.');
+}
+
+/* ============ Khách hàng ============ */
+function vCustomers(D) {
+  if (!D.asOf) return '<div class="head"><h1>Khách hàng</h1></div>' + noData();
+  const q = fold(S.f.q || ''), mode = S.f.mode || 'all';
+  let l = D.custs.filter(c => c.orders > 0 || (c.close && Math.abs(c.close) > 0.5));
+  l.forEach(c => { c.idle = c.lastSale ? diff(c.lastSale, D.asOf) : null; });
+  const idle = l.filter(c => c.lastSale && c.idle >= 10 && c.orders >= 2);
+  if (mode === 'idle') l = idle; else if (mode === 'new') l = l.filter(c => c.orders > 0 && (c.open == null || Math.abs(c.open) < 0.5) && c.sales.every(s => s.d >= monthStart(D.asOf)) && !Object.keys(S.months).some(m => m < D.asOf.slice(0, 7) && S.months[m].cust && S.months[m].cust[c.code]));
+  if (q) l = l.filter(c => fold(c.code + ' ' + c.name).includes(q));
+  l.sort((a, b) => b.rev - a.rev);
+  return '<div class="head"><div><h1>Khách hàng</h1><div class="sub">Doanh thu và thói quen mua từ ' + dm(D.firstDay) + ' đến ' + dm(D.asOf) + '</div></div></div>' +
+    '<div class="row"><div class="seg">' + [['all', 'Tất cả'], ['idle', 'Lâu chưa mua (' + idle.length + ')'], ['new', 'Khách mới']].map(([k, lb]) => '<button data-act="fMode" data-arg="' + k + '" aria-pressed="' + (mode === k) + '">' + lb + '</button>').join('') + '</div><input type="search" id="fQ" placeholder="Tìm mã hoặc tên khách" value="' + esc(S.f.q || '') + '" style="width:240px"></div>' +
+    (mode === 'idle' ? '<p class="muted">Khách mua từ 2 đơn trở lên trong dữ liệu nhưng 10 ngày trở lên chưa có đơn mới. Báo kinh doanh hỏi thăm.</p>' : '') +
+    '<div class="tbl tall"><table><thead><tr><th>Khách</th><th class="n">Đơn</th><th class="n">Doanh thu</th><th>Mua gần nhất</th><th class="n">Số ngày chưa mua</th><th class="n">Công nợ</th><th>Nhóm</th></tr></thead><tbody>' +
+    l.slice(0, 500).map(c => '<tr class="click" data-act="cust" data-arg="' + esc(c.code) + '"><td class="w">' + custLabel(c.code, D) + '</td><td class="n">' + c.orders + '</td><td class="n">' + N(c.rev) + '</td><td>' + dm(c.lastSale) + '</td><td class="n">' + (c.idle == null ? '' : c.idle) + '</td><td class="n' + (c.close < 0 ? ' neg' : '') + '">' + (c.close ? N(c.close) : '') + '</td><td>' + grpPill(c.grp) + '</td></tr>').join('') + '</tbody></table></div>';
+}
+
+/* ============ Nhập MISA ============ */
+function vImport(D) {
+  const pv = S.f.preview;
+  const hist = S.meta && S.meta.months ? Object.entries(S.meta.months).sort((a, b) => (a[0] < b[0] ? 1 : -1)) : [];
+  return '<div class="head"><div><h1>Nhập dữ liệu MISA</h1><div class="sub">Làm mỗi sáng lúc 8:30, sau khi đã lập phiếu thu cho tiền về hôm trước</div></div></div>' +
+    '<div class="grid2"><div class="card"><h2>Cách xuất file từ MISA</h2><ol style="margin:0;padding-left:20px;display:grid;gap:4px"><li>Vào Báo cáo, chọn <b>Chi tiết công nợ phải thu khách hàng</b>.</li><li>Tài khoản <b>131</b>, kỳ báo cáo <b>từ ngày đầu tháng đến hôm nay</b> (hoặc chọn Tháng này), chọn tất cả khách hàng.</li><li>Xuất ra Excel (có thể chọn “DỮ LIỆU”).</li><li>Kéo file vào ô bên cạnh. Nhập lại nhiều lần trong tháng không bị trùng: dữ liệu các ngày trong kỳ được thay bằng bản mới.</li></ol>' +
+      '<p class="small muted">Đầu tháng mới, nhập thêm một lần cho tháng trước (đủ đến ngày cuối tháng) để chốt số.</p></div>' +
+    '<div class="card"><label class="drop" id="drop" for="file"><b>Kéo file Excel MISA vào đây</b><span class="muted small">hoặc bấm để chọn file .xlsx</span><input type="file" id="file" accept=".xlsx,.xls" hidden></label>' + (S.f.importMsg ? '<p class="small">' + S.f.importMsg + '</p>' : '') + '</div></div>' +
+    (pv ? previewCard(pv) : '') +
+    '<div class="card"><h2>Lịch sử nhập</h2>' + (hist.length ? '<div class="tbl"><table><thead><tr><th>Tháng</th><th>Dữ liệu từ</th><th>Đến</th><th>File</th><th>Nhập lúc</th><th>Người nhập</th></tr></thead><tbody>' +
+      hist.map(([m, h]) => '<tr><td>' + m.slice(5) + '/' + m.slice(0, 4) + '</td><td>' + dmy(h.from) + '</td><td>' + dmy(h.to) + '</td><td class="w small">' + esc(h.file || '') + '</td><td>' + new Date(h.at).toLocaleString('vi-VN') + '</td><td>' + person(h.by) + '</td></tr>').join('') + '</tbody></table></div>' : '<div class="empty">Chưa nhập lần nào.</div>') + '</div>';
+}
+function previewCard(p) {
+  const ok = !p.bad && p.grandOk;
+  return '<div class="card"><div class="row"><h2 class="grow">Kiểm tra trước khi lưu: ' + esc(p.file) + '</h2>' + (canW() ? '<button class="btn pri" data-act="saveImport"' + (S.f.saving ? ' disabled' : '') + '>' + (S.f.saving ? 'Đang lưu… ' + esc(S.f.saving) : 'Lưu vào web') + '</button>' : '<span class="pill">Bạn chỉ có quyền xem</span>') + '<button class="btn" data-act="cancelImport">Bỏ qua</button></div>' +
+    '<div class="kpis">' + kpi('Kỳ dữ liệu', dm(p.from) + ' – ' + dmy(p.to), 'TK ' + (p.acct || '131')) + kpi('Khách hàng', N(Object.keys(p.cust).length), '') + kpi('Đơn bán', N(p.sales.length), 'Doanh thu ' + M(p.rev)) + kpi('Khoản thu', N(p.pays.length), M(p.paid)) + kpi('Dòng chi tiết', N(p.lines), '') + '</div>' +
+    '<div class="banner ' + (ok ? '' : 'crit') + '"><span>' + (ok ? 'Số liệu khớp: tổng cộng bằng tổng các khách, số dư từng khách tính đúng.' : 'Cảnh báo: ' + (p.bad ? p.bad + ' khách có số dư cuối không khớp (' + esc(p.badList.join(', ')) + '). ' : '') + (p.grandOk ? '' : 'Dòng Tổng cộng không bằng tổng các khách. ') + 'Kiểm tra lại file trước khi lưu.') + '</span></div>' +
+    (p.from.slice(8) !== '01' ? '<p class="small" style="color:var(--warn)">Kỳ không bắt đầu từ ngày 01. Số dư đầu tháng sẽ giữ theo lần nhập trước (nếu có). Nên xuất từ ngày đầu tháng.</p>' : '') + '</div>';
+}
+async function handleFile(file) {
+  if (!file) return;
+  if (!window.XLSX) { S.f.importMsg = 'Chưa tải xong bộ đọc Excel. Đợi vài giây rồi thử lại.'; render(); return; }
+  S.f.importMsg = 'Đang đọc ' + esc(file.name) + '…'; S.f.preview = null; render();
+  try {
+    const buf = await file.arrayBuffer();
+    const wb = XLSX.read(buf, { type: 'array', cellDates: false });
+    const ws = wb.Sheets[wb.SheetNames[0]];
+    const rows = XLSX.utils.sheet_to_json(ws, { header: 1, raw: true, defval: '' });
+    S.f.preview = parseMisa(rows, file.name); S.f.importMsg = '';
+  } catch (e) { S.f.importMsg = '<span style="color:var(--crit)">' + esc(e.message || String(e)) + '</span>'; }
+  render();
+}
+async function saveImport() {
+  const p = S.f.preview; if (!p || S.f.saving) return;
+  const byDay = {};
+  const day = d => byDay[d] || (byDay[d] = { s: [], p: [], o: [] });
+  p.sales.forEach(s => day(s.d).s.push(s)); p.pays.forEach(x => day(x.d).p.push(x)); p.others.forEach(x => day(x.d).o.push(x));
+  const dates = []; for (let d = p.minD || p.from; d && d <= p.maxD; d = addDays(d, 1)) dates.push(d);
+  const at = Date.now(), by = S.uid || '';
+  try {
+    let i = 0;
+    for (const d of dates) {
+      i++; S.f.saving = i + '/' + (dates.length + 2); render();
+      const x = byDay[d] || { s: [], p: [], o: [] };
+      await S.db.doc('days/' + d).set({ m: d.slice(0, 7), d, s: x.s, p: x.p, o: x.o, at, by, src: p.file });
+    }
+    const mk = p.to.slice(0, 7);
+    const custOut = {}; for (const code in p.cust) { const c = p.cust[code]; custOut[code] = { n: c.n, o: Math.round(c.o), z: Math.round(c.z) }; }
+    let from = p.from;
+    if (from.slice(8) !== '01') {
+      const old = await S.db.doc('months/' + mk).get();
+      if (old.exists) { const od = old.data(); if (od.from && od.from < from) { from = od.from; for (const code in custOut) if (od.cust && od.cust[code]) custOut[code].o = od.cust[code].o; } }
+    }
+    S.f.saving = (dates.length + 1) + '/' + (dates.length + 2); render();
+    await S.db.doc('months/' + mk).set({ m: mk, from, to: p.to, cust: custOut, at, by, file: p.file });
+    await upsert('meta/index', { last: { at, by, file: p.file, from, to: p.to, m: mk }, months: { [mk]: { at, by, file: p.file, from, to: p.to } } });
+    S.f.preview = null; S.f.saving = ''; S.f.importMsg = 'Đã lưu dữ liệu ' + dm(from) + ' – ' + dmy(p.to) + ': ' + p.sales.length + ' đơn, ' + p.pays.length + ' khoản thu.';
+    toast('Đã nhập dữ liệu MISA đến ' + dmy(p.to) + '.');
+    autoTick('t02');
+  } catch (e) { S.f.saving = ''; writeFail(e); }
+  render();
+}
+async function autoTick(id) {
+  if (!tasksOn(S.today).some(t => t.id === id) || (S.checks[id] && S.checks[id].by)) return;
+  try { await upsert('checks/' + S.today, { [id]: { by: S.uid || '', at: Date.now(), note: 'Tự đánh dấu khi nhập file' } }); } catch (e) {}
+}
+
+/* ============ Cài đặt ============ */
+function vSettings(D) {
+  const c = cfg(), adm = S.isAdmin && canW();
+  const tasks = S.f.editTasks || c.tasks.map(t => Object.assign({}, t));
+  const rep = t => t.r === 'w' ? 'Hằng tuần' : t.r === 'm' ? 'Hằng tháng' : 'Hằng ngày (T2–T7)';
+  const people = Object.keys(S.people || {});
+  return '<div class="head"><div><h1>Cài đặt</h1><div class="sub">' + (adm ? 'Bạn là quản lý: sửa được ca, việc và hạn thanh toán.' : 'Chỉ quản lý (quyền Editor) sửa được phần này.') + '</div></div></div>' +
+    '<div class="card"><h2>Nhắc việc trên điện thoại</h2><p>Web nhắc việc bằng thông báo và âm báo khi đang mở. Để điện thoại nhắc cả khi không mở web, thêm lịch nhắc vào Google Calendar của bạn. Mỗi người tự bấm một lần cho ca của mình.</p>' +
+      '<div class="row"><label class="f">Ca của bạn<select id="calShift">' + c.shifts.map(s => '<option value="' + esc(s.id) + '">' + esc(s.name) + '</option>').join('') + '<option value="all">Cả hai ca</option></select></label><button class="btn pri" data-act="calendar" style="align-self:flex-end">Thêm lịch nhắc vào Google Calendar</button><button class="btn" data-act="notify" style="align-self:flex-end">Bật thông báo trình duyệt</button></div>' + (S.f.calMsg ? '<p class="small">' + S.f.calMsg + '</p>' : '') + '</div>' +
+    '<div class="grid2"><div class="card"><h2>Ca làm việc</h2>' + (adm ? '<div class="tbl"><table class="ed"><thead><tr><th>Tên ca</th><th>Từ</th><th>Đến</th><th></th></tr></thead><tbody>' + (S.f.editShifts || c.shifts).map((s, i) => '<tr><td><input type="text" id="shN' + i + '" value="' + esc(s.name) + '"></td><td><input type="time" id="shF' + i + '" value="' + esc(s.from) + '"></td><td><input type="time" id="shT' + i + '" value="' + esc(s.to) + '"></td><td><button class="btn sm ghost" data-act="delShift" data-arg="' + i + '">Xóa</button></td></tr>').join('') + '</tbody></table></div><p class="small muted">Ca qua nửa đêm (ví dụ 17:00–01:00): việc trước 05:00 sáng được tính vào ngày làm việc hôm trước.</p><div class="row"><button class="btn" data-act="addShift">Thêm ca</button><button class="btn pri" data-act="saveShifts">Lưu ca</button></div>' :
+      '<div class="list">' + c.shifts.map(s => '<div class="li"><b>' + esc(s.name) + '</b><span>' + esc(s.from) + '–' + esc(s.to) + '</span></div>').join('') + '</div>') + '</div>' +
+    '<div class="card"><h2>Hạn thanh toán và phân nhóm</h2>' + (adm ? '<div class="grid2"><label class="f">Hạn thanh toán (ngày)<input type="number" id="tDays" value="' + c.terms.days + '"></label><label class="f">Chặn giao nợ sau hạn (ngày)<input type="number" id="tStop" value="' + c.terms.stopAfter + '"></label><label class="f">Hạn mức nợ mặc định (đ)<input type="number" id="tLimit" value="' + c.terms.limit + '"></label><label class="f">Nhóm đỏ từ (đ)<input type="number" id="tRed" value="' + c.terms.red + '"></label><label class="f">Nhóm vàng từ (đ)<input type="number" id="tYellow" value="' + c.terms.yellow + '"></label><label class="f">Tài khoản nhận tiền (ghi trong tin nhắc nợ)<input type="text" id="tBank" value="' + esc(c.bank) + '"></label></div><div class="row"><button class="btn pri" data-act="saveTerms">Lưu</button></div>' :
+      '<p>Hạn thanh toán ' + c.terms.days + ' ngày. Quá hạn ' + c.terms.stopAfter + ' ngày thì chặn giao nợ. Hạn mức mặc định ' + N(c.terms.limit) + ' đ. Nhóm đỏ: có nợ trước tháng, bill quá 30 ngày hoặc nợ từ ' + M(c.terms.red) + '. Nhóm vàng: bill từ 8 ngày hoặc nợ từ ' + M(c.terms.yellow) + '.</p>') + '</div></div>' +
+    '<div class="card"><div class="row"><h2 class="grow">Danh sách việc theo giờ</h2>' + (adm ? '<button class="btn" data-act="addTask">Thêm việc</button><button class="btn pri" data-act="saveTasks">Lưu danh sách việc</button>' : '') + '</div>' +
+      (adm ? '<div class="tbl"><table class="ed"><thead><tr><th>Giờ</th><th>Việc</th><th>Hướng dẫn</th><th>Ca</th><th>Lặp lại</th><th>Ngày</th><th></th></tr></thead><tbody>' + tasks.map((t, i) => '<tr><td><input type="time" id="tkT' + i + '" value="' + esc(t.t) + '"></td><td style="min-width:220px"><input type="text" id="tkTi' + i + '" value="' + esc(t.title) + '"></td><td style="min-width:260px"><input type="text" id="tkN' + i + '" value="' + esc(t.note || '') + '"></td><td><select id="tkS' + i + '">' + c.shifts.map(s => '<option value="' + esc(s.id) + '"' + (t.s === s.id ? ' selected' : '') + '>' + esc(s.name) + '</option>').join('') + '<option value="all"' + (t.s === 'all' ? ' selected' : '') + '>Mọi ca</option></select></td><td><select id="tkR' + i + '"><option value="d"' + (t.r === 'd' ? ' selected' : '') + '>Hằng ngày</option><option value="w"' + (t.r === 'w' ? ' selected' : '') + '>Hằng tuần</option><option value="m"' + (t.r === 'm' ? ' selected' : '') + '>Hằng tháng</option></select></td><td><input type="number" id="tkD' + i + '" value="' + (t.r === 'w' ? t.wd : t.r === 'm' ? t.md : '') + '" style="width:70px" title="Hằng tuần: 1 = thứ Hai … 6 = thứ Bảy. Hằng tháng: ngày trong tháng, -1 = ngày cuối tháng"></td><td><button class="btn sm ghost" data-act="delTask" data-arg="' + i + '">Xóa</button></td></tr>').join('') + '</tbody></table></div><p class="small muted">Cột Ngày: hằng tuần ghi 1 (thứ Hai) đến 6 (thứ Bảy); hằng tháng ghi ngày trong tháng, -1 là ngày cuối tháng.</p>' :
+      '<div class="tbl"><table><thead><tr><th>Giờ</th><th>Việc</th><th>Ca</th><th>Lặp lại</th></tr></thead><tbody>' + c.tasks.slice().sort((a, b) => (tkey(a.t) < tkey(b.t) ? -1 : 1)).map(t => '<tr><td class="mono">' + esc(t.t) + '</td><td class="w">' + esc(t.title) + '</td><td>' + esc((c.shifts.find(s => s.id === t.s) || { name: 'Mọi ca' }).name) + '</td><td>' + rep(t) + (t.r === 'w' ? ' ' + DOW[t.wd] : t.r === 'm' ? ' ngày ' + (t.md === -1 ? 'cuối tháng' : t.md) : '') + '</td></tr>').join('') + '</tbody></table></div>') + '</div>' +
+    '<div class="card"><h2>Thành viên đã mở web</h2><p class="small muted">Người được chia sẻ quyền Contributor trở lên sẽ hiện ở đây sau lần mở đầu tiên, và có thể được giao phụ trách khách ở trang Công nợ.</p><div class="row">' + (people.length ? people.map(u => '<span class="pill">' + person(u) + '</span>').join('') : '<span class="muted">Chưa có ai.</span>') + '</div></div>';
+}
+function readShifts() {
+  return (S.f.editShifts || cfg().shifts).map((s, i) => { const g = id => { const el = document.getElementById(id + i); return el ? el.value : ''; }; return { id: s.id, name: (g('shN') || s.name).trim(), from: g('shF') || s.from, to: g('shT') || s.to }; });
+}
+function readTasks() {
+  const c = cfg(); const src = S.f.editTasks || c.tasks; const out = [];
+  src.forEach((t, i) => {
+    const g = id => { const el = document.getElementById(id + i); return el ? el.value : ''; };
+    const r = g('tkR') || t.r; const dv = parseInt(g('tkD'), 10);
+    const o = { id: t.id, t: g('tkT') || t.t, title: (g('tkTi') || '').trim() || t.title, note: g('tkN'), s: g('tkS') || t.s, r, go: t.go || '' };
+    if (r === 'w') o.wd = isNaN(dv) ? 1 : Math.min(6, Math.max(0, dv)); if (r === 'm') o.md = isNaN(dv) ? 1 : dv;
+    out.push(o);
+  });
+  return out;
+}
+async function saveSettings(patch, msg) {
+  const cur = S.settings || {};
+  const next = Object.assign({ shifts: cfg().shifts, tasks: cfg().tasks, terms: cfg().terms, bank: cfg().bank }, cur, patch);
+  try { await S.db.doc('settings/app').set(next); toast(msg || 'Đã lưu cài đặt.'); } catch (e) { writeFail(e); }
+}
+
+/* ============ Ngăn chi tiết khách / đơn ============ */
+function renderDrawer() {
+  const host = $('#drawerHost'); const d = S.drawer;
+  if (!d) { host.innerHTML = ''; return; }
+  const D = derive();
+  host.innerHTML = '<div class="drawer-bg" data-act="closeDrawer"></div><div class="drawer" role="dialog" aria-modal="true">' + (d.type === 'cust' ? drawerCust(D, d.id) : drawerOrder(D, d.id)) + '</div>';
+}
+function drawerCust(D, code) {
+  const c = D.C[code] || { code, name: D.names[code] || '', sales: [], pays: [], bills: [], contacts: [], close: null };
+  const people = Object.keys(S.people || {});
+  const msg = remindText(c);
+  return '<div class="row"><div class="grow"><div class="small muted mono">' + esc(code) + '</div><h2>' + esc(c.name || code) + '</h2></div><button class="btn" data-act="closeDrawer">Đóng</button></div>' +
+    '<div class="kpis">' + kpi('Công nợ', c.close == null ? '—' : N(c.close), c.close == null ? 'Không có trong dữ liệu MISA' : 'đến ' + dm(D.asOf), c.grp === 'red') + kpi('Nợ lâu nhất', c.close > 0.5 ? (c.prior ? '> ' : '') + c.age + ' ngày' : '—', c.prior ? 'Nợ trước ' + dm(D.firstDay) + ': ' + N(c.prior) : '') + kpi('Doanh thu', M(c.rev || 0), (c.orders || 0) + ' đơn từ ' + dm(D.firstDay)) + kpi('Trả gần nhất', c.lastPay ? dm(c.lastPay) : '—', '') + '</div>' +
+    '<div class="row">' + grpPill(c.grp) + (c.stopWhy ? '<span class="pill red">Chặn giao nợ: ' + esc(c.stopWhy) + '</span>' : '') + (c.need ? '<span class="pill yellow">' + esc(c.need.why) + '</span>' : '') + '<span class="grow"></span>' + (canW() ? '<label class="f">Phụ trách' + ownerSelect(code, people) + '</label>' : '<span class="small">Phụ trách: ' + person(S.assign.owners[code]) + '</span>') + '</div>' +
+    (canW() ? '<div class="card"><h3>Ghi lần liên hệ</h3><div class="row"><label class="f">Kênh<select id="ctCh"><option>Zalo</option><option>Gọi điện</option><option>Gặp trực tiếp</option><option>Biên bản đối chiếu</option><option>Công văn</option><option>Khác</option></select></label><label class="f grow">Kết quả<input type="text" id="ctRes" placeholder="Ví dụ: hẹn thứ Sáu chuyển 5 triệu"></label></div><div class="row"><label class="f">Hẹn trả ngày<input type="date" id="ctPd"></label><label class="f">Số tiền hẹn (đ)<input type="number" id="ctPa" placeholder="' + (c.close > 0 ? Math.round(c.close) : '') + '"></label><button class="btn pri" data-act="saveContact" data-arg="' + esc(code) + '" style="align-self:flex-end">Lưu liên hệ</button></div></div>' : '') +
+    (c.close > 0.5 ? '<div class="card"><div class="row"><h3 class="grow">Tin nhắn nhắc nợ</h3><button class="btn sm" data-act="copy" data-arg="remindMsg">Copy</button></div><div class="msg" id="remindMsg">' + esc(msg) + '</div></div>' : '') +
+    (c.bills && c.bills.length || c.prior ? '<div class="card"><h3>Bill chưa thu</h3><div class="tbl"><table><thead><tr><th>Ngày</th><th>Chứng từ</th><th>Số HĐ</th><th class="n">Giá trị</th><th class="n">Còn phải thu</th><th class="n">Tuổi</th></tr></thead><tbody>' +
+      (c.prior ? '<tr><td colspan="4">Nợ từ trước ' + dmy(D.firstDay) + '</td><td class="n">' + N(c.prior) + '</td><td class="n">&gt; ' + diff(D.firstDay, S.today) + '</td></tr>' : '') +
+      c.bills.map(b => '<tr' + (b.k === 'bh' ? ' class="click" data-act="order" data-arg="' + esc(b.n) + '"' : '') + '><td>' + dm(b.d) + '</td><td class="mono">' + esc(b.n) + '</td><td class="mono">' + esc(b.i || '') + '</td><td class="n">' + N(b.amt) + '</td><td class="n">' + N(b.unpaid) + '</td><td class="n">' + b.age + '</td></tr>').join('') + '</tbody></table></div></div>' : '') +
+    '<div class="card"><h3>Lịch sử liên hệ</h3>' + (c.contacts.length ? '<div class="list">' + c.contacts.map(k => '<div class="li"><div class="a"><b>' + dm(k.d) + ' · ' + esc(k.ch || '') + '</b> ' + esc(k.res || '') + '<div class="small muted">' + person(k.by) + (k.pd ? ' · hẹn ' + dmy(k.pd) + (k.pa ? ' ' + N(k.pa) + ' đ' : '') : '') + '</div></div>' + (k.pd ? (k.ok ? '<span class="pill green">Đã trả</span>' : canW() ? '<button class="btn sm" data-act="promiseOk" data-arg="' + esc(k._id) + '">Đã trả</button>' : '') : '') + '</div>').join('') + '</div>' : '<p class="muted">Chưa có lần liên hệ nào.</p>') + '</div>' +
+    '<div class="grid2"><div class="card"><h3>Đơn gần đây</h3>' + (c.sales.length ? '<div class="list">' + c.sales.slice().sort((a, b) => (a.d < b.d ? 1 : -1)).slice(0, 15).map(s => '<div class="li click" data-act="order" data-arg="' + esc(s.n) + '"><div class="a">' + dm(s.d) + ' <span class="mono">' + esc(s.n) + '</span><div class="small muted">' + esc(s.l.map(l => l[1] + ' ×' + nf.format(l[2])).join(', ')) + '</div></div><span class="num">' + N(s.t) + '</span></div>').join('') + '</div>' : '<p class="muted">Không có đơn trong dữ liệu.</p>') + '</div>' +
+    '<div class="card"><h3>Khoản đã trả</h3>' + (c.pays.length ? '<div class="list">' + c.pays.slice().sort((a, b) => (a.d < b.d ? 1 : -1)).slice(0, 15).map(p => '<div class="li"><div class="a">' + dm(p.d) + ' <span class="mono">' + esc(p.n) + '</span><div class="small muted">' + esc(p.x) + '</div></div><span class="num">' + N(p.a) + '</span></div>').join('') + '</div>' : '<p class="muted">Không có khoản thu trong dữ liệu.</p>') + '</div></div>';
+}
+function remindText(c) {
+  const D = derive(); const name = (c.name && !/người tiêu dùng/i.test(c.name)) ? c.name : 'anh/chị';
+  const lines = ['Dạ em chào ' + name + ', An Tâm gửi anh/chị công nợ đến ngày ' + dmy(D.asOf) + ': ' + N(c.close) + ' đ' + (c.bills && c.bills.length ? ', gồm ' + c.bills.length + ' bill chưa thanh toán' : '') + '.'];
+  if (c.prior) lines.push('- Nợ từ trước ' + dmy(D.firstDay) + ': ' + N(c.prior) + ' đ');
+  (c.bills || []).slice(0, 12).forEach(b => lines.push('- ' + dm(b.d) + ' ' + b.n + (b.i ? ' (HĐ ' + b.i + ')' : '') + ': ' + N(b.unpaid) + ' đ'));
+  if (c.bills && c.bills.length > 12) lines.push('- và ' + (c.bills.length - 12) + ' bill khác');
+  lines.push('Anh/chị chuyển khoản giúp em vào ' + cfg().bank + ', nội dung: ' + c.code + '. Anh/chị đã chuyển rồi thì báo em để em đối chiếu. Em cảm ơn ạ.');
+  return lines.join('\n');
+}
+function drawerOrder(D, no) {
+  const s = D.sales.find(x => x.n === no);
+  if (!s) return '<div class="row"><h2 class="grow">Không tìm thấy đơn ' + esc(no) + '</h2><button class="btn" data-act="closeDrawer">Đóng</button></div>';
+  return '<div class="row"><div class="grow"><div class="small muted">Đơn bán hàng</div><h2 class="mono">' + esc(s.n) + '</h2></div><button class="btn" data-act="closeDrawer">Đóng</button></div>' +
+    '<div class="kpis">' + kpi('Ngày giao', dmy(s.d), DOW[parseISO(s.d).getDay()]) + kpi('Hóa đơn', s.i || 'Chưa có', s.id ? 'ngày ' + dmy(s.id) : '', !s.i || (s.id && s.id > s.d)) + kpi('Tổng gồm VAT', N(s.t), 'VAT ' + N(s.v)) + kpi('Còn phải thu', N(D.unpaid[s.n] || 0), '', (D.unpaid[s.n] || 0) > 0.5) + '</div>' +
+    '<div class="row"><span>Khách:</span><button class="btn sm ghost" data-act="cust" data-arg="' + esc(s.c) + '">' + custLabel(s.c, D) + '</button>' + orderStatus(s, D) + '</div>' +
+    '<div class="tbl"><table><thead><tr><th>Mã hàng</th><th>Tên hàng</th><th class="n">Số lượng</th><th class="n">Thành tiền</th><th>TK</th></tr></thead><tbody>' + s.l.map(l => '<tr><td class="mono">' + esc(l[0]) + '</td><td class="w">' + esc(l[1]) + '</td><td class="n">' + nf.format(l[2]) + '</td><td class="n">' + N(l[3]) + '</td><td class="mono">' + esc(l[4]) + '</td></tr>').join('') + '</tbody><tfoot>' +
+    (s.k ? '<tr><td colspan="3">Chiết khấu</td><td class="n">−' + N(s.k) + '</td><td></td></tr>' : '') + '<tr><td colspan="3">Thuế GTGT</td><td class="n">' + N(s.v) + '</td><td></td></tr><tr><td colspan="3">Tổng cộng</td><td class="n">' + N(s.t) + '</td><td></td></tr></tfoot></table></div>';
+}
+
+/* ============ Xuất Excel ============ */
+async function exportXlsx(kind) {
+  const D = derive(); if (!window.XLSX) { toast('Chưa tải xong bộ tạo Excel.'); return; }
+  const dl = await window.claude?.use?.('downloads'); if (!dl) { toast('Trang này chưa được phép tải file xuống.'); return; }
+  const wb = XLSX.utils.book_new(); let name = '';
+  const add = (title, head, rows) => { const ws = XLSX.utils.aoa_to_sheet([head].concat(rows)); ws['!cols'] = head.map(h => ({ wch: Math.max(10, Math.min(48, String(h).length + 6)) })); XLSX.utils.book_append_sheet(wb, ws, title); };
+  const rng = S.f.from ? S.f.from + '_' + S.f.to : D.asOf;
+  if (kind === 'orders' || kind === 'invoices') {
+    const l = D.sales.filter(s => inRange(s.d)).sort((a, b) => (a.d < b.d ? -1 : 1));
+    add('Đơn hàng', ['Ngày', 'Số đơn', 'Số HĐ', 'Ngày HĐ', 'Trễ HĐ (ngày)', 'Mã KH', 'Tên KH', 'Mặt hàng', 'Tiền hàng', 'Chiết khấu', 'VAT', 'Tổng', 'Còn phải thu'],
+      l.map(s => [dmy(s.d), s.n, s.i, dmy(s.id), s.i && s.id ? diff(s.d, s.id) : '', s.c, D.names[s.c] || '', s.l.map(x => x[1] + ' x' + x[2]).join(', '), Math.round(s.a), Math.round(s.k), Math.round(s.v), Math.round(s.t), Math.round(D.unpaid[s.n] || 0)]));
+    name = (kind === 'orders' ? 'Don_hang_' : 'Hoa_don_') + rng + '.xlsx';
+  } else if (kind === 'revenue') {
+    const l = D.sales.filter(s => inRange(s.d)); const it = {}, dd = {}, cu = {};
+    l.forEach(s => { dd[s.d] = (dd[s.d] || 0) + s.a - s.k; cu[s.c] = (cu[s.c] || 0) + s.a - s.k; s.l.forEach(x => { const k = x[0] || x[1]; it[k] = it[k] || [x[0], x[1], 0, 0]; it[k][2] += x[2]; it[k][3] += x[3]; }); });
+    add('Theo ngày', ['Ngày', 'Doanh thu thuần'], Object.keys(dd).sort().map(d => [dmy(d), Math.round(dd[d])]));
+    add('Theo mặt hàng', ['Mã hàng', 'Tên hàng', 'Số lượng', 'Doanh thu'], Object.values(it).sort((a, b) => b[3] - a[3]).map(x => [x[0], x[1], x[2], Math.round(x[3])]));
+    add('Theo khách', ['Mã KH', 'Tên KH', 'Doanh thu'], Object.entries(cu).sort((a, b) => b[1] - a[1]).map(([c, v]) => [c, D.names[c] || '', Math.round(v)]));
+    name = 'Doanh_thu_' + rng + '.xlsx';
+  } else if (kind === 'payments') {
+    add('Thu tiền', ['Ngày', 'Chứng từ', 'Mã KH', 'Tên KH', 'TK', 'Số tiền', 'Nội dung'], D.pays.filter(p => inRange(p.d)).sort((a, b) => (a.d < b.d ? -1 : 1)).map(p => [dmy(p.d), p.n, p.c, D.names[p.c] || '', p.acc, Math.round(p.a), p.x]));
+    name = 'Thu_tien_' + rng + '.xlsx';
+  } else {
+    const debt = D.custs.filter(c => c.close > 0.5).sort((a, b) => b.close - a.close);
+    add('Tổng hợp', ['Mã KH', 'Tên KH', 'Nhóm', 'Công nợ', 'Nợ trước kỳ', 'Số bill chưa thu', 'Nợ lâu nhất (ngày)', 'Liên hệ gần nhất', 'Hẹn trả', 'Chặn giao nợ'], debt.map(c => [c.code, c.name, { red: 'Đỏ', yellow: 'Vàng', green: 'Xanh' }[c.grp], Math.round(c.close), c.prior, c.bills.length, c.age, dmy(c.lastContact), c.promise ? dmy(c.promise.pd) : '', c.stopWhy]));
+    const rows = []; debt.forEach(c => { if (c.prior) rows.push([c.code, c.name, 'Trước ' + dmy(D.firstDay), '', '', '', c.prior, '']); c.bills.forEach(b => rows.push([c.code, c.name, dmy(b.d), b.n, b.i, Math.round(b.amt), Math.round(b.unpaid), b.age])); });
+    add('Bill chưa thu', ['Mã KH', 'Tên KH', 'Ngày', 'Chứng từ', 'Số HĐ', 'Giá trị bill', 'Còn phải thu', 'Tuổi (ngày)'], rows);
+    name = 'Cong_no_' + D.asOf + '.xlsx';
+  }
+  try { const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }); await dl.save({ filename: name, data: new Blob([out]) }); }
+  catch (e) { if (e && e.code !== 'declined') toast('Không tải được file: ' + (e.message || e.code)); }
+}
+
+/* ============ Nhắc việc ============ */
+let audioCtx = null;
+function beep() {
+  if (!S.sound) return;
+  try { audioCtx = audioCtx || new (window.AudioContext || window.webkitAudioContext)(); const o = audioCtx.createOscillator(), g = audioCtx.createGain(); o.frequency.value = 880; g.gain.setValueAtTime(0.0001, audioCtx.currentTime); g.gain.exponentialRampToValueAtTime(0.25, audioCtx.currentTime + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, audioCtx.currentTime + 0.6); o.connect(g).connect(audioCtx.destination); o.start(); o.stop(audioCtx.currentTime + 0.65); } catch (e) {}
+}
+function toast(text, opts) {
+  const el = document.createElement('div'); el.className = 'toast' + (opts && opts.rem ? ' rem' : '');
+  el.innerHTML = (opts && opts.title ? '<b>' + esc(opts.title) + '</b>' : '') + '<div style="white-space:pre-line">' + esc(text) + '</div><div class="row">' + (opts && opts.go ? '<button class="btn sm pri" data-act="go" data-arg="' + esc(opts.go) + '">Mở</button>' : '') + '<button class="btn sm" data-act="dismiss">Đóng</button></div>';
+  $('#toasts').appendChild(el);
+  if (!(opts && opts.sticky)) setTimeout(() => el.remove(), 7000);
+}
+let titleFlash = 0;
+function flashTitle(msg) { if (document.hasFocus()) return; clearInterval(titleFlash); let on = false; const base = document.title; titleFlash = setInterval(() => { document.title = (on = !on) ? msg : base; }, 1000); window.addEventListener('focus', () => { clearInterval(titleFlash); document.title = base; }, { once: true }); }
+function reminderTick() {
+  if (!S.db || !S.uid) return;
+  const td = today(); if (td !== S.today) { bump(); return; }
+  const mine = myShifts(); if (!mine.length) return;
+  const now = nowHM(); const sent = ls.get('sent-' + td, {});
+  const nowMin = tmin(now);
+  const fire = [];
+  for (const t of tasksOn(td)) {
+    if (!(t.s === 'all' || mine.includes(t.s))) continue;
+    if (S.checks[t.id] && S.checks[t.id].by) continue;
+    const tm = tmin(t.t);
+    let kind = '';
+    if (nowMin >= tm && nowMin < tm + 30 && !sent[t.id]) kind = 'due';
+    else if (nowMin >= tm + 30 && nowMin < tm + 240 && sent[t.id] !== 'late') kind = 'late';
+    if (!kind) continue;
+    sent[t.id] = kind === 'due' ? 'due' : 'late';
+    fire.push({ t, kind });
+  }
+  if (!fire.length) return;
+  ls.set('sent-' + td, sent);
+  let title, body, goTo;
+  if (fire.length === 1) { const { t, kind } = fire[0]; title = (kind === 'due' ? 'Đến giờ ' : 'Quá giờ ') + t.t + ': ' + t.title; body = t.note || ''; goTo = t.go || 'checklist'; }
+  else { title = 'Có ' + fire.length + ' việc đến giờ hoặc đã quá giờ'; body = fire.map(x => x.t.t + ' ' + x.t.title).join('\n'); goTo = 'checklist'; }
+  toast(body, { title, go: goTo, rem: true, sticky: true });
+  beep(); flashTitle('⏰ ' + (fire.length === 1 ? fire[0].t.title : fire.length + ' việc cần làm'));
+  try { if ('Notification' in window && Notification.permission === 'granted') new Notification(title, { body }); } catch (e) {}
+}
+setInterval(reminderTick, 20000);
+setInterval(() => { if (S.view === 'home' || S.view === 'checklist') bump(); }, 60000);
+
+async function addCalendar() {
+  const mcp = await window.claude?.use?.('mcp');
+  if (!mcp) { S.f.calMsg = 'Trang chưa được phép dùng Google Calendar trong lần mở này.'; render(); return; }
+  const shift = ($('#calShift') || {}).value || 'all';
+  const tasks = cfg().tasks.filter(t => shift === 'all' || t.s === shift || t.s === 'all');
+  const BY = ['SU', 'MO', 'TU', 'WE', 'TH', 'FR', 'SA'];
+  let ok = 0;
+  for (const t of tasks) {
+    S.f.calMsg = 'Đang thêm ' + (ok + 1) + '/' + tasks.length + '…'; render();
+    // Việc sau nửa đêm (trước 05:00) thuộc ngày làm việc hôm trước, nên lịch thật rơi vào ngày hôm sau
+    const late = t.t < DAY_START ? 1 : 0;
+    let start = addDays(today(), 1), rule = late ? 'RRULE:FREQ=WEEKLY;BYDAY=TU,WE,TH,FR,SA,SU' : 'RRULE:FREQ=WEEKLY;BYDAY=MO,TU,WE,TH,FR,SA';
+    if (t.r === 'w') { while (parseISO(start).getDay() !== t.wd) start = addDays(start, 1); rule = 'RRULE:FREQ=WEEKLY;BYDAY=' + BY[(t.wd + late) % 7]; }
+    if (t.r === 'm') { if (t.md === -1) { start = monthEnd(start); rule = late ? 'RRULE:FREQ=MONTHLY;BYMONTHDAY=1' : 'RRULE:FREQ=MONTHLY;BYMONTHDAY=-1'; } else { while (parseISO(start).getDate() !== t.md) start = addDays(start, 1); rule = 'RRULE:FREQ=MONTHLY;BYMONTHDAY=' + (t.md + late); } }
+    if (late) start = addDays(start, 1);
+    if (t.r === 'd') while (parseISO(start).getDay() === (late ? 1 : 0)) start = addDays(start, 1);
+    const em = tmin(t.t) % 1440 + 15, endDay = em >= 1440 ? addDays(start, 1) : start, end = pad(Math.floor(em % 1440 / 60)) + ':' + pad(em % 60);
+    try {
+      await mcp.callTool('Google Calendar', 'create_event', { summary: 'KTBH ' + t.t + ' · ' + t.title, description: (t.note || '') + '\n\nMở web Kế toán bán hàng An Tâm để đánh dấu đã làm.', startTime: start + 'T' + t.t + ':00', endTime: endDay + 'T' + end + ':00', recurrenceData: [rule], overrideReminders: [{ method: 'popup', minutes: 0 }], availability: 'AVAILABILITY_FREE' });
+      ok++;
+    } catch (e) {
+      const m = e && e.code === 'server_not_connected' ? 'Bạn chưa kết nối Google Calendar. Vào claude.ai › Cài đặt › Connectors để thêm, rồi bấm lại.' : e && (e.code === 'not_in_manifest' || e.code === 'approval_required') ? 'Bạn chưa cho phép trang dùng Google Calendar.' : 'Lỗi: ' + ((e && e.message) || 'không rõ');
+      S.f.calMsg = 'Đã thêm ' + ok + '/' + tasks.length + ' lịch nhắc. ' + m; render(); return;
+    }
+  }
+  S.f.calMsg = 'Đã thêm ' + ok + ' lịch nhắc lặp lại vào Google Calendar của bạn, báo đúng giờ trên điện thoại. Đừng bấm lại kẻo bị trùng.'; render();
+}
+
+/* ============ Sự kiện ============ */
+document.addEventListener('click', async e => {
+  const el = e.target.closest('[data-act]'); if (!el) return;
+  const a = el.dataset.act, arg = el.dataset.arg;
+  if (el.tagName === 'SELECT' || (el.tagName === 'INPUT' && el.type !== 'checkbox')) return;
+  if (a === 'go') { S.drawer = null; const t = el.closest('.toast'); if (t) t.remove(); go(arg); }
+  else if (a === 'dismiss') { el.closest('.toast').remove(); }
+  else if (a === 'sound') { S.sound = !S.sound; ls.set('sound', S.sound); if (S.sound) beep(); render(); }
+  else if (a === 'range') { const D = derive(), b = D.asOf || today(); if (arg === 'day') { S.f.from = S.f.to = b; } else if (arg === 'week') { S.f.from = addDays(b, -6); S.f.to = b; } else if (arg === 'month') { S.f.from = monthStart(b); S.f.to = b; } else { const p = addDays(monthStart(b), -1); S.f.from = monthStart(p); S.f.to = p; } render(); }
+  else if (['fSt', 'fGrp', 'fOwn', 'fMode', 'tab', 'ckShift'].includes(a)) { S.f[{ fSt: 'st', fGrp: 'grp', fOwn: 'own', fMode: 'mode', tab: 'tab', ckShift: 'shift' }[a]] = arg; render(); }
+  else if (a === 'allNeed') { S.f.allNeed = arg === '1'; render(); }
+  else if (a === 'cust') { if (e.target.closest('select')) return; S.drawer = { type: 'cust', id: arg }; renderDrawer(); fillNames(); }
+  else if (a === 'order') { S.drawer = { type: 'order', id: arg }; renderDrawer(); fillNames(); }
+  else if (a === 'closeDrawer') { S.drawer = null; renderDrawer(); }
+  else if (a === 'check') {
+    const date = el.dataset.date, on = el.checked;
+    if (!canW()) { el.checked = !on; return; }
+    try { await upsert('checks/' + date, { [arg]: on ? { by: S.uid || '', at: Date.now(), note: '' } : { by: '', at: 0, note: '' } }); if (date !== S.today) { S.otherChecks[date] = Object.assign({}, S.otherChecks[date], { [arg]: on ? { by: S.uid, at: Date.now() } : null }); bump(); } }
+    catch (err) { el.checked = !on; writeFail(err); }
+  }
+  else if (a === 'shift') {
+    const r = (S.roster || {})[arg] || {}; const on = !r[S.uid];
+    try { await upsert('roster/' + S.today, { [arg]: { [S.uid]: on } }); toast(on ? 'Đã nhận ca. Web sẽ nhắc việc của ca này đúng giờ khi trang đang mở.' : 'Đã rời ca.'); } catch (err) { writeFail(err); }
+  }
+  else if (a === 'saveContact') {
+    const res = ($('#ctRes').value || '').trim(), pd = $('#ctPd').value, pa = parseFloat($('#ctPa').value) || 0;
+    if (!res && !pd) { toast('Ghi kết quả liên hệ hoặc ngày hẹn trả.'); return; }
+    try { await S.db.collection('contacts').add({ c: arg, by: S.uid || '', at: Date.now(), d: today(), ch: $('#ctCh').value, res, pd: pd || '', pa, ok: false }); toast('Đã lưu lần liên hệ.'); $('#ctRes').value = ''; $('#ctPd').value = ''; $('#ctPa').value = ''; } catch (err) { writeFail(err); }
+  }
+  else if (a === 'promiseOk') { try { await S.db.doc('contacts/' + arg).update({ ok: true, okAt: Date.now(), okBy: S.uid || '' }); toast('Đã đánh dấu khách trả theo hẹn.'); } catch (err) { writeFail(err); } }
+  else if (a === 'copy') {
+    const box = document.getElementById(arg); if (!box) return; const text = box.textContent;
+    try { await navigator.clipboard.writeText(text); toast('Đã copy, dán vào Zalo để gửi.'); }
+    catch (err) { const r = document.createRange(); r.selectNodeContents(box); const s = getSelection(); s.removeAllRanges(); s.addRange(r); toast('Đã chọn sẵn nội dung, bấm Ctrl+C để copy.'); }
+  }
+  else if (a === 'export') exportXlsx(arg);
+  else if (a === 'saveImport') saveImport();
+  else if (a === 'cancelImport') { S.f.preview = null; S.f.importMsg = ''; render(); }
+  else if (a === 'saveShifts') { const sh = readShifts(); await saveSettings({ shifts: sh }, 'Đã lưu ca làm việc.'); S.f.editShifts = null; render(); }
+  else if (a === 'addShift') { const sh = readShifts(); sh.push({ id: 'ca' + Date.now().toString(36), name: 'Ca mới', from: '08:00', to: '12:00' }); S.f.editShifts = sh; render(); }
+  else if (a === 'delShift') { const sh = readShifts(); const s = sh[+arg]; if (cfg().tasks.some(t => t.s === s.id)) { toast('Ca “' + s.name + '” còn việc trong danh sách. Chuyển hoặc xóa các việc đó trước, rồi xóa ca.'); return; } sh.splice(+arg, 1); S.f.editShifts = sh; render(); }
+  else if (a === 'saveTerms') { const v = id => parseFloat($(id).value); const tm = { days: v('#tDays') || 7, stopAfter: isNaN(v('#tStop')) ? 3 : v('#tStop'), limit: v('#tLimit') || 0, red: v('#tRed') || 0, yellow: v('#tYellow') || 0 }; saveSettings({ terms: tm, bank: $('#tBank').value.trim() || DEF.bank }, 'Đã lưu hạn thanh toán.'); }
+  else if (a === 'addTask') { const t = readTasks(); t.push({ id: 't' + Date.now().toString(36), t: '10:00', title: 'Việc mới', note: '', s: cfg().shifts[0].id, r: 'd', go: '' }); S.f.editTasks = t; render(); }
+  else if (a === 'delTask') { const t = readTasks(); t.splice(+arg, 1); S.f.editTasks = t; render(); }
+  else if (a === 'saveTasks') { const t = readTasks(); await saveSettings({ tasks: t }, 'Đã lưu danh sách việc.'); S.f.editTasks = null; }
+  else if (a === 'calendar') addCalendar();
+  else if (a === 'notify') {
+    try { if (!('Notification' in window)) throw 0; const p = await Notification.requestPermission(); S.f.calMsg = p === 'granted' ? 'Đã bật thông báo trình duyệt cho lần mở này.' : 'Trình duyệt không cho phép thông báo trong khung trang. Web vẫn hiện nhắc việc và âm báo khi đang mở.'; }
+    catch (err) { S.f.calMsg = 'Trình duyệt không cho phép thông báo trong khung trang. Web vẫn hiện nhắc việc và âm báo khi đang mở.'; }
+    render();
+  }
+});
+document.addEventListener('change', async e => {
+  const el = e.target;
+  if (el.id === 'file') handleFile(el.files[0]);
+  else if (el.id === 'fFrom' || el.id === 'fTo') { S.f[el.id === 'fFrom' ? 'from' : 'to'] = el.value; if (S.f.from > S.f.to) S.f.to = S.f.from; render(); }
+  else if (el.id === 'ckDate') { S.f.date = el.value || S.today; render(); }
+  else if (el.dataset.act === 'owner') {
+    const code = el.dataset.arg, v = el.value;
+    try { await upsert('assign/owners', { owners: { [code]: v } }); } catch (err) { writeFail(err); }
+  }
+});
+document.addEventListener('input', e => { if (e.target.id === 'fQ') { S.f.q = e.target.value; render(); } });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && S.drawer) { S.drawer = null; renderDrawer(); } });
+document.addEventListener('dragover', e => { const d = e.target.closest && e.target.closest('#drop'); if (d) { e.preventDefault(); d.classList.add('over'); } });
+document.addEventListener('dragleave', e => { const d = e.target.closest && e.target.closest('#drop'); if (d) d.classList.remove('over'); });
+document.addEventListener('drop', e => { const d = e.target.closest && e.target.closest('#drop'); if (d) { e.preventDefault(); d.classList.remove('over'); handleFile(e.dataTransfer.files[0]); } });
+init();
+</script>

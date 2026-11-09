@@ -187,6 +187,192 @@ fieldset.grp legend { padding: 0 6px; font-size: .8rem; font-weight: 600; color:
 }
 @media (prefers-reduced-motion: no-preference) { .btn, nav.tabs a { transition: border-color .15s, color .15s, background .15s } }
 </style>
+<!-- nick-gate:start -->
+<script>window.NICK_GATE = {"site": "qtm", "title": "Quỹ tiền mặt An Tâm", "slot": "#gate-slot"};</script>
+<style id="nick-gate-css">
+/* Khóa trang bằng nick + mật khẩu: chưa đăng nhập thì ẩn toàn bộ trang, chỉ hiện ô đăng nhập */
+html.ng-locked body > *:not([id^="ng-"]):not(script):not(style):not(link):not(title):not(meta) { display: none !important; }
+#ng-gate { position: fixed; inset: 0; z-index: 9000; display: grid; place-items: center; overflow: auto; background: var(--bg, #f2f4f1); color: var(--fg, var(--ink, #18211d));
+  padding: max(24px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(24px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
+#ng-gate[hidden], #ng-panel[hidden] { display: none !important; }
+.ng-card { width: min(420px, 100%); background: var(--surface, #fff); border: 1px solid var(--line, #dce2dc); border-radius: 14px; padding: 22px; display: grid; gap: 12px; box-shadow: 0 6px 24px rgba(0, 0, 0, .08); }
+.ng-card h1 { margin: 0; font-size: 1.35em; line-height: 1.25; }
+.ng-card p { margin: 0; color: var(--muted, #5b6862); font-size: .92em; }
+.ng-f { display: grid; gap: 4px; font-size: .9em; color: var(--muted, #5b6862); }
+.ng-f input, .ng-f select { font: inherit; color: var(--fg, var(--ink, #18211d)); border: 1px solid var(--line, #dce2dc); background: var(--surface, #fff); border-radius: 8px; padding: 9px 11px; min-width: 0; width: 100%; }
+.ng-btn { font: inherit; border: 1px solid var(--line, #dce2dc); background: var(--surface, #fff); color: inherit; border-radius: 8px; padding: 8px 14px; cursor: pointer; font-weight: 600; white-space: nowrap; }
+.ng-btn.pri { background: var(--accent, #1c6b5a); border-color: var(--accent, #1c6b5a); color: var(--accent-fg, var(--accent-ink, #fff)); }
+.ng-btn.sm { padding: 4px 10px; font-size: .88em; }
+.ng-btn:disabled { opacity: .55; cursor: default; }
+.ng-err { color: var(--crit, var(--chi, #b42318)); font-size: .9em; min-height: 1.2em; }
+.ng-me { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--line, #dce2dc); background: var(--surface, #fff); color: inherit; border-radius: 999px; padding: 4px 11px; font: inherit; font-size: .86em; cursor: pointer; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
+#ng-fixed { position: fixed; left: calc(10px + env(safe-area-inset-left, 0px)); bottom: calc(10px + env(safe-area-inset-bottom, 0px)); z-index: 8000; }
+#ng-panel { position: fixed; inset: 0; z-index: 9100; background: rgba(10, 16, 14, .42); display: grid; place-items: start center; overflow-y: auto;
+  padding: max(24px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) max(24px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); }
+#ng-panel .ng-card { width: min(680px, 100%); color: var(--fg, var(--ink, #18211d)); }
+.ng-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
+.ng-grow { flex: 1 1 auto; }
+.ng-tbl { overflow-x: auto; border: 1px solid var(--line, #dce2dc); border-radius: 8px; }
+.ng-tbl table { border-collapse: collapse; width: 100%; font-size: .92em; }
+.ng-tbl th, .ng-tbl td { padding: 7px 9px; text-align: left; border-bottom: 1px solid var(--line, #dce2dc); white-space: nowrap; }
+.ng-tbl th { font-size: .8em; text-transform: uppercase; letter-spacing: .04em; color: var(--muted, #5b6862); }
+.ng-tbl tr.off td { color: var(--muted, #5b6862); }
+.ng-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 10px; }
+.ng-chk { display: inline-flex; gap: 6px; align-items: center; font-size: .92em; }
+</style>
+<script id="nick-gate">
+(function () {
+  'use strict';
+  const C = window.NICK_GATE || {}, SITE = C.site || 'site', TITLE = C.title || document.title;
+  const KEY = 'ng-' + SITE + '-sess', DAYS = 30, root = document.documentElement;
+  root.classList.add('ng-locked');
+  const $ = (s, r) => (r || document).querySelector(s);
+  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  const norm = v => String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().replace(/[^a-z0-9._-]/g, '');
+  const hex = b => Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2, '0')).join('');
+  // mật khẩu băm PBKDF2 (ai được mời vào trang cũng đọc được danh sách tài khoản – không lưu mật khẩu gốc)
+  async function hash(salt, pw) {
+    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(pw)), 'PBKDF2', false, ['deriveBits']);
+    return hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: new TextEncoder().encode(salt), iterations: 120000, hash: 'SHA-256' }, key, 256));
+  }
+  const rid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+  const sess = { get() { try { return JSON.parse(localStorage.getItem(KEY)); } catch (e) { return null; } }, set(v) { try { if (v) localStorage.setItem(KEY, JSON.stringify(v)); else localStorage.removeItem(KEY); } catch (e) { /* trình duyệt chặn lưu */ } } };
+  const nowStr = () => { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
+  const G = { db: null, user: null, owner: false, admin: false, acc: {}, ep: 0, loaded: false, nodb: false, me: null };
+  window.ANTAM_NICK = null;
+
+  const gate = document.createElement('div'); gate.id = 'ng-gate'; document.body.appendChild(gate);
+  const panel = document.createElement('div'); panel.id = 'ng-panel'; panel.hidden = true; document.body.appendChild(panel);
+
+  function current() {
+    const s = sess.get(), a = s && G.acc[s.id];
+    return a && a.active !== false && a.pw && s.sig === a.pw.slice(0, 24) && s.exp > Date.now() && (s.iat || 0) >= (G.ep || 0) ? Object.assign({ id: s.id }, a) : null;
+  }
+  function apply() {
+    if (!G.loaded) { drawGate(); return; }
+    const me = current();
+    if (sess.get() && !me) sess.set(null);
+    G.me = me;
+    window.ANTAM_NICK = me ? { id: me.id, user: me.user, name: me.name || me.user } : G.owner ? { id: 'owner', user: '', name: 'Chủ trang' } : null;
+    const open = !!(me || G.owner);
+    root.classList.toggle('ng-locked', !open); gate.hidden = open;
+    if (!open) drawGate();
+    drawSlot();
+    window.dispatchEvent(new Event('antam-nick'));
+  }
+  function drawGate() {
+    const hasAcc = Object.values(G.acc).some(a => a && a.active !== false);
+    const state = G.nodb ? 'nodb' : !G.loaded ? 'loading' : hasAcc ? 'form' : 'empty';
+    if (gate.dataset.state === state && state === 'form') return; // đang gõ: giữ nguyên ô đăng nhập
+    gate.dataset.state = state;
+    const body = state === 'nodb' ? '<p>Trang cần mở trên claude.ai khi đã đăng nhập, bằng link chủ trang gửi.</p>'
+      : state === 'loading' ? '<p>Đang tải…</p>'
+      : state === 'empty' ? '<p>Trang chưa có tài khoản nào. Chủ trang mở trang để tạo tài khoản đăng nhập cho nhân viên.</p>'
+      : `<p>Đăng nhập bằng nick và mật khẩu do quản lý cấp.</p>
+        <label class="ng-f">Nick<input id="ng-user" autocomplete="username" autocapitalize="none" spellcheck="false" value="${esc(localStorage.getItem('ng-' + SITE + '-last') || '')}"></label>
+        <label class="ng-f">Mật khẩu<input id="ng-pw" type="password" autocomplete="current-password"></label>
+        <button class="ng-btn pri" type="submit">Đăng nhập</button><div class="ng-err" id="ng-err" role="alert"></div>
+        <p>Quên mật khẩu: nhờ quản lý đặt lại.</p>`;
+    gate.innerHTML = `<form class="ng-card" id="ng-form" novalidate><h1>${esc(TITLE)}</h1>${body}</form>`;
+    const f = $('#ng-form', gate), u = $('#ng-user', gate), pw = $('#ng-pw', gate);
+    if (u) (u.value ? pw : u).focus();
+    f.onsubmit = async e => {
+      e.preventDefault(); if (!u) return;
+      const btn = $('button[type=submit]', f), err = $('#ng-err', f);
+      btn.disabled = true; btn.textContent = 'Đang đăng nhập…'; err.textContent = '';
+      const hit = Object.entries(G.acc).find(([, a]) => a && a.active !== false && norm(a.user) === norm(u.value));
+      const ok = hit && (await hash(hit[1].salt, pw.value)) === hit[1].pw;
+      if (!ok) { await new Promise(r => setTimeout(r, 600)); err.textContent = 'Sai nick hoặc mật khẩu.'; btn.disabled = false; btn.textContent = 'Đăng nhập'; pw.select(); return; }
+      sess.set({ id: hit[0], sig: hit[1].pw.slice(0, 24), iat: Date.now(), exp: Date.now() + DAYS * 864e5 });
+      try { localStorage.setItem('ng-' + SITE + '-last', hit[1].user); } catch (x) { /* trình duyệt chặn lưu */ }
+      gate.dataset.state = ''; apply();
+    };
+  }
+  function drawSlot() {
+    let host = C.slot && $(C.slot);
+    if (!host) { host = $('#ng-fixed') || Object.assign(document.createElement('div'), { id: 'ng-fixed' }); if (!host.parentNode) document.body.appendChild(host); }
+    const who = window.ANTAM_NICK;
+    host.innerHTML = who ? `<button type="button" class="ng-me" title="Tài khoản đăng nhập">👤 ${esc(who.name)}</button>` : '';
+    const b = $('.ng-me', host); if (b) b.onclick = openPanel;
+  }
+
+  // ---------- tài khoản của tôi / quản lý tài khoản ----------
+  let edit = null;
+  function closePanel() { panel.hidden = true; panel.innerHTML = ''; edit = null; }
+  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !panel.hidden) closePanel(); });
+  panel.addEventListener('mousedown', e => { if (e.target === panel) closePanel(); });
+  function openPanel() { panel.hidden = false; drawPanel(); }
+  function drawPanel() {
+    if (panel.hidden) return;
+    const me = G.me, list = Object.entries(G.acc).filter(([, a]) => a).sort((x, y) => norm(x[1].user) < norm(y[1].user) ? -1 : 1);
+    const mine = me ? `<div class="ng-row"><div class="ng-grow"><b>${esc(me.name || me.user)}</b> <span style="color:var(--muted,#5b6862)">· nick ${esc(me.user)}</span></div><button class="ng-btn" type="button" id="ng-out">Đăng xuất</button></div>`
+      : `<p>Bạn là <b>chủ trang</b>: vào trang không cần đăng nhập và quản lý được tài khoản.</p>`;
+    const mgr = G.admin ? `<hr style="border:0;border-top:1px solid var(--line,#dce2dc);margin:4px 0">
+      <div class="ng-row"><h2 class="ng-grow" style="margin:0;font-size:1.1em">Tài khoản đăng nhập</h2><button class="ng-btn sm" type="button" id="ng-add">+ Thêm tài khoản</button><button class="ng-btn sm" type="button" id="ng-epoch" title="Bắt mọi người đăng nhập lại">Đăng xuất tất cả máy</button></div>
+      ${edit ? `<form id="ng-edit" class="ng-grid" novalidate style="background:var(--raise,var(--sunk,#f7f9f6));padding:12px;border-radius:10px">
+          <label class="ng-f">Nick<input id="ng-e-user" value="${esc(edit.user)}" autocapitalize="none" spellcheck="false" maxlength="40"></label>
+          <label class="ng-f">Họ tên<input id="ng-e-name" value="${esc(edit.name)}" maxlength="60"></label>
+          <label class="ng-f">${edit.id ? 'Mật khẩu mới (để trống = giữ nguyên)' : 'Mật khẩu (ít nhất 4 ký tự)'}<input id="ng-e-pw" type="text" autocomplete="new-password"></label>
+          <label class="ng-chk"><input type="checkbox" id="ng-e-on"${edit.active !== false ? ' checked' : ''}> Đang dùng (bỏ tích = khóa tài khoản)</label>
+          <div class="ng-row" style="grid-column:1/-1"><button class="ng-btn pri" type="submit">Lưu tài khoản</button><button class="ng-btn" type="button" id="ng-e-x">Hủy</button><span class="ng-err" id="ng-e-err"></span></div>
+        </form>` : ''}
+      <div class="ng-tbl"><table><thead><tr><th>Nick</th><th>Họ tên</th><th>Trạng thái</th><th>Sửa lúc</th><th></th></tr></thead><tbody>
+        ${list.length ? list.map(([id, a]) => `<tr class="${a.active === false ? 'off' : ''}"><td><b>${esc(a.user)}</b></td><td>${esc(a.name)}</td><td>${a.active === false ? 'Đã khóa' : 'Đang dùng'}</td><td>${esc(a.at || '')}</td><td><button class="ng-btn sm" type="button" data-ng-edit="${esc(id)}">Sửa</button></td></tr>`).join('')
+          : '<tr><td colspan="5" style="color:var(--muted,#5b6862)">Chưa có tài khoản nào. Bấm “+ Thêm tài khoản”.</td></tr>'}
+      </tbody></table></div>
+      <p>Mỗi người một nick. Khóa tài khoản hoặc đổi mật khẩu thì máy đang đăng nhập bằng nick đó bị đăng xuất ngay.</p>` : '';
+    panel.innerHTML = `<div class="ng-card" role="dialog" aria-modal="true"><div class="ng-row"><h1 class="ng-grow">Tài khoản · ${esc(TITLE)}</h1><button class="ng-btn sm" type="button" id="ng-x">Đóng</button></div>${mine}${mgr}</div>`;
+    $('#ng-x', panel).onclick = closePanel;
+    const out = $('#ng-out', panel); if (out) out.onclick = () => { sess.set(null); closePanel(); apply(); };
+    const add = $('#ng-add', panel); if (add) add.onclick = () => { edit = { id: '', user: '', name: '', active: true }; drawPanel(); const i = $('#ng-e-user', panel); if (i) i.focus(); };
+    panel.querySelectorAll('[data-ng-edit]').forEach(b => b.onclick = () => { const a = G.acc[b.dataset.ngEdit]; edit = Object.assign({ id: b.dataset.ngEdit }, a); drawPanel(); });
+    const ep = $('#ng-epoch', panel); if (ep) ep.onclick = async () => {
+      if (ep.dataset.sure !== '1') { ep.dataset.sure = '1'; ep.textContent = 'Bấm lần nữa để đăng xuất tất cả'; return; }
+      try { await save(null, null, Date.now()); ep.textContent = 'Đã đăng xuất tất cả máy'; } catch (e) { ep.textContent = 'Không lưu được: ' + (e.message || e.code); }
+    };
+    const f = $('#ng-edit', panel); if (f) {
+      $('#ng-e-x', panel).onclick = () => { edit = null; drawPanel(); };
+      f.onsubmit = async e => {
+        e.preventDefault();
+        const err = $('#ng-e-err', panel), user = $('#ng-e-user', panel).value.trim(), name = $('#ng-e-name', panel).value.trim(), pw = $('#ng-e-pw', panel).value, on = $('#ng-e-on', panel).checked;
+        const dup = Object.entries(G.acc).some(([id, a]) => a && id !== edit.id && norm(a.user) === norm(user));
+        const bad = !norm(user) ? 'Nhập nick (chữ, số, dấu chấm, gạch dưới).' : dup ? 'Nick này đã có người dùng.' : (!edit.id || pw) && pw.length < 4 ? 'Mật khẩu cần ít nhất 4 ký tự.' : '';
+        if (bad) { err.textContent = bad; return; }
+        const id = edit.id || rid('a'), old = G.acc[id] || {};
+        const rec = { user: norm(user), name, active: on, at: nowStr(), salt: old.salt || '', pw: old.pw || '' };
+        if (pw) { rec.salt = rid('s'); rec.pw = await hash(rec.salt, pw); }
+        try { await save(id, rec); edit = null; drawPanel(); } catch (x) { err.textContent = 'Không lưu được: ' + (x.message || x.code) + (x.code === 'invalid_argument' ? ' (chỉ chủ trang / Editor sửa được tài khoản)' : ''); }
+      };
+    }
+  }
+  async function save(id, rec, ep) {
+    const ref = G.db.doc('auth/accounts'), s = await ref.get(), cur = s.exists ? s.data() : { a: {} };
+    const next = { a: Object.assign({}, cur.a || {}), ep: cur.ep || 0 };
+    if (id) next.a[id] = rec;
+    if (ep) next.ep = ep;
+    await ref.set(next);
+  }
+
+  // ---------- khởi động ----------
+  (async function boot() {
+    drawGate();
+    const c = window.claude;
+    const [db, user] = c && c.use ? await Promise.all([c.use('db').catch(() => null), c.use('user').catch(() => null)]) : [null, null];
+    G.db = db; G.user = user;
+    if (!db) { G.nodb = true; G.loaded = true; gate.dataset.state = ''; drawGate(); return; }
+    if (user) {
+      try { G.owner = !!(await user.isOwner()); } catch (e) { /* không rõ */ }
+      try { G.admin = !!(await user.canEdit()); } catch (e) { /* không rõ */ }
+    }
+    db.doc('auth/accounts').onSnapshot(s => {
+      const d = s.exists ? s.data() : {};
+      G.acc = d.a || {}; G.ep = d.ep || 0; G.loaded = true;
+      apply(); drawPanel();
+    }, () => { G.loaded = true; apply(); });
+  })();
+})();
+</script>
+<!-- nick-gate:end -->
 
 <div class="top">
   <div class="wrap head">
@@ -194,6 +380,7 @@ fieldset.grp legend { padding: 0 6px; font-size: .8rem; font-weight: 600; color:
       <svg width="34" height="34" viewBox="0 0 34 34" aria-hidden="true"><rect x="2" y="7" width="30" height="20" rx="4" fill="var(--accent)"/><circle cx="17" cy="17" r="5.5" fill="none" stroke="var(--accent-ink)" stroke-width="2"/><rect x="6" y="11" width="4" height="2" rx="1" fill="var(--accent-ink)"/><rect x="24" y="21" width="4" height="2" rx="1" fill="var(--accent-ink)"/></svg>
       <div><b>Quỹ tiền mặt</b><span>Công ty TNHH SX-TM Ẩm Thực An Tâm</span></div>
     </div>
+    <div id="gate-slot"></div>
     <div class="bal" id="bal"><div><div class="lbl">Tồn quỹ</div><div class="money">—</div></div></div>
     <div class="acts" id="acts">
       <button class="btn thu" type="button" id="b-thu" disabled>+ Phiếu thu</button>
@@ -346,6 +533,7 @@ async function resolveNames(ids) {
   try { const ps = await S.user.profiles(need); for (const id of need) S.names[id] = (ps[id] && ps[id].name) || ''; render(); } catch (e) { /* không lấy được tên */ }
 }
 const who = id => !id ? '' : id === S.me.id ? 'Bạn' : (S.names[id] || 'Người dùng');
+const nickName = () => (window.ANTAM_NICK || {}).name || ''; // tên tài khoản đang đăng nhập (nick) – ghi kèm vào phiếu
 
 // ---------- ghi dữ liệu ----------
 function canWrite() { return !!S.db && !S.readonly && S.me.write !== false; }
@@ -517,7 +705,7 @@ function phieuForm(loai, p) {
     if (!bad && p.loai === 'chi') { try { hdv = readHd(); } catch (x) { bad = x.message; } }
     if (bad) { err.textContent = bad; err.hidden = false; return; }
     const rec = Object.assign({}, p, { ngay, quy: $('#pf-quy', el).value, dm: $('#pf-dm', el).value, tien, doi_tuong: dt, noidung: nd, chungtu: $('#pf-ct', el).value.trim(), anh, ncc: nc, hd: hdv });
-    if (edit) Object.assign(rec, { sua_boi: S.me.id, sua_luc: nowStr() }); else Object.assign(rec, { tao_boi: S.me.id, tao_luc: nowStr(), huy: null });
+    if (edit) Object.assign(rec, { sua_boi: S.me.id, sua_nick: nickName(), sua_luc: nowStr() }); else Object.assign(rec, { tao_boi: S.me.id, tao_nick: nickName(), tao_luc: nowStr(), huy: null });
     const btn = $('#pf-save', el); btn.disabled = true; btn.textContent = 'Đang lưu…';
     try {
       await savePhieu(rec, edit ? orig : null);
@@ -547,10 +735,10 @@ function phieuView(id) {
         ${nccOf(p) || (p.ncc && p.ncc.mst) ? `<dt>${p.loai === 'thu' ? 'Đơn vị nộp' : 'Nhà cung cấp'}</dt><dd>${esc(nccOf(p)) || '—'}${nccLine(p.ncc) ? `<div class="small muted">${esc(nccLine(p.ncc))}</div>` : ''}</dd>` : ''}
         ${p.loai === 'chi' ? `<dt>Hóa đơn</dt><dd>${hdPill(p) || esc(HD[hdOf(p)])}${hdOf(p) === 'co' ? ` Số <b class="num">${esc(p.hd.so)}</b>${p.hd.ky_hieu ? ' · ký hiệu ' + esc(p.hd.ky_hieu) : ''}${p.hd.ngay ? ' · ngày ' + vnDate(p.hd.ngay) : ''}${p.hd.thue ? ` · thuế GTGT <span class="num">${fmt(p.hd.thue)}</span> đ` : ''}` : ''}</dd>` : ''}
         <dt>Chứng từ gốc</dt><dd>${esc(p.chungtu) || '<span class="muted">—</span>'}</dd>
-        <dt>Người lập</dt><dd>${esc(who(p.tao_boi))} <span class="muted small">· ${esc(p.tao_luc || '')}</span></dd>
-        ${p.sua_luc ? `<dt>Sửa lần cuối</dt><dd>${esc(who(p.sua_boi))} <span class="muted small">· ${esc(p.sua_luc)}</span></dd>` : ''}
+        <dt>Người lập</dt><dd>${esc(p.tao_nick || who(p.tao_boi))} <span class="muted small">· ${esc(p.tao_luc || '')}</span></dd>
+        ${p.sua_luc ? `<dt>Sửa lần cuối</dt><dd>${esc(p.sua_nick || who(p.sua_boi))} <span class="muted small">· ${esc(p.sua_luc)}</span></dd>` : ''}
         ${ap && ap.ok ? `<dt>Duyệt</dt><dd>${esc(who(ap.boi))} <span class="muted small">· ${esc(ap.luc)}</span></dd>` : ''}
-        ${p.huy ? `<dt>Hủy</dt><dd>${esc(who(p.huy.boi))} <span class="muted small">· ${esc(p.huy.luc)}</span><br>${esc(p.huy.lydo)}</dd>` : ''}
+        ${p.huy ? `<dt>Hủy</dt><dd>${esc(p.huy.nick || who(p.huy.boi))} <span class="muted small">· ${esc(p.huy.luc)}</span><br>${esc(p.huy.lydo)}</dd>` : ''}
       </dl>
       ${(p.anh || []).length ? `<div class="thumbs" id="pv-anh">${p.anh.map((a, i) => `<button type="button" data-i="${i}" aria-label="Xem ảnh ${i + 1}"><img src="/_blob/${esc(a)}" alt="Chứng từ ${i + 1}" loading="lazy"></button>`).join('')}</div>` : ''}
       <div id="pv-cf"></div>
@@ -574,7 +762,7 @@ function phieuView(id) {
     $('#pv-no', el).onclick = () => { $('#pv-cf', el).innerHTML = ''; };
     $('#pv-yes', el).onclick = async () => {
       const ly = $('#pv-ly', el).value.trim(); if (!ly) { $('#pv-ly', el).focus(); return; }
-      try { await S.db.doc('thang/' + ymOf(p.ngay)).update({ v: { [p.id]: { huy: { boi: S.me.id, luc: nowStr(), lydo: ly } } } }); closeDlg(); toast('Đã hủy phiếu ' + p.so); }
+      try { await S.db.doc('thang/' + ymOf(p.ngay)).update({ v: { [p.id]: { huy: { boi: S.me.id, nick: nickName(), luc: nowStr(), lydo: ly } } } }); closeDlg(); toast('Đã hủy phiếu ' + p.so); }
       catch (x) { writeFailed(x); }
     };
   };
@@ -749,7 +937,7 @@ function bindSoQuy() {
     const lines = [['Ngày', 'Số phiếu', 'Loại', 'Quỹ', 'Khoản mục', 'Người nộp/nhận', 'Nhà cung cấp / đơn vị', 'MST', 'Điện thoại', 'Địa chỉ', 'Nội dung', 'Chứng từ gốc', 'Hóa đơn', 'Số HĐ', 'Ký hiệu HĐ', 'Ngày HĐ', 'Thuế GTGT', 'Thu', 'Chi', 'Trạng thái', 'Người lập', 'Lập lúc'].join(',')];
     for (const p of list) lines.push([vnDate(p.ngay), p.so, p.loai === 'thu' ? 'Thu' : 'Chi', quyName(p.quy), p.dm, p.doi_tuong, nccOf(p), (p.ncc || {}).mst || '', (p.ncc || {}).sdt || '', (p.ncc || {}).dia_chi || '', p.noidung, p.chungtu,
       hdOf(p) ? HD[hdOf(p)] : '', (p.hd || {}).so || '', (p.hd || {}).ky_hieu || '', p.hd && p.hd.ngay ? vnDate(p.hd.ngay) : '', (p.hd || {}).thue || '', p.loai === 'thu' ? p.tien : '', p.loai === 'chi' ? p.tien : '',
-      p.huy ? 'Đã hủy: ' + p.huy.lydo : needsApproval(p) ? 'Chờ duyệt' : (approvalOf(p) || {}).ok ? 'Đã duyệt' : '', who(p.tao_boi), p.tao_luc || ''].map(cell).join(','));
+      p.huy ? 'Đã hủy: ' + p.huy.lydo : needsApproval(p) ? 'Chờ duyệt' : (approvalOf(p) || {}).ok ? 'Đã duyệt' : '', p.tao_nick || who(p.tao_boi), p.tao_luc || ''].map(cell).join(','));
     S.downloads.save({ filename: `so-quy-${f.from}_${f.to}.csv`, data: new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv' }) })
       .then(r => { if (r && r.status === 'saved') toast('Đã tải sổ quỹ.'); }).catch(e => { if (e && e.code !== 'declined') toast('Không tải được: ' + (e.message || e.code), true); });
   };
@@ -818,7 +1006,7 @@ function viewKiemQuy() {
   </section>
   <section class="card"><header><h2>Các lần kiểm quỹ</h2></header>
     ${hist.length ? `<div class="tw"><table><thead><tr><th>Ngày giờ</th><th>Quỹ</th><th class="r">Theo sổ</th><th class="r">Thực tế</th><th class="r">Chênh lệch</th><th>Người kiểm</th><th>Ghi chú</th></tr></thead><tbody>
-    ${hist.map(x => `<tr><td class="num">${esc(x.luc)}</td><td>${esc(quyName(x.quy))}</td><td class="money">${fmt(x.so_sach)}</td><td class="money">${fmt(x.thuc_te)}</td><td class="money ${x.chenh ? 'c-chi' : 'c-thu'}">${x.chenh >= 0 ? '+' : '−'}${fmt(Math.abs(x.chenh))}</td><td>${esc(who(x.boi))}${x.thanhphan ? '<div class="small muted">' + esc(x.thanhphan) + '</div>' : ''}</td><td>${esc(x.ghichu)}</td></tr>`).join('')}
+    ${hist.map(x => `<tr><td class="num">${esc(x.luc)}</td><td>${esc(quyName(x.quy))}</td><td class="money">${fmt(x.so_sach)}</td><td class="money">${fmt(x.thuc_te)}</td><td class="money ${x.chenh ? 'c-chi' : 'c-thu'}">${x.chenh >= 0 ? '+' : '−'}${fmt(Math.abs(x.chenh))}</td><td>${esc(x.nick || who(x.boi))}${x.thanhphan ? '<div class="small muted">' + esc(x.thanhphan) + '</div>' : ''}</td><td>${esc(x.ghichu)}</td></tr>`).join('')}
     </tbody></table></div>` : '<div class="empty">Chưa có lần kiểm quỹ nào. Cuối ca hoặc cuối ngày, đếm tiền theo từng mệnh giá ở trên rồi lưu biên bản.</div>'}
   </section>`;
 }
@@ -838,7 +1026,7 @@ function bindKiemQuy() {
     const { book, real, diff } = upd();
     if (!real) { toast('Nhập số tờ từng mệnh giá trước khi lưu.', true); return; }
     const ym = today().slice(0, 7), id = 'k' + uid(), rec = { ngay: today(), luc: nowStr(), quy: kqDraft.quy, so_sach: book, thuc_te: real, chenh: diff,
-      to: Object.fromEntries(DENOMS.filter(d => kqDraft.n[d]).map(d => [d, kqDraft.n[d]])), thanhphan: kqDraft.thanhphan.trim(), ghichu: kqDraft.ghichu.trim(), boi: S.me.id };
+      to: Object.fromEntries(DENOMS.filter(d => kqDraft.n[d]).map(d => [d, kqDraft.n[d]])), thanhphan: kqDraft.thanhphan.trim(), ghichu: kqDraft.ghichu.trim(), boi: S.me.id, nick: nickName() };
     sv.disabled = true;
     try {
       const ref = S.db.doc('kiemquy/' + ym), snap = await ref.get();
