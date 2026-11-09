@@ -131,12 +131,6 @@ HOP_PICK = """<div id="hop-pick" hidden><div class="box">
   <nav class="hp-links" aria-label="Web khác của An Tâm">
     <a href="https://claude.ai/artifact/1PqLezLBJk3zZqRSvEs4wT" target="_blank" rel="noopener"><i>💵</i><b>Quỹ tiền mặt</b><span>Phiếu thu – chi, sổ quỹ, kiểm quỹ</span></a>
     <a href="https://claude.ai/artifact/JvUGzUPjrC93AoNzEbnhC9" target="_blank" rel="noopener"><i>🧾</i><b>Kế toán bán hàng</b><span>Doanh thu, hóa đơn bán hàng</span></a>
-    <a href="https://claude.ai/artifact/UgGL7Zsm6JCCfUonMtf7PQ" target="_blank" rel="noopener"><i>📒</i><b>Công nợ 131</b><span>Kiểm tra công nợ khách hàng</span></a>
-    <a href="https://claude.ai/artifact/8iwBT1YGqiJ1vTwVQfmzed" target="_blank" rel="noopener"><i>🤖</i><b>Kho vận</b><span>Báo cáo các bộ phận, Trợ lý AI</span></a>
-    <a href="https://claude.ai/artifact/FR5exq3vhG67nKqfWiPtVq" target="_blank" rel="noopener"><i>🛵</i><b>Tuyến Lẻ CT2</b><span>Danh sách tuyến lẻ CT2</span></a>
-    <a href="https://claude.ai/artifact/GAwGsda7xfb2G3TRBWfEov" target="_blank" rel="noopener"><i>👥</i><b>Nhân sự</b><span>Thông tin nhân sự</span></a>
-    <a href="https://claude.ai/artifact/JMsE7j3eDSYj5L24xo1SVu" target="_blank" rel="noopener"><i>📊</i><b>Quản trị</b><span>Quản trị chung của công ty</span></a>
-    <a href="https://claude.ai/artifact/PBDDvN1vVf34Cj7PjZJLvZ" target="_blank" rel="noopener"><i>🧭</i><b>Cổng web</b><span>Tất cả web, quy trình, biểu mẫu</span></a>
   </nav>
 </div></div>
 <button type="button" id="hop-switch" hidden title="Chọn lại bộ phận (Đóng hàng / Kho / Giao hàng)">⇄ Bộ phận</button>"""
