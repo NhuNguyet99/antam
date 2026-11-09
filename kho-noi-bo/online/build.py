@@ -107,6 +107,15 @@ body.hop-picking { background: var(--hp-bg); color: var(--hp-ink); }
 #hop-pick button i { grid-row: span 2; font-style: normal; font-size: 36px; text-align: center; }
 #hop-pick button b { font-size: 21px; }
 #hop-pick button span { color: var(--hp-muted); font-size: 15px; }
+#hop-pick h2 { margin: 14px 0 0; font-size: 19px; }
+#hop-pick .hp-hint { font-size: 14px; }
+#hop-pick .hp-links { display: grid; grid-template-columns: repeat(auto-fill, minmax(min(250px, 100%), 1fr)); gap: 10px; }
+#hop-pick .hp-links a { display: grid; grid-template-columns: 34px 1fr; gap: 0 10px; align-items: center; text-decoration: none; color: inherit;
+  background: var(--hp-panel); border: 1px solid var(--hp-line); border-radius: 12px; padding: 10px 12px; min-width: 0; }
+#hop-pick .hp-links a:hover, #hop-pick .hp-links a:focus-visible { border-color: var(--hp-brand); background: var(--hp-brand-soft); outline: none; }
+#hop-pick .hp-links i { grid-row: span 2; font-style: normal; font-size: 24px; text-align: center; }
+#hop-pick .hp-links b { font-size: 16px; }
+#hop-pick .hp-links span { color: var(--hp-muted); font-size: 13.5px; }
 #hop-switch { position: fixed; left: calc(10px + env(safe-area-inset-left, 0px)); bottom: calc(10px + env(safe-area-inset-bottom, 0px)); z-index: 70;
   font: 600 13px/1 system-ui, sans-serif; padding: 7px 11px; border-radius: 999px; border: 1px solid var(--hp-line); background: var(--hp-panel); color: var(--hp-muted);
   opacity: .82; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
@@ -117,6 +126,18 @@ HOP_PICK = """<div id="hop-pick" hidden><div class="box">
   <button type="button" data-app="dh"><i>📦</i><b>Đóng hàng</b><span>Đơn hàng ngày, tuyến kebab 123, định mức đóng hàng</span></button>
   <button type="button" data-app="kho"><i>🏭</i><b>Kho</b><span>Phiếu nhập – xuất, tồn kho, phân tuyến, tài khoản giao hàng</span></button>
   <button type="button" data-app="giao"><i>🚚</i><b>Giao hàng</b><span>Người giao: xem tuyến của mình, báo đã giao kèm ảnh</span></button>
+  <h2>Web khác của An Tâm</h2>
+  <p class="hp-hint">Mở ở tab mới. Mỗi web có dữ liệu và quyền riêng: chỉ mở được web chủ trang đã mời bạn.</p>
+  <nav class="hp-links" aria-label="Web khác của An Tâm">
+    <a href="https://claude.ai/artifact/1PqLezLBJk3zZqRSvEs4wT" target="_blank" rel="noopener"><i>💵</i><b>Quỹ tiền mặt</b><span>Phiếu thu – chi, sổ quỹ, kiểm quỹ</span></a>
+    <a href="https://claude.ai/artifact/JvUGzUPjrC93AoNzEbnhC9" target="_blank" rel="noopener"><i>🧾</i><b>Kế toán bán hàng</b><span>Doanh thu, hóa đơn bán hàng</span></a>
+    <a href="https://claude.ai/artifact/UgGL7Zsm6JCCfUonMtf7PQ" target="_blank" rel="noopener"><i>📒</i><b>Công nợ 131</b><span>Kiểm tra công nợ khách hàng</span></a>
+    <a href="https://claude.ai/artifact/8iwBT1YGqiJ1vTwVQfmzed" target="_blank" rel="noopener"><i>🤖</i><b>Kho vận</b><span>Báo cáo các bộ phận, Trợ lý AI</span></a>
+    <a href="https://claude.ai/artifact/FR5exq3vhG67nKqfWiPtVq" target="_blank" rel="noopener"><i>🛵</i><b>Tuyến Lẻ CT2</b><span>Danh sách tuyến lẻ CT2</span></a>
+    <a href="https://claude.ai/artifact/GAwGsda7xfb2G3TRBWfEov" target="_blank" rel="noopener"><i>👥</i><b>Nhân sự</b><span>Thông tin nhân sự</span></a>
+    <a href="https://claude.ai/artifact/JMsE7j3eDSYj5L24xo1SVu" target="_blank" rel="noopener"><i>📊</i><b>Quản trị</b><span>Quản trị chung của công ty</span></a>
+    <a href="https://claude.ai/artifact/PBDDvN1vVf34Cj7PjZJLvZ" target="_blank" rel="noopener"><i>🧭</i><b>Cổng web</b><span>Tất cả web, quy trình, biểu mẫu</span></a>
+  </nav>
 </div></div>
 <button type="button" id="hop-switch" hidden title="Chọn lại bộ phận (Đóng hàng / Kho / Giao hàng)">⇄ Bộ phận</button>"""
 HOP_JS = r"""
