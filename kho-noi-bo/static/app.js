@@ -15,6 +15,8 @@ const GIAO_APP = !!window.ANTAM_GIAO_APP;
 // Bản online của web kho: link trang Giao hàng An Tâm – phân tuyến làm ở web kho rồi "Gửi sang" trang đó cho người giao
 const GIAO_URL = window.ANTAM_GIAO_URL || '';
 const GIAO_LINKED = ONLINE && !VIEW && !GIAO_APP && !!GIAO_URL;
+// trang chung An Tâm: tài khoản giao hàng tạo / sửa ở web Đóng hàng, web Kho chỉ xem (cùng kho dữ liệu)
+const DRV_RO = GIAO_APP || !!window.ANTAM_HOP;
 // Trang GPS An Tâm (đọc GPS điện thoại ngoài claude.ai): quản lý link ở trang có hành trình – Giao hàng An Tâm (hoặc web kho chưa tách trang giao)
 const GPS_HERE = ONLINE && !VIEW && !GIAO_LINKED;
 // Google Sheet "GPS An Tâm" (trang GPS ghi vào) – trang đọc qua kết nối Google Drive của người xem (chủ trang)
@@ -81,7 +83,8 @@ const ROUTE_PERM = { 'phieu/moi': ['pN', 'pX', 'pD'], phieu: ['phieu', 'pN', 'pX
 const routeOk = path => { const key = /^phieu\/moi/.test(path) ? 'phieu/moi' : path.split('/')[0]; const need = ROUTE_PERM[key]; return !need || need.some(can); };
 function applyPerms() {
   $$('#nav a[data-route]').forEach(a => { a.hidden = !routeOk(a.dataset.route); });
-  const nd = $('#nav-duyet'); if (nd) nd.hidden = !(S.account && can('duyet')); // mục Duyệt phiếu: chỉ người có quyền duyệt phiếu điều chỉnh
+  const nd = $('#nav-duyet'); if (nd) nd.hidden = !(S.account && can('duyet'));
+  const ng = window.ANTAM_HOP && $('#nav a[data-route="giao-hang-tk"]'); if (ng) ng.textContent = 'Người giao & kết quả giao'; // tạo / sửa tài khoản ở web Đóng hàng // mục Duyệt phiếu: chỉ người có quyền duyệt phiếu điều chỉnh
   $$('#wh-switch button').forEach(b => { b.hidden = !can('kho' + b.dataset.wh); });
 }
 const HANDOVER_REASONS = ['Bàn giao ca', 'Bàn giao thủ kho (nghỉ phép/nghỉ việc)', 'Bàn giao cuối ngày', 'Chuyển kho', 'Khác'];
@@ -2217,7 +2220,7 @@ function openGiaoHang() {
   window.open('/giao-hang', '_blank');
 }
 async function viewDrivers(main) {
-  setTitle('Tài khoản giao hàng');
+  setTitle(window.ANTAM_HOP ? 'Người giao & kết quả giao hàng' : 'Tài khoản giao hàng');
   const routes = routeList();
   const rName = c => { const r = routes.find(x => x.code.toLowerCase() === String(c).toLowerCase()); return r ? r.name : ''; };
   const res = { date: isoDate(), who: '', list: {}, tracks: [], locs: {} };
@@ -2257,7 +2260,7 @@ async function viewDrivers(main) {
   function draw() {
     const list = (S.meta.drivers || []).slice().sort((a, b) => (b.active - a.active) || a.nick.localeCompare(b.nick));
     const links = giaoHangLinks();
-    main.innerHTML = `<div class="toolbar">${GIAO_APP ? '' : '<button class="btn primary" id="g-add">+ Thêm người giao hàng</button>'}<button class="btn" id="g-open">🚚 ${GIAO_LINKED ? 'Mở Giao hàng An Tâm ↗' : 'Mở web giao hàng'}</button></div>
+    main.innerHTML = `<div class="toolbar">${DRV_RO ? '' : '<button class="btn primary" id="g-add">+ Thêm người giao hàng</button>'}<button class="btn" id="g-open">🚚 ${GIAO_LINKED ? 'Mở Giao hàng An Tâm ↗' : 'Mở web giao hàng'}</button></div>
       <div class="callout">Mỗi người giao hàng có <b>1 nick + mã PIN</b>. Đăng nhập web giao hàng trên điện thoại sẽ thấy <b>tuyến đã sắp của từng ngày</b>
       (lấy từ <a href="#/phan-tuyen">Phân tuyến giao hàng</a>): khách, địa chỉ (bấm để mở bản đồ), SĐT (bấm để gọi), số lượng từng loại; bấm <b>Đã giao</b> /
       <b>Không giao được</b> và kho thấy kết quả ở bảng phân tuyến.<br>Tuyến của mỗi người = <b>tuyến thường chạy</b> dưới đây; ngày nào đổi người thì chọn lại ở cột
@@ -2267,7 +2270,8 @@ async function viewDrivers(main) {
       : GIAO_LINKED ? `<div class="callout small">Người giao dùng trang riêng <a href="${esc(GIAO_URL)}" target="_blank" rel="noopener"><b>Giao hàng An Tâm ↗</b></a> – mời họ vào trang đó
         (email, quyền <b>Contributor</b> – nhập liệu được, không sửa được code trang (menu Share không có Contributor thì chọn Editor), tắt "Anyone with the link"), <b>không mời vào web Kho An Tâm</b>. Tài khoản tạo / sửa ở đây tự chuyển sang mỗi lần
         <b>Lưu</b> bảng Phân tuyến giao hàng (trong khoảng 1 giờ); kết quả giao, ảnh và vị trí xem ở trang Giao hàng An Tâm.</div>`
-      : window.ANTAM_HOP ? `<div class="callout small">Người giao dùng <b>chung trang An Tâm này</b> (Đóng hàng + Kho + Giao hàng): mời họ bằng <b>email</b> ở nút <i>Share</i>, quyền <b>Contributor</b>
+      : window.ANTAM_HOP ? `<div class="callout small">Tài khoản giao hàng (nick, PIN, tuyến thường chạy) <b>tạo / sửa / khóa ở web Đóng hàng › Tài khoản giao hàng</b>; ở đây chỉ xem.
+        Người giao dùng <b>chung trang An Tâm này</b> (Đóng hàng + Kho + Giao hàng): mời họ bằng <b>email</b> ở nút <i>Share</i>, quyền <b>Contributor</b>
         (menu Share không có Contributor thì chọn Editor), để <i>General access</i> ở chế độ <b>chỉ người được mời</b>.
         Trên điện thoại: mở link → chọn <b>🚚 Giao hàng</b> → đăng nhập nick + PIN. Lần sau mở link sẽ vào thẳng tuyến của mình; kết quả giao và ảnh hiện ngay ở Phân tuyến và web Đóng hàng.</div>`
       : ONLINE ? `<div class="callout small">Người giao hàng chỉ được mời vào <b>trang Giao hàng An Tâm này</b> – <b>không mời họ vào web Kho An Tâm</b>.
@@ -2280,7 +2284,7 @@ async function viewDrivers(main) {
       ${list.map(x => `<tr class="clickable" data-id="${esc(x.id)}" ${x.active ? '' : 'style="opacity:.55"'}><td><b>${esc(x.nick)}</b></td><td>${esc(x.name)}</td><td>${esc(x.phone)}</td>
         <td>${x.routes.length ? x.routes.map(c => `<span class="badge" title="${esc(rName(c))}">${esc(c)}</span>`).join(' ') : '<span class="muted small">— chọn theo ngày —</span>'}</td>
         <td>${x.active ? '<span class="badge ok">Đang dùng</span>' : '<span class="badge warn">Đã khóa</span>'}</td>
-        <td>${GIAO_APP ? '' : `<button class="btn sm danger" data-del="${esc(x.id)}">Xóa</button>`}</td></tr>`).join('')}</tbody></table></div>`
+        <td>${DRV_RO ? '' : `<button class="btn sm danger" data-del="${esc(x.id)}">Xóa</button>`}</td></tr>`).join('')}</tbody></table></div>`
       : '<p class="muted">Chưa có tài khoản giao hàng nào.</p>'}
       ${GPS_HERE ? '<div class="card" style="margin-top:16px" id="g-gps"><h3>🛰 GPS An Tâm – đọc GPS điện thoại người giao</h3><p class="muted">Đang tải…</p></div>' : ''}
       ${GIAO_LINKED ? '' : `<div class="card" style="margin-top:16px"><h3>Kết quả giao hàng theo ngày</h3>
@@ -2304,10 +2308,10 @@ async function viewDrivers(main) {
       clearInterval(viewDrivers.timer);
       viewDrivers.timer = setInterval(() => { if (!$('#g-jr')) return clearInterval(viewDrivers.timer); if (!document.hidden && !$('.modal')) tick(); }, 60000);
     }
-    if (!GIAO_APP) $('#g-add').onclick = () => edit(null);
+    if (!DRV_RO) $('#g-add').onclick = () => edit(null);
     if (GPS_HERE) drawGps();
     $('#g-open').onclick = () => openGiaoHang();
-    if (!GIAO_APP) $$('tr[data-id]', main).forEach(tr => tr.onclick = e => { if (!e.target.closest('button')) edit(S.meta.drivers.find(x => x.id === tr.dataset.id)); });
+    if (!DRV_RO) $$('tr[data-id]', main).forEach(tr => tr.onclick = e => { if (!e.target.closest('button')) edit(S.meta.drivers.find(x => x.id === tr.dataset.id)); });
     $$('[data-del]', main).forEach(b => b.onclick = async () => {
       const x = S.meta.drivers.find(v => v.id === b.dataset.del);
       if (!(await ask(`Xóa tài khoản giao hàng "${x.nick}"? Người này sẽ không đăng nhập được nữa (kết quả giao cũ vẫn giữ).`))) return;

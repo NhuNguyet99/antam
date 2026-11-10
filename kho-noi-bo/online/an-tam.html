@@ -584,6 +584,7 @@ body.drag-on, body.drag-on * { cursor: grabbing !important; user-select: none; }
     <button data-v="in" class="p-in">Định mức đóng hàng</button>
     <button data-v="khach" class="p-khach">Khách hàng</button>
     <button data-v="gh" class="p-gh">Theo dõi giao hàng</button>
+    <button data-v="taixe" class="p-taixe" id="tab-taixe" hidden>Tài khoản giao hàng</button>
     <button data-v="tk" class="p-tk">Thống kê</button>
     <button data-v="cd" class="p-cd">Định mức &amp; cài đặt</button>
     <button data-v="nhap" class="p-nhap">Nhập từ sheet</button>
@@ -1966,16 +1967,17 @@ const PERMS = [
   ['Nhập liệu', [['don', 'Đơn hàng ngày – xem'], ['donNhap', 'Đơn hàng ngày – nhập / sửa đơn'], ['t123', 'Tuyến kebab 123 – xem'], ['t123Nhap', 'Tuyến kebab 123 – nhập / sửa đơn'],
     ['in', 'Định mức đóng hàng – xem & in'],
     ['khach', 'Khách hàng – thêm / sửa thông tin'], ['gh', 'Theo dõi giao hàng'], ['tk', 'Thống kê']]],
-  ['Điều phối', [['tuyen', 'Đổi tuyến của đơn / khách'], ['quytac', 'Sửa quy tắc chia tuyến'], ['nguoigiao', 'Chọn người giao từng tuyến'], ['gui', 'Gửi ngay sang Giao hàng & Kho']]],
+  ['Điều phối', [['tuyen', 'Đổi tuyến của đơn / khách'], ['quytac', 'Sửa quy tắc chia tuyến'], ['nguoigiao', 'Chọn người giao từng tuyến'], ['gui', 'Gửi ngay sang Giao hàng & Kho'],
+    ['taixe', 'Tài khoản giao hàng (nick + PIN người giao)']]],
   ['Quản lý', [['xoa', 'Xóa khách'], ['misa', 'Cập nhật khách từ MISA'], ['gia', 'Sửa giá Tuyến 123'], ['nhap', 'Nhập từ sheet (Đơn hàng, Tuyến 123)'],
     ['cd', 'Định mức & cài đặt'], ['acc', 'Quản lý tài khoản & phân quyền']]],
 ];
 const PERM_KEYS = PERMS.flatMap(([, l]) => l.map(x => x[0]));
 const PERM_LAB = Object.fromEntries(PERMS.flatMap(([, l]) => l));
-const VIEWS = ['don', 't123', 'in', 'khach', 'gh', 'tk', 'cd', 'nhap', 'acc'];
+const VIEWS = ['don', 't123', 'in', 'khach', 'gh', 'taixe', 'tk', 'cd', 'nhap', 'acc'];
 // Điều phối: chỉ xem đơn (không nhập / sửa số lượng), được chia tuyến, chọn người giao, gửi ngay
-const PRESET = { nhap: ['don', 'donNhap', 't123', 't123Nhap', 'in', 'khach', 'gh', 'tk', 'cd'], dp: ['don', 't123', 'in', 'khach', 'gh', 'tk', 'tuyen', 'quytac', 'nguoigiao', 'gui'], ql: PERM_KEYS };
-const PERM_V = 4; // bản 1: 'don' / 't123' gồm cả nhập đơn; bản 2: chưa có 'gh' (theo dõi giao hàng – cấp cho mọi người); bản 3: Nhập liệu chưa có 'cd'
+const PRESET = { nhap: ['don', 'donNhap', 't123', 't123Nhap', 'in', 'khach', 'gh', 'tk', 'cd'], dp: ['don', 't123', 'in', 'khach', 'gh', 'tk', 'tuyen', 'quytac', 'nguoigiao', 'gui', 'taixe'], ql: PERM_KEYS };
+const PERM_V = 5; // bản 1: 'don' / 't123' gồm cả nhập đơn; bản 2: chưa có 'gh' (theo dõi giao hàng – cấp cho mọi người); bản 3: Nhập liệu chưa có 'cd'; bản 4: chưa có 'taixe'
 document.head.insertAdjacentHTML('beforeend', `<style>${PERM_KEYS.map(k => `body.no-p-${k} .p-${k}`).join(',')} { display: none !important; }</style>`);
 const SESSION_DAYS = 30;
 const newSess = (id, pw) => ({ id, sig: pw.slice(0, 24), iat: Date.now(), exp: Date.now() + SESSION_DAYS * 864e5 });
@@ -1993,6 +1995,7 @@ function permsOf(a) {
   if ((a.pv || 1) < 2) { if (p.has('don')) p.add('donNhap'); if (p.has('t123')) p.add('t123Nhap'); }
   if ((a.pv || 1) < 3) p.add('gh');
   if ((a.pv || 1) < 4 && roleOf(a) === 'nhap') p.add('cd'); // Nhập liệu được sửa Định mức & cài đặt
+  if ((a.pv || 1) < 5 && roleOf(a) !== 'nhap') p.add('taixe'); // Tài khoản giao hàng chuyển từ web Kho sang (Điều phối, Quản lý)
   return p;
 }
 const custom = a => { const p = permsOf(a), d = new Set(PRESET[roleOf(a)]); return p.size !== d.size || [...p].some(k => !d.has(k)); };
@@ -2102,6 +2105,89 @@ function changePw() {
     },
   });
 }
+/* ================================================================ TÀI KHOẢN GIAO HÀNG (chuyển từ web Kho sang)
+   Trang chung An Tâm: Đóng hàng, Kho, Giao hàng dùng chung kho dữ liệu → tài khoản người giao vẫn ở config/settings {s: {drivers: {id: {nick, name, phone,
+   routes, active, salt, pin}}}} (web Giao hàng đăng nhập bằng nick + PIN đọc ở đây; PIN băm SHA-256 "salt:pin" như web Kho), danh mục tuyến ở config/routes.
+   Lưu xong ghi lại nvpub/list (danh sách người giao không có PIN) để chọn người giao từng tuyến. */
+S.nv = { drv: null, routes: [], subs: false };
+function nvSubscribe() {
+  if (S.nv.subs || !HOP || !S.db) return; S.nv.subs = true;
+  S.db.doc('config/settings').onSnapshot(sn => { S.nv.drv = (((sn.exists && sn.data()) || {}).s || {}).drivers || {}; if (S.view === 'taixe' && !$('.modal-back')) render(); }, () => { S.nv.drv = {}; });
+  S.db.doc('config/routes').onSnapshot(sn => {
+    const r = ((sn.exists && sn.data()) || {}).r || {};
+    S.nv.routes = Object.values(r).filter(x => x && x.code).sort((a, b) => (a.sort || 0) - (b.sort || 0)).map(x => ({ code: String(x.code).replace(/\s+/g, ''), name: x.name || '' }));
+    if (S.view === 'taixe' && !$('.modal-back')) render();
+  }, () => {});
+}
+const nvNick = v => String(v || '').replace(/\s+/g, '').toLowerCase();
+async function pinHash(salt, pin) { return hex(await crypto.subtle.digest('SHA-256', new TextEncoder().encode(`${salt}:${pin}`))); }
+const randHex = n => hex(crypto.getRandomValues(new Uint8Array(n)));
+async function nvPublish(drv) { // danh sách người giao (không có PIN) cho mục chọn người giao từng tuyến
+  const list = Object.entries(drv).filter(([, d]) => d).map(([id, d]) => ({ id, nick: d.nick || '', name: d.name || '', phone: d.phone || '', routes: d.routes || [], active: d.active !== false }));
+  await S.db.doc('nvpub/list').set({ list, at: nowStr() });
+}
+function viewDrivers(main) {
+  if (!HOP) { main.innerHTML = '<div class="card empty"><div class="big">Tài khoản giao hàng quản lý ở trang chung An Tâm</div></div>'; return; }
+  nvSubscribe();
+  if (!S.nv.drv) { main.innerHTML = '<div class="card empty"><div class="big">Đang tải tài khoản giao hàng…</div></div>'; return; }
+  const rName = c => (S.nv.routes.find(r => r.code.toLowerCase() === String(c).toLowerCase()) || {}).name || '';
+  const list = Object.entries(S.nv.drv).filter(([, d]) => d).map(([id, d]) => Object.assign({ id }, d))
+    .sort((a, b) => (b.active !== false) - (a.active !== false) || String(a.nick).localeCompare(String(b.nick)));
+  main.innerHTML = `<div class="card" style="display:grid;gap:12px">
+      <div class="row"><h2 style="margin:0">Tài khoản giao hàng</h2><span class="grow"></span><button class="btn pri" id="nv-add">+ Thêm người giao hàng</button></div>
+      <p class="hint" style="margin:0">Mỗi người giao có <b>1 nick + mã PIN</b>. Trên điện thoại: mở trang An Tâm → chọn <b>🚚 Giao hàng</b> → đăng nhập nick + PIN, thấy tuyến của mình
+        từng ngày và bấm <b>Đã giao</b> / <b>Không giao được</b> kèm ảnh. Tuyến của mỗi người = <b>tuyến thường chạy</b> dưới đây; ngày nào đổi người thì chọn ở nút tuyến
+        (Đơn hàng ngày / Tuyến kebab 123) hoặc cột Người giao ở Phân tuyến của web Kho.</p>
+      <p class="hint" style="margin:0">Người giao cần được mời vào trang An Tâm bằng email ở nút <b>Share</b>, quyền <b>Contributor</b>.</p>
+      ${list.length ? `<div class="tw"><table><thead><tr><th>Nick</th><th>Họ tên</th><th>SĐT</th><th>Tuyến thường chạy</th><th>Trạng thái</th><th></th></tr></thead><tbody>
+        ${list.map(d => `<tr data-id="${esc(d.id)}" ${d.active === false ? 'style="opacity:.55"' : ''}><td class="mono"><b>${esc(d.nick)}</b></td><td>${esc(d.name)}</td><td>${esc(d.phone || '')}</td>
+          <td>${(d.routes || []).length ? d.routes.map(c => `<span class="pill" title="${esc(rName(c))}">${esc(c)}</span>`).join(' ') : '<span class="small muted">— chọn theo ngày —</span>'}</td>
+          <td>${d.active === false ? '<span class="pill off">Đã khóa</span>' : '<span class="pill ok">Đang dùng</span>'}</td>
+          <td class="nowrap"><button class="btn sm" data-ed>Sửa</button> <button class="btn sm danger" data-del>Xóa</button></td></tr>`).join('')}</tbody></table></div>`
+      : '<p class="muted">Chưa có tài khoản giao hàng nào. Bấm <b>+ Thêm người giao hàng</b>.</p>'}</div>`;
+  $('#nv-add').onclick = () => editDriver(null);
+  $$('tr[data-id]', main).forEach(tr => {
+    const id = tr.dataset.id;
+    $('[data-ed]', tr).onclick = () => editDriver(id);
+    $('[data-del]', tr).onclick = async () => {
+      const d = S.nv.drv[id];
+      if (!(await confirmBox(`Xóa tài khoản giao hàng "${d.nick}" (${d.name})? Người này sẽ không đăng nhập được nữa; kết quả giao cũ vẫn giữ.`, 'Xóa', true))) return;
+      if (await guard(async () => { await mergeInto('config/settings', { s: { drivers: { [id]: null } } }, { s: {} }); await nvPublish(Object.assign({}, S.nv.drv, { [id]: null })); return true; })) toast('Đã xóa tài khoản ' + d.nick);
+    };
+  });
+}
+function editDriver(id) {
+  const old = id ? S.nv.drv[id] : null, x = Object.assign({ nick: '', name: '', phone: '', routes: [], active: true }, old || {});
+  const sel = new Set((x.routes || []).map(c => String(c).toLowerCase()));
+  const routes = S.nv.routes.slice(); (x.routes || []).forEach(c => { if (!routes.some(r => r.code.toLowerCase() === String(c).toLowerCase())) routes.push({ code: c, name: '' }); });
+  modal({
+    title: old ? 'Sửa tài khoản giao hàng ' + old.nick : 'Thêm người giao hàng', ok: '💾 Lưu', wide: true,
+    body: `<div class="fgrid">
+        <label class="field">Nick đăng nhập<input id="nv-nick" value="${esc(x.nick)}" autocapitalize="none" spellcheck="false" maxlength="30" placeholder="VD: cuong"></label>
+        <label class="field">Họ tên<input id="nv-name" value="${esc(x.name)}" maxlength="60"></label>
+        <label class="field">Số điện thoại<input id="nv-phone" value="${esc(x.phone || '')}" inputmode="tel" maxlength="20"></label>
+        <label class="field">${old ? 'Mã PIN mới (4–8 số, để trống = giữ nguyên)' : 'Mã PIN (4–8 số)'}<input id="nv-pin" inputmode="numeric" autocomplete="off" maxlength="8"></label>
+      </div>
+      <div class="field" style="margin-top:10px">Tuyến thường chạy <span class="small muted">(không chọn = chọn người giao theo từng ngày)</span>
+        <div class="row" style="flex-wrap:wrap;gap:6px 14px;margin-top:6px">${routes.length ? routes.map(r => `<label class="small" style="display:inline-flex;gap:5px;align-items:center"><input type="checkbox" data-rt="${esc(r.code)}"${sel.has(r.code.toLowerCase()) ? ' checked' : ''}> <b>${esc(r.code)}</b> ${esc(r.name)}</label>`).join('') : '<span class="muted small">Chưa có danh mục tuyến (web Kho › Tuyến / nơi nhận).</span>'}</div></div>
+      <label class="small" style="display:inline-flex;gap:6px;align-items:center;margin-top:10px"><input type="checkbox" id="nv-on"${x.active !== false ? ' checked' : ''}> Đang dùng (bỏ tích = khóa, không đăng nhập được)</label>`,
+    onOk: async r => {
+      const nick = nvNick($('#nv-nick', r).value), pin = $('#nv-pin', r).value.trim(), did = id || rid('g');
+      if (!/^[a-z0-9._-]{2,30}$/.test(nick)) throw new Error('Nick 2–30 ký tự, chỉ gồm chữ không dấu, số, dấu chấm, gạch');
+      if (Object.entries(S.nv.drv).some(([k, d]) => d && k !== did && nvNick(d.nick) === nick)) throw new Error(`Nick ${nick} đã có người dùng`);
+      if (pin && !/^\d{4,8}$/.test(pin)) throw new Error('Mã PIN gồm 4–8 chữ số');
+      if (!pin && !(old && old.pin)) throw new Error('Cần đặt mã PIN cho tài khoản mới');
+      const rec = { nick, name: $('#nv-name', r).value.trim() || nick, phone: $('#nv-phone', r).value.trim(), routes: $$('[data-rt]', r).filter(c => c.checked).map(c => c.dataset.rt),
+        active: $('#nv-on', r).checked, salt: (old && old.salt) || '', pin: (old && old.pin) || '' };
+      if (pin) { rec.salt = randHex(8); rec.pin = await pinHash(rec.salt, pin); }
+      await mergeInto('config/settings', { s: { drivers: { [did]: rec } } }, { s: {} });
+      await nvPublish(Object.assign({}, S.nv.drv, { [did]: rec }));
+      toast(`Đã lưu tài khoản giao hàng ${nick}${pin ? ' (PIN mới)' : ''}`); return true;
+    },
+  });
+}
+if (HOP) $('#tab-taixe').hidden = false;
+
 function viewAccounts(main) {
   if (!can('acc')) { main.innerHTML = '<div class="card empty"><div class="big">Chưa được cấp quyền quản lý tài khoản</div></div>'; return; }
   const list = Object.entries(S.tk).filter(([, a]) => a).map(([id, a]) => Object.assign({ id }, a))
@@ -2192,7 +2278,7 @@ function render() {
     S.view = v; store('view', v);
   }
   $$('#tabs button').forEach(b => b.classList.toggle('on', b.dataset.v === S.view));
-  const views = { don: viewDay, t123: viewT123, in: viewPrint, khach: viewCust, gh: viewTrack, tk: viewStats, nhap: viewImport, cd: viewSettings, acc: viewAccounts };
+  const views = { don: viewDay, t123: viewT123, in: viewPrint, khach: viewCust, gh: viewTrack, taixe: viewDrivers, tk: viewStats, nhap: viewImport, cd: viewSettings, acc: viewAccounts };
   (views[S.view] || viewDay)(main);
   $$('[data-goto]', main).forEach(b => b.onclick = () => setView(b.dataset.goto));
 }
@@ -6369,7 +6455,7 @@ const GiaoHang = (() => {
     stopTimer();
     st.root.innerHTML = `<div class="gh-login">
       <div class="gh-logo">🚚</div><h1>Giao hàng An Tâm</h1>
-      <p class="gh-muted">Đăng nhập bằng nick và mã PIN do kho cấp để xem tuyến giao của bạn.</p>
+      <p class="gh-muted">Đăng nhập bằng nick và mã PIN do quản lý cấp để xem tuyến giao của bạn.</p>
       <form id="gh-login-form" autocomplete="on">
         <label>Nick<input id="gh-nick" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" value="${esc(store('nick') || '')}" required></label>
         <label>Mã PIN<input id="gh-pin" name="password" type="password" inputmode="numeric" autocomplete="current-password" required></label>
@@ -7019,6 +7105,8 @@ const GIAO_APP = !!window.ANTAM_GIAO_APP;
 // Bản online của web kho: link trang Giao hàng An Tâm – phân tuyến làm ở web kho rồi "Gửi sang" trang đó cho người giao
 const GIAO_URL = window.ANTAM_GIAO_URL || '';
 const GIAO_LINKED = ONLINE && !VIEW && !GIAO_APP && !!GIAO_URL;
+// trang chung An Tâm: tài khoản giao hàng tạo / sửa ở web Đóng hàng, web Kho chỉ xem (cùng kho dữ liệu)
+const DRV_RO = GIAO_APP || !!window.ANTAM_HOP;
 // Trang GPS An Tâm (đọc GPS điện thoại ngoài claude.ai): quản lý link ở trang có hành trình – Giao hàng An Tâm (hoặc web kho chưa tách trang giao)
 const GPS_HERE = ONLINE && !VIEW && !GIAO_LINKED;
 // Google Sheet "GPS An Tâm" (trang GPS ghi vào) – trang đọc qua kết nối Google Drive của người xem (chủ trang)
@@ -7085,7 +7173,8 @@ const ROUTE_PERM = { 'phieu/moi': ['pN', 'pX', 'pD'], phieu: ['phieu', 'pN', 'pX
 const routeOk = path => { const key = /^phieu\/moi/.test(path) ? 'phieu/moi' : path.split('/')[0]; const need = ROUTE_PERM[key]; return !need || need.some(can); };
 function applyPerms() {
   $$('#nav a[data-route]').forEach(a => { a.hidden = !routeOk(a.dataset.route); });
-  const nd = $('#nav-duyet'); if (nd) nd.hidden = !(S.account && can('duyet')); // mục Duyệt phiếu: chỉ người có quyền duyệt phiếu điều chỉnh
+  const nd = $('#nav-duyet'); if (nd) nd.hidden = !(S.account && can('duyet'));
+  const ng = window.ANTAM_HOP && $('#nav a[data-route="giao-hang-tk"]'); if (ng) ng.textContent = 'Người giao & kết quả giao'; // tạo / sửa tài khoản ở web Đóng hàng // mục Duyệt phiếu: chỉ người có quyền duyệt phiếu điều chỉnh
   $$('#wh-switch button').forEach(b => { b.hidden = !can('kho' + b.dataset.wh); });
 }
 const HANDOVER_REASONS = ['Bàn giao ca', 'Bàn giao thủ kho (nghỉ phép/nghỉ việc)', 'Bàn giao cuối ngày', 'Chuyển kho', 'Khác'];
@@ -9221,7 +9310,7 @@ function openGiaoHang() {
   window.open('/giao-hang', '_blank');
 }
 async function viewDrivers(main) {
-  setTitle('Tài khoản giao hàng');
+  setTitle(window.ANTAM_HOP ? 'Người giao & kết quả giao hàng' : 'Tài khoản giao hàng');
   const routes = routeList();
   const rName = c => { const r = routes.find(x => x.code.toLowerCase() === String(c).toLowerCase()); return r ? r.name : ''; };
   const res = { date: isoDate(), who: '', list: {}, tracks: [], locs: {} };
@@ -9261,7 +9350,7 @@ async function viewDrivers(main) {
   function draw() {
     const list = (S.meta.drivers || []).slice().sort((a, b) => (b.active - a.active) || a.nick.localeCompare(b.nick));
     const links = giaoHangLinks();
-    main.innerHTML = `<div class="toolbar">${GIAO_APP ? '' : '<button class="btn primary" id="g-add">+ Thêm người giao hàng</button>'}<button class="btn" id="g-open">🚚 ${GIAO_LINKED ? 'Mở Giao hàng An Tâm ↗' : 'Mở web giao hàng'}</button></div>
+    main.innerHTML = `<div class="toolbar">${DRV_RO ? '' : '<button class="btn primary" id="g-add">+ Thêm người giao hàng</button>'}<button class="btn" id="g-open">🚚 ${GIAO_LINKED ? 'Mở Giao hàng An Tâm ↗' : 'Mở web giao hàng'}</button></div>
       <div class="callout">Mỗi người giao hàng có <b>1 nick + mã PIN</b>. Đăng nhập web giao hàng trên điện thoại sẽ thấy <b>tuyến đã sắp của từng ngày</b>
       (lấy từ <a href="#/phan-tuyen">Phân tuyến giao hàng</a>): khách, địa chỉ (bấm để mở bản đồ), SĐT (bấm để gọi), số lượng từng loại; bấm <b>Đã giao</b> /
       <b>Không giao được</b> và kho thấy kết quả ở bảng phân tuyến.<br>Tuyến của mỗi người = <b>tuyến thường chạy</b> dưới đây; ngày nào đổi người thì chọn lại ở cột
@@ -9271,7 +9360,8 @@ async function viewDrivers(main) {
       : GIAO_LINKED ? `<div class="callout small">Người giao dùng trang riêng <a href="${esc(GIAO_URL)}" target="_blank" rel="noopener"><b>Giao hàng An Tâm ↗</b></a> – mời họ vào trang đó
         (email, quyền <b>Contributor</b> – nhập liệu được, không sửa được code trang (menu Share không có Contributor thì chọn Editor), tắt "Anyone with the link"), <b>không mời vào web Kho An Tâm</b>. Tài khoản tạo / sửa ở đây tự chuyển sang mỗi lần
         <b>Lưu</b> bảng Phân tuyến giao hàng (trong khoảng 1 giờ); kết quả giao, ảnh và vị trí xem ở trang Giao hàng An Tâm.</div>`
-      : window.ANTAM_HOP ? `<div class="callout small">Người giao dùng <b>chung trang An Tâm này</b> (Đóng hàng + Kho + Giao hàng): mời họ bằng <b>email</b> ở nút <i>Share</i>, quyền <b>Contributor</b>
+      : window.ANTAM_HOP ? `<div class="callout small">Tài khoản giao hàng (nick, PIN, tuyến thường chạy) <b>tạo / sửa / khóa ở web Đóng hàng › Tài khoản giao hàng</b>; ở đây chỉ xem.
+        Người giao dùng <b>chung trang An Tâm này</b> (Đóng hàng + Kho + Giao hàng): mời họ bằng <b>email</b> ở nút <i>Share</i>, quyền <b>Contributor</b>
         (menu Share không có Contributor thì chọn Editor), để <i>General access</i> ở chế độ <b>chỉ người được mời</b>.
         Trên điện thoại: mở link → chọn <b>🚚 Giao hàng</b> → đăng nhập nick + PIN. Lần sau mở link sẽ vào thẳng tuyến của mình; kết quả giao và ảnh hiện ngay ở Phân tuyến và web Đóng hàng.</div>`
       : ONLINE ? `<div class="callout small">Người giao hàng chỉ được mời vào <b>trang Giao hàng An Tâm này</b> – <b>không mời họ vào web Kho An Tâm</b>.
@@ -9284,7 +9374,7 @@ async function viewDrivers(main) {
       ${list.map(x => `<tr class="clickable" data-id="${esc(x.id)}" ${x.active ? '' : 'style="opacity:.55"'}><td><b>${esc(x.nick)}</b></td><td>${esc(x.name)}</td><td>${esc(x.phone)}</td>
         <td>${x.routes.length ? x.routes.map(c => `<span class="badge" title="${esc(rName(c))}">${esc(c)}</span>`).join(' ') : '<span class="muted small">— chọn theo ngày —</span>'}</td>
         <td>${x.active ? '<span class="badge ok">Đang dùng</span>' : '<span class="badge warn">Đã khóa</span>'}</td>
-        <td>${GIAO_APP ? '' : `<button class="btn sm danger" data-del="${esc(x.id)}">Xóa</button>`}</td></tr>`).join('')}</tbody></table></div>`
+        <td>${DRV_RO ? '' : `<button class="btn sm danger" data-del="${esc(x.id)}">Xóa</button>`}</td></tr>`).join('')}</tbody></table></div>`
       : '<p class="muted">Chưa có tài khoản giao hàng nào.</p>'}
       ${GPS_HERE ? '<div class="card" style="margin-top:16px" id="g-gps"><h3>🛰 GPS An Tâm – đọc GPS điện thoại người giao</h3><p class="muted">Đang tải…</p></div>' : ''}
       ${GIAO_LINKED ? '' : `<div class="card" style="margin-top:16px"><h3>Kết quả giao hàng theo ngày</h3>
@@ -9308,10 +9398,10 @@ async function viewDrivers(main) {
       clearInterval(viewDrivers.timer);
       viewDrivers.timer = setInterval(() => { if (!$('#g-jr')) return clearInterval(viewDrivers.timer); if (!document.hidden && !$('.modal')) tick(); }, 60000);
     }
-    if (!GIAO_APP) $('#g-add').onclick = () => edit(null);
+    if (!DRV_RO) $('#g-add').onclick = () => edit(null);
     if (GPS_HERE) drawGps();
     $('#g-open').onclick = () => openGiaoHang();
-    if (!GIAO_APP) $$('tr[data-id]', main).forEach(tr => tr.onclick = e => { if (!e.target.closest('button')) edit(S.meta.drivers.find(x => x.id === tr.dataset.id)); });
+    if (!DRV_RO) $$('tr[data-id]', main).forEach(tr => tr.onclick = e => { if (!e.target.closest('button')) edit(S.meta.drivers.find(x => x.id === tr.dataset.id)); });
     $$('[data-del]', main).forEach(b => b.onclick = async () => {
       const x = S.meta.drivers.find(v => v.id === b.dataset.del);
       if (!(await ask(`Xóa tài khoản giao hàng "${x.nick}"? Người này sẽ không đăng nhập được nữa (kết quả giao cũ vẫn giữ).`))) return;

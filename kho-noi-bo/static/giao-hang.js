@@ -73,7 +73,7 @@ const GiaoHang = (() => {
     stopTimer();
     st.root.innerHTML = `<div class="gh-login">
       <div class="gh-logo">🚚</div><h1>Giao hàng An Tâm</h1>
-      <p class="gh-muted">Đăng nhập bằng nick và mã PIN do kho cấp để xem tuyến giao của bạn.</p>
+      <p class="gh-muted">Đăng nhập bằng nick và mã PIN do quản lý cấp để xem tuyến giao của bạn.</p>
       <form id="gh-login-form" autocomplete="on">
         <label>Nick<input id="gh-nick" name="username" autocomplete="username" autocapitalize="none" spellcheck="false" value="${esc(store('nick') || '')}" required></label>
         <label>Mã PIN<input id="gh-pin" name="password" type="password" inputmode="numeric" autocomplete="current-password" required></label>
