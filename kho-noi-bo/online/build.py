@@ -188,6 +188,9 @@ def build_hop():
         '<meta name="description" content="%s">' % HOP_DESC,
         '<meta name="claude:viewport-fit-sides" content="cover">',
         '<style id="hop-css">%s</style>' % HOP_CSS,
+        # ghi lỗi trang cho agent Báo cáo lỗi An Tâm (shared/err-log.html)
+        '<script>window.ANTAM_ERRLOG = {"web": "An Tâm"};</script>',
+        open(os.path.join(HERE, "..", "..", "shared", "err-log.html"), encoding="utf-8").read().strip(),
         HOP_PICK,
         '<template id="hop-dh">%s</template>' % dh_rest.strip(),
         '<template id="hop-kho"><style id="app-style">%s</style>\n%s</template>' % (css, markup),

@@ -1,0 +1,108 @@
+<title>Báo cáo lỗi An Tâm</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Agent gom lỗi trang và kiểm tra dữ liệu của các web An Tâm 2 lần mỗi ngày, báo cáo ở đây.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
+<style>
+/* Bố cục: thanh trên (tên, lần chạy) → dải tình trạng từng web → danh sách mục theo web, mỗi mục có vạch màu mức độ */
+:root {
+  --bg: #f1f3f2; --surface: #ffffff; --raise: #f7f8f8; --ink: #17201d; --muted: #5a6762; --line: #d9dfdc;
+  --accent: #0f6e5a; --accent-soft: #e1f0ea;
+  --bad: #b3261e; --bad-soft: #fbe6e3; --warn: #94600a; --warn-soft: #fcf0d8; --ok: #1f7a43; --ok-soft: #e2f2e7;
+  --f-ui: "Be Vietnam Pro", "Segoe UI", system-ui, sans-serif; --f-mono: "JetBrains Mono", ui-monospace, Consolas, monospace;
+}
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) {
+  --bg: #101614; --surface: #171f1c; --raise: #1d2623; --ink: #e3ebe7; --muted: #98a6a0; --line: #2b3632;
+  --accent: #4cbd9d; --accent-soft: #183530; --bad: #f08a7f; --bad-soft: #3a1d1a; --warn: #e8b55a; --warn-soft: #362a15; --ok: #74c992; --ok-soft: #18301f; color-scheme: dark } }
+:root[data-theme="dark"] {
+  --bg: #101614; --surface: #171f1c; --raise: #1d2623; --ink: #e3ebe7; --muted: #98a6a0; --line: #2b3632;
+  --accent: #4cbd9d; --accent-soft: #183530; --bad: #f08a7f; --bad-soft: #3a1d1a; --warn: #e8b55a; --warn-soft: #362a15; --ok: #74c992; --ok-soft: #18301f; color-scheme: dark }
+* { box-sizing: border-box }
+body { background: var(--bg); color: var(--ink); font: 16px/1.55 var(--f-ui); }
+.wrap { max-width: 1040px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 22px 60px; display: grid; gap: 18px; }
+h1, h2, h3 { margin: 0; text-wrap: balance; line-height: 1.25 }
+h1 { font-size: 1.6rem; } h2 { font-size: 1.15rem; } h3 { font-size: 1rem; }
+p { margin: 0 }
+.muted { color: var(--muted) } .small { font-size: .88rem }
+.mono { font-family: var(--f-mono); font-size: .86em }
+.head { display: flex; flex-wrap: wrap; gap: 10px 18px; align-items: end; justify-content: space-between }
+.head .sub { color: var(--muted); font-size: .92rem }
+select { font: inherit; color: inherit; background: var(--surface); border: 1px solid var(--line); border-radius: 8px; padding: 7px 10px; max-width: 100% }
+.lbl { font-size: .74rem; text-transform: uppercase; letter-spacing: .06em; color: var(--muted); font-weight: 600 }
+.sum { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; padding: 16px; display: grid; gap: 10px }
+.sum .t { font-size: 1.05rem; font-weight: 600 }
+.webs { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(190px, 100%), 1fr)); gap: 10px }
+.web { border: 1px solid var(--line); border-radius: 10px; padding: 10px 12px; background: var(--surface); display: grid; gap: 4px; text-align: left; font: inherit; color: inherit; cursor: pointer }
+.web[aria-pressed="true"] { outline: 2px solid var(--accent); outline-offset: -1px }
+.web b { font-size: .98rem }
+.pill { display: inline-block; font-size: .78rem; font-weight: 600; padding: 1px 8px; border-radius: 99px; white-space: nowrap }
+.p-loi { background: var(--bad-soft); color: var(--bad) } .p-canh_bao { background: var(--warn-soft); color: var(--warn) } .p-ok { background: var(--ok-soft); color: var(--ok) }
+.grp { display: grid; gap: 8px }
+.item { display: grid; grid-template-columns: 4px minmax(0, 1fr); gap: 0 12px; background: var(--surface); border: 1px solid var(--line); border-radius: 10px; overflow: hidden }
+.item .bar { background: var(--ok) } .item.loi .bar { background: var(--bad) } .item.canh_bao .bar { background: var(--warn) }
+.item .bd { padding: 10px 12px 10px 0; display: grid; gap: 4px; min-width: 0 }
+.item .tt { font-weight: 600; display: flex; flex-wrap: wrap; gap: 6px 10px; align-items: baseline }
+.item .ct { white-space: pre-wrap; overflow-wrap: anywhere; color: var(--muted); font-size: .92rem }
+.empty { background: var(--surface); border: 1px dashed var(--line); border-radius: 12px; padding: 28px 16px; text-align: center; color: var(--muted); display: grid; gap: 6px }
+.how { font-size: .9rem; color: var(--muted); display: grid; gap: 4px }
+button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+</style>
+
+<div class="wrap">
+  <div class="head">
+    <div><h1>Báo cáo lỗi An Tâm</h1><div class="sub" id="sub">Agent kiểm tra các web lúc 11:47 và 21:47 mỗi ngày.</div></div>
+    <label class="small muted" for="run">Lần kiểm tra <select id="run" disabled><option>Đang tải…</option></select></label>
+  </div>
+  <div id="view"><div class="empty"><b>Chưa có báo cáo nào</b><span>Sau lần chạy đầu tiên của agent, tình trạng từng web (lỗi trang, dữ liệu bất thường, tác vụ định kỳ) hiện ở đây.</span></div></div>
+  <div class="how">
+    <span><b>Lỗi trang</b>: lỗi xảy ra trên máy người dùng khi mở web (Đóng hàng, Kho, Giao hàng, Quỹ tiền mặt, Kế toán bán hàng, Kho vận), các web tự ghi lại.</span>
+    <span><b>Dữ liệu</b>: tồn âm, phiếu chờ duyệt, đơn chưa sang Kho, bảng phân tuyến trùng, quỹ âm, phiếu chi chưa có hóa đơn, dữ liệu MISA lâu chưa cập nhật…</span>
+    <span><b>Tác vụ</b>: các tác vụ định kỳ cập nhật Kho vận có chạy được không.</span>
+  </div>
+</div>
+
+<script>
+(() => {
+  'use strict';
+  const $ = s => document.querySelector(s);
+  const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
+  const LV = { loi: 'Lỗi', canh_bao: 'Cảnh báo', ok: 'Ổn' };
+  const rank = { loi: 0, canh_bao: 1, ok: 2 };
+  const S = { runs: [], cur: '', web: '' };
+  const worst = items => items.reduce((w, i) => (rank[i.muc_do] ?? 2) < (rank[w] ?? 2) ? i.muc_do : w, 'ok');
+  function draw() {
+    const sel = $('#run');
+    if (!S.runs.length) { sel.disabled = true; sel.innerHTML = '<option>Chưa có</option>'; return; }
+    sel.disabled = false;
+    sel.innerHTML = S.runs.map(r => `<option value="${esc(r.id)}"${r.id === S.cur ? ' selected' : ''}>${esc(r.at || r.id)}${r.so_loi ? ' · ' + r.so_loi + ' lỗi' : ''}</option>`).join('');
+    const r = S.runs.find(x => x.id === S.cur) || S.runs[0];
+    const items = (r.muc || []).slice().sort((a, b) => (rank[a.muc_do] ?? 2) - (rank[b.muc_do] ?? 2));
+    const webs = [...new Set((r.webs || []).concat(items.map(i => i.web)))];
+    const byWeb = Object.fromEntries(webs.map(w => [w, items.filter(i => i.web === w)]));
+    const shown = S.web ? items.filter(i => i.web === S.web) : items;
+    const nL = items.filter(i => i.muc_do === 'loi').length, nC = items.filter(i => i.muc_do === 'canh_bao').length;
+    $('#sub').textContent = `Lần kiểm tra ${r.at || r.id}${r.ky ? ' · ' + r.ky : ''}`;
+    $('#view').innerHTML = `<div style="display:grid;gap:18px">
+      <section class="sum"><span class="lbl">Tóm tắt</span><div class="t">${esc(r.tom_tat || (nL || nC ? `${nL} lỗi, ${nC} cảnh báo` : 'Không có lỗi'))}</div>
+        <div class="webs">${webs.map(w => { const l = byWeb[w], wl = worst(l), a = l.filter(i => i.muc_do === 'loi').length, b = l.filter(i => i.muc_do === 'canh_bao').length;
+          return `<button type="button" class="web" data-web="${esc(w)}" aria-pressed="${S.web === w}"><b>${esc(w)}</b><span><span class="pill p-${wl}">${a ? a + ' lỗi' : b ? b + ' cảnh báo' : 'Ổn'}</span>${a && b ? ` <span class="pill p-canh_bao">${b} cảnh báo</span>` : ''}</span></button>`; }).join('')}</div>
+        ${S.web ? `<span class="small"><button type="button" class="web" data-web="" style="display:inline-block;padding:3px 10px">Xem tất cả web</button></span>` : ''}</section>
+      <section class="grp">${shown.length ? shown.map(i => `<div class="item ${esc(i.muc_do)}"><div class="bar"></div><div class="bd">
+          <div class="tt"><span class="pill p-${esc(i.muc_do)}">${LV[i.muc_do] || esc(i.muc_do)}</span><span>${esc(i.tieu_de)}</span></div>
+          <div class="small muted">${esc(i.web)}${i.nhom ? ' · ' + esc(i.nhom) : ''}</div>
+          ${i.chi_tiet ? `<div class="ct">${esc(i.chi_tiet)}</div>` : ''}</div></div>`).join('')
+        : '<div class="empty">Không có mục nào.</div>'}</section></div>`;
+    document.querySelectorAll('[data-web]').forEach(b => b.onclick = () => { S.web = S.web === b.dataset.web ? '' : b.dataset.web; draw(); });
+  }
+  $('#run').onchange = e => { S.cur = e.target.value; S.web = ''; draw(); };
+  (async () => {
+    const db = window.claude && window.claude.use ? await window.claude.use('db').catch(() => null) : null;
+    if (!db) { $('#view').innerHTML = '<div class="empty"><b>Chưa kết nối được dữ liệu</b><span>Mở trang trên claude.ai khi đã đăng nhập.</span></div>'; return; }
+    db.collection('bc').orderBy('at', 'desc').limit(60).onSnapshot(q => {
+      S.runs = q.docs.map(d => Object.assign({ id: d.id }, d.data()));
+      if (!S.runs.some(r => r.id === S.cur)) S.cur = S.runs[0] ? S.runs[0].id : '';
+      if (S.runs.length) draw();
+    }, () => {});
+  })();
+})();
+</script>

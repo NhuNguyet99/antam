@@ -30,6 +30,58 @@ body.hop-picking { background: var(--hp-bg); color: var(--hp-ink); }
   opacity: .82; cursor: pointer; box-shadow: 0 2px 8px rgba(0,0,0,.12); }
 #hop-switch:hover { opacity: 1; color: var(--hp-ink); }
 </style>
+<script>window.ANTAM_ERRLOG = {"web": "An Tâm"};</script>
+<script id="antam-errlog">
+/* Ghi lỗi trang vào kho dữ liệu của web: errlog/<ngày> {e: {mã: {at, web, bo_phan, who, msg, src, view}}}.
+   Agent "Báo cáo lỗi An Tâm" đọc 2 lần mỗi ngày. Chỉ ghi lỗi chưa bắt được, promise bị từ chối và lỗi kho dữ liệu; tối đa 15 lỗi mỗi lần mở trang. */
+(function () {
+  'use strict';
+  const WEB = (window.ANTAM_ERRLOG || {}).web || document.title;
+  const seen = new Set(); let n = 0, dbp = null;
+  const p2 = x => String(x).padStart(2, '0');
+  const stamp = () => { const d = new Date(); return { day: `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}`, at: `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())} ${p2(d.getHours())}:${p2(d.getMinutes())}:${p2(d.getSeconds())}` }; };
+  const DB_CODES = ['unavailable', 'resource_exhausted', 'quota_exceeded', 'revoked', 'capability_disabled', 'transform_error'];
+  function who() {
+    try {
+      const n1 = window.ANTAM_NICK && window.ANTAM_NICK.name; if (n1) return n1;
+      const keys = ['dh_me', 'kho.user', 'user']; for (const k of keys) { const v = localStorage.getItem(k); if (v) return String(JSON.parse(v) || '').slice(0, 60); }
+    } catch (e) { /* bỏ qua */ }
+    return '';
+  }
+  async function log(msg, src) {
+    msg = String(msg || '').replace(/\s+/g, ' ').trim().slice(0, 300);
+    if (!msg || seen.has(msg) || n >= 15) return;
+    seen.add(msg); n++;
+    try {
+      dbp = dbp || (window.claude && window.claude.use ? window.claude.use('db') : Promise.resolve(null));
+      const db = await dbp; if (!db) return;
+      const { day, at } = stamp(), id = 'e' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6);
+      let bo = ''; try { bo = localStorage.getItem('antam.app') || ''; } catch (e) { /* bỏ qua */ }
+      const rec = { at, web: WEB, bo_phan: bo, who: who(), msg, src: String(src || '').trim().slice(0, 160), view: String(location.hash || '').slice(0, 60) };
+      const ref = db.doc('errlog/' + day);
+      try { await ref.update({ e: { [id]: rec } }); }
+      catch (e) { if (e && e.code === 'invalid_argument') { const s = await ref.get(); if (s.exists) await ref.update({ e: { [id]: rec } }); else await ref.set({ day, e: { [id]: rec } }); } }
+    } catch (e) { /* không ghi được lỗi thì thôi, không làm phiền người dùng */ }
+  }
+  const isDbErr = e => e && typeof e === 'object' && DB_CODES.includes(e.code);
+  window.addEventListener('error', ev => {
+    if (!ev || !ev.message || /^Script error\.?$/.test(ev.message) || /ResizeObserver loop/.test(ev.message)) return;
+    log(ev.message, (ev.filename ? ev.filename.split('/').pop() : '') + (ev.lineno ? ':' + ev.lineno + ':' + (ev.colno || 0) : ''));
+  });
+  window.addEventListener('unhandledrejection', ev => {
+    const r = ev && ev.reason; if (!r) return;
+    if (r && r.code === 'declined') return; // người dùng bấm Không khi tải file
+    log((r.code ? '[' + r.code + '] ' : '') + (r.message || String(r)), r.stack ? String(r.stack).split('\n')[1] || '' : '');
+  });
+  const ce = console.error.bind(console);
+  console.error = function () {
+    ce.apply(console, arguments);
+    const a = Array.from(arguments), e = a.find(x => x instanceof Error || isDbErr(x));
+    if (e && (isDbErr(e) || e instanceof TypeError || e instanceof ReferenceError || e instanceof SyntaxError)) log((e.code ? '[' + e.code + '] ' : '') + (e.message || String(e)), e.stack ? String(e.stack).split('\n')[1] || '' : 'console.error');
+  };
+  window.antamLogError = log; // web gọi thêm khi muốn ghi một lỗi đã bắt
+})();
+</script>
 <div id="hop-pick" hidden><div class="box">
   <h1>An Tâm</h1><p>Chọn bộ phận của bạn (máy này sẽ nhớ, lần sau vào thẳng):</p>
   <button type="button" data-app="dh"><i>📦</i><b>Đóng hàng</b><span>Đơn hàng ngày, tuyến kebab 123, định mức đóng hàng</span></button>
