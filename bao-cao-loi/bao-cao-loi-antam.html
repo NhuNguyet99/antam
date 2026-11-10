@@ -59,7 +59,24 @@ table.dc th, table.dc td { padding: 8px 10px; border-bottom: 1px solid var(--lin
 table.dc th { font-size: .74rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; background: var(--raise) }
 table.dc th:first-child, table.dc td:first-child { text-align: left }
 table.dc tr:last-child td { border-bottom: 0 }
-@media (max-width: 520px) { table.dc { font-size: .86rem } table.dc th, table.dc td { padding: 8px 6px } table.dc th:first-child, table.dc td:first-child { padding-left: 10px } }
+.dg { display: flex; gap: 8px; align-items: baseline; text-align: left; font-size: .88rem }
+.dg .pill { flex: none }
+tr.dgr td { padding-top: 0; text-align: left }
+tr.has-dg td { border-bottom: 0 }
+td.ton { background: var(--raise) }
+.p-ton_am, .p-thieu_hang { background: var(--bad-soft); color: var(--bad) } .p-xuat_thieu, .p-xuat_thua { background: var(--warn-soft); color: var(--warn) }
+.p-bu_ton { background: var(--raise); color: var(--muted); border: 1px solid var(--line) } .p-dung { background: var(--ok-soft); color: var(--ok) }
+.chips { display: flex; flex-wrap: wrap; gap: 6px }
+@media (max-width: 620px) {
+  .head > label { display: grid; gap: 4px; width: 100% } .head select { width: 100% }
+  table.dc, table.dc tbody { display: block } table.dc thead { display: none }
+  table.dc tr { display: grid; grid-template-columns: repeat(5, minmax(0, 1fr)); gap: 2px 6px; padding: 10px 12px; border-bottom: 1px solid var(--line) }
+  table.dc tr.has-dg { border-bottom: 0; padding-bottom: 4px } table.dc tr.dgr { display: block; padding-top: 0 }
+  table.dc td { display: block; padding: 0; border: 0; text-align: left; background: none }
+  table.dc td:first-child { grid-column: 1 / -1; padding: 0 0 6px }
+  table.dc td.n::before { content: attr(data-l); display: block; font-size: .68rem; text-transform: uppercase; letter-spacing: .04em; color: var(--muted); font-weight: 600 }
+  table.dc td.n { white-space: normal; font-size: .9rem } table.dc tr.dgr td { padding: 0 }
+}
 table.dc td.n { font-variant-numeric: tabular-nums; white-space: nowrap }
 table.dc .d { display: block; font-size: .8rem; font-weight: 600; white-space: normal }
 .d.thieu { color: var(--bad) } .d.thua { color: var(--warn) } .d.khop, .d.khong { color: var(--muted); font-weight: 400 }
@@ -87,6 +104,7 @@ table.dc .d { display: block; font-size: .8rem; font-weight: 600; white-space: n
   <div class="how" id="how-dc" hidden>
     <span><b>Đặt</b>: tổng số lượng trên bảng Đóng hàng + Tuyến 123 của ngày đơn, quy ra mã Kho thành phẩm (cây thịt 5/12/18 kg tính ra kg; bánh không hương, không đường, bánh tươi… vào mã "… Đặt").</span>
     <span><b>SX nhập</b>: phiếu nhập từ bộ phận sản xuất của Kho TP ngày hôm sau. <b>Xuất</b>: phiếu xuất kho cùng ngày đó. Phiếu chờ duyệt / bị từ chối không tính.</span>
+    <span><b>Tồn đầu / tồn cuối</b>: tồn Kho TP đầu và cuối ngày Kho (số dư ban đầu + nhập − xuất + điều chỉnh, như báo cáo tồn của web Kho). <b>Đánh giá</b>: <i>Tồn âm</i> = xuất nhiều hơn hàng có (thiếu phiếu nhập sản xuất hoặc xuất sai số); <i>Thiếu hàng</i> = tồn đầu + sản xuất không đủ đơn; <i>Xuất thiếu / thừa</i> = đủ hàng nhưng xuất khác đơn; <i>Bù bằng tồn</i> = sản xuất ít hơn đơn nhưng tồn đủ bù.</span>
     <span><b>Lệch</b>: chênh quá 2 đơn vị và quá 2% số đặt. Thịt, phô mai, khoai tây không có phiếu nhập sản xuất nên chỉ so số xuất. Bánh kebab sản xuất và xuất rải trong ngày nên hay lệch với số đặt.</span>
   </div>
 </div>
@@ -134,27 +152,37 @@ table.dc .d { display: block; font-size: .8rem; font-weight: 600; white-space: n
   const sg = x => (x > 0 ? '+' : '') + fmt(x);
   const dmy = s => (s || '').split('-').reverse().slice(0, 2).join('/');
   try { D.chiLech = localStorage.getItem('bc-dc-all') !== '1'; } catch (e) {}
-  function cell(v, d, k) {
-    return `<td class="n">${fmt(v)}${k === 'khong' ? '<span class="d khong">không SX</span>' : `<span class="d ${esc(k)}">${k === 'khop' ? 'khớp' : esc(KQ[k] || k) + ' ' + sg(d)}</span>`}</td>`;
+  const DG = { ton_am: 'Tồn âm', thieu_hang: 'Thiếu hàng', xuat_thieu: 'Xuất thiếu', xuat_thua: 'Xuất thừa', bu_ton: 'Bù bằng tồn', dung: 'Đúng' };
+  const DG_ORDER = ['ton_am', 'thieu_hang', 'xuat_thieu', 'xuat_thua', 'bu_ton', 'dung'];
+  const isLech = x => x.danh_gia ? x.danh_gia !== 'dung' : (['thieu', 'thua'].includes(x.sx) || x.xk !== 'khop');
+  function cell(v, d, k, l) {
+    return `<td class="n" data-l="${l}">${fmt(v)}${k === 'khong' ? '<span class="d khong">không SX</span>' : `<span class="d ${esc(k)}">${k === 'khop' ? 'khớp' : esc(KQ[k] || k) + ' ' + sg(d)}</span>`}</td>`;
   }
   function drawDc() {
     const sel = $('#dcd');
     if (!D.list.length) { sel.disabled = true; sel.innerHTML = '<option>Chưa có</option>'; return; }
     sel.disabled = false;
-    sel.innerHTML = D.list.map(r => `<option value="${esc(r.id)}"${r.id === D.cur ? ' selected' : ''}>${esc(dmy(r.dh_ngay))}${r.chot ? '' : ' (tạm)'} · SX lệch ${+r.so_lech_sx || 0} · xuất lệch ${+r.so_lech_xuat || 0}</option>`).join('');
+    sel.innerHTML = D.list.map(r => `<option value="${esc(r.id)}"${r.id === D.cur ? ' selected' : ''}>${esc(dmy(r.dh_ngay))}${r.chot ? '' : ' (tạm)'} ${r.co_ton ? ` · ${(+r.so_ton_am || 0) + (+r.so_thieu_hang || 0)} mã sai tồn` : ''} · SX lệch ${+r.so_lech_sx || 0} · xuất lệch ${+r.so_lech_xuat || 0}</option>`).join('');
     const r = D.list.find(x => x.id === D.cur) || D.list[0];
-    const rows = (r.rows || []).filter(x => !D.chiLech || ['thieu', 'thua'].includes(x.sx) || x.xk !== 'khop');
+    const all = r.rows || [], ton = !!r.co_ton;
+    const rows = all.filter(x => !D.chiLech || isLech(x)).sort((a, b) => ton ? DG_ORDER.indexOf(a.danh_gia) - DG_ORDER.indexOf(b.danh_gia) : 0);
+    const cnt = {}; all.forEach(x => { if (x.danh_gia) cnt[x.danh_gia] = (cnt[x.danh_gia] || 0) + 1; });
+    const nCol = ton ? 6 : 4;
     const src = (r.nguon_dh || []).map(n => `${/t123/.test(n.ma) ? 'Tuyến 123' : 'Đóng hàng'} sửa lúc ${n.at || '?'}`).join(' · ');
     $('#view-dc').innerHTML = `<div style="display:grid;gap:14px">
       <section class="sum"><span class="lbl">Đơn ngày ${esc(dmy(r.dh_ngay))} → Kho ngày ${esc(dmy(r.kho_ngay))} <span class="pill ${r.chot ? 'p-ok' : 'p-tam'}" style="text-transform:none;letter-spacing:0">${r.chot ? 'Đã chốt' : 'Tạm tính, Kho còn đang làm'}</span></span>
         <div class="t">${esc(r.tom_tat || '')}</div>
+        ${ton ? `<div class="chips">${DG_ORDER.filter(k => cnt[k]).map(k => `<span class="pill p-${k}">${DG[k]}: ${cnt[k]}</span>`).join('')}</div>` : ''}
         ${r.nhan_xet ? `<div class="ct" style="white-space:pre-wrap">${esc(r.nhan_xet)}</div>` : ''}
         <div class="small muted">${esc(src || 'Không có đơn Đóng hàng')}${r.phieu_cho_duyet ? ` · <b>${+r.phieu_cho_duyet} phiếu Kho chờ duyệt chưa tính</b>` : ''} · chạy lúc ${esc(r.at || '')}</div></section>
       <div class="bar2"><span class="small muted">${rows.length} / ${(r.rows || []).length} mã</span>
-        <label class="chk"><input type="checkbox" id="dc-lech"${D.chiLech ? ' checked' : ''}> Chỉ hiện mã lệch</label></div>
-      ${rows.length ? `<div class="tw"><table class="dc"><thead><tr><th>Sản phẩm</th><th>Đặt</th><th>SX nhập</th><th>Xuất kho</th></tr></thead><tbody>
-        ${rows.map(x => `<tr><td><b>${esc(x.ten || x.code)}</b><span class="d khop mono">${esc(x.code)}${x.dvt ? ' · ' + esc(x.dvt) : ''}</span></td><td class="n"><b>${fmt(x.dat)}</b></td>${cell(x.nhap, x.lech_sx, x.sx)}${cell(x.xuat, x.lech_xuat, x.xk)}</tr>`).join('')}
-        </tbody></table></div>` : '<div class="empty">Tất cả mã đều khớp.</div>'}
+        <label class="chk"><input type="checkbox" id="dc-lech"${D.chiLech ? ' checked' : ''}> Chỉ hiện mã cần xem</label></div>
+      ${rows.length ? `<div class="tw"><table class="dc"><thead><tr><th>Sản phẩm</th>${ton ? '<th>Tồn đầu</th>' : ''}<th>Đặt</th><th>SX nhập</th><th>Xuất kho</th>${ton ? '<th>Tồn cuối</th>' : ''}</tr></thead><tbody>
+        ${rows.map(x => `<tr${ton && x.danh_gia ? ' class="has-dg"' : ''}><td><b>${esc(x.ten || x.code)}</b><span class="d khop mono">${esc(x.code)}${x.dvt ? ' · ' + esc(x.dvt) : ''}</span></td>
+          ${ton ? `<td class="n ton" data-l="Tồn đầu">${fmt(x.ton_dau)}</td>` : ''}<td class="n" data-l="Đặt"><b>${fmt(x.dat)}</b></td>${cell(x.nhap, x.lech_sx, x.sx, 'SX nhập')}${cell(x.xuat, x.lech_xuat, x.xk, 'Xuất')}
+          ${ton ? `<td class="n ton" data-l="Tồn cuối"><b style="${x.ton_cuoi < 0 ? 'color:var(--bad)' : ''}">${fmt(x.ton_cuoi)}</b>${x.dieu_chinh ? `<span class="d khop">đ.chỉnh ${sg(x.dieu_chinh)}</span>` : ''}</td>` : ''}</tr>
+          ${ton && x.danh_gia ? `<tr class="dgr"><td colspan="${nCol}"><div class="dg"><span class="pill p-${esc(x.danh_gia)}">${DG[x.danh_gia] || esc(x.danh_gia)}</span><span>${esc(x.danh_gia_text || '')}</span></div></td></tr>` : ''}`).join('')}
+        </tbody></table></div>` : '<div class="empty">Tất cả mã đều đúng.</div>'}
       ${(r.chua_ma || []).length ? `<section class="item canh_bao"><div class="bar"></div><div class="bd"><div class="tt"><span class="pill p-canh_bao">Chưa gán mã</span><span>Cột đơn chưa biết thuộc mã Kho nào</span></div>
         <div class="ct">${r.chua_ma.map(c => esc(c.cot) + ': ' + fmt(c.sl)).join('\n')}</div></div></section>` : ''}</div>`;
     $('#dc-lech').onchange = e => { D.chiLech = e.target.checked; try { localStorage.setItem('bc-dc-all', D.chiLech ? '0' : '1'); } catch (er) {} drawDc(); };

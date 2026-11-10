@@ -16,10 +16,12 @@ Trang https://claude.ai/artifact/Pra6DjARdoAaRrLEGiLA93 – đọc `bc/<yyyy-mm-
 So đơn Đóng hàng ngày D (bảng Đóng hàng + Tuyến 123, `khoout/<D>` và `khoout/<D>-t123` của trang An Tâm) với Kho thành phẩm ngày D+1
 (phiếu nhập từ sản xuất `type N` và phiếu xuất `type X` trong `kho/TP/days/<D+1>`; phiếu chờ duyệt / từ chối không tính).
 
-- **Script**: `doi_chieu.py <thư mục dữ liệu> <D> map-doi-chieu.json` → `{dh_ngay, kho_ngay, rows: [{code, ten, dvt, dat, nhap, xuat, lech_sx, lech_xuat, sx, xk}], chua_ma, phieu_cho_duyet, so_lech_sx, so_lech_xuat, tom_tat}`
+- **Script**: `doi_chieu.py <thư mục dữ liệu> <D> map-doi-chieu.json` → `{dh_ngay, kho_ngay, rows: [{code, ten, dvt, dat, nhap, xuat, lech_sx, lech_xuat, sx, xk, ton_dau, dieu_chinh, ton_cuoi, co_hang, danh_gia, danh_gia_text}], co_ton, so_ton_am, so_thieu_hang, chua_ma, phieu_cho_duyet, so_lech_sx, so_lech_xuat, tom_tat}`
   (`sx`/`xk`: `khop` | `thieu` | `thua` | `khong` = mã không lập phiếu sản xuất). Lệch khi chênh quá `max(2, 2% số đặt)`.
+- **Tồn**: thư mục dữ liệu chứa mọi `kho/TP/days/*.json`; tồn tính như web Kho (số dư ban đầu trong danh mục + nhập − xuất + điều chỉnh, bỏ phiếu chờ duyệt / bị từ chối).
+  `danh_gia`: `ton_am` (tồn cuối âm: xuất quá hàng có), `thieu_hang` (tồn đầu + sản xuất + điều chỉnh < đặt), `xuat_thieu` / `xuat_thua`, `bu_ton` (sản xuất thiếu nhưng tồn bù đủ), `dung`.
 - **Bảng gán mã** `map-doi-chieu.json`: tên cột đơn (viết hoa, bỏ khoảng trắng khi so) → mã Kho TP và hệ số (cây thịt 5/12/18 kg → kg Thịt KEBAB);
   bánh không hương / không đường / bánh tươi → mã "TP TACOS SIZE … Đặt"; `khong_sx` = mã chỉ so số xuất. Cột chưa gán mã hiện ở mục "Chưa gán mã".
 - **Agent**: tác vụ định kỳ "Đối chiếu Đóng hàng – Kho (7:23, 17:23)" (phiên mới mỗi lần, báo về điện thoại). 7:23 chốt đơn hôm kia (Kho hôm qua đã xong),
-  17:23 tạm tính đơn hôm qua; ghi `dc/<D>` = kết quả script + `{at, chot, nhan_xet}` (rules `dc write: admin`). Script và bảng gán mã được dán nguyên văn
-  trong lời nhắc của tác vụ: sửa ở đây thì cập nhật lại lời nhắc (update_trigger). Chạy lại một ngày: kích hoạt tác vụ kèm "ngày đơn yyyy-mm-dd".
+  17:23 tạm tính đơn hôm qua; ghi `dc/<D>` = kết quả script + `{at, chot, nhan_xet}` (rules `dc write: admin`). Agent lấy script và bảng gán mã từ
+  `cfg/doi-chieu` `{py, map}` của trang Báo cáo lỗi (rules `cfg write: admin`): sửa ở đây thì ghi lại tài liệu đó (ArtifactData set), không cần sửa tác vụ. Chạy lại một ngày: kích hoạt tác vụ kèm "ngày đơn yyyy-mm-dd".
