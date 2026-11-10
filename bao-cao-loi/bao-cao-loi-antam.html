@@ -1,6 +1,6 @@
 <title>Báo cáo lỗi An Tâm</title>
 <meta name="claude:viewport-fit-sides" content="cover">
-<meta name="description" content="Agent gom lỗi trang và kiểm tra dữ liệu của các web An Tâm 2 lần mỗi ngày, báo cáo ở đây.">
+<meta name="description" content="Agent gom lỗi trang, kiểm tra dữ liệu các web An Tâm và đối chiếu đơn Đóng hàng với sản xuất – xuất kho, báo cáo ở đây.">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=JetBrains+Mono:wght@400;600&display=swap">
 <style>
@@ -18,6 +18,8 @@
   --bg: #101614; --surface: #171f1c; --raise: #1d2623; --ink: #e3ebe7; --muted: #98a6a0; --line: #2b3632;
   --accent: #4cbd9d; --accent-soft: #183530; --bad: #f08a7f; --bad-soft: #3a1d1a; --warn: #e8b55a; --warn-soft: #362a15; --ok: #74c992; --ok-soft: #18301f; color-scheme: dark }
 * { box-sizing: border-box }
+[hidden] { display: none !important }
+.wrap > *, #view-dc > div > * { min-width: 0 }
 body { background: var(--bg); color: var(--ink); font: 16px/1.55 var(--f-ui); }
 .wrap { max-width: 1040px; margin: 0 auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); padding-block: 22px 60px; display: grid; gap: 18px; }
 h1, h2, h3 { margin: 0; text-wrap: balance; line-height: 1.25 }
@@ -46,18 +48,46 @@ select { font: inherit; color: inherit; background: var(--surface); border: 1px 
 .empty { background: var(--surface); border: 1px dashed var(--line); border-radius: 12px; padding: 28px 16px; text-align: center; color: var(--muted); display: grid; gap: 6px }
 .how { font-size: .9rem; color: var(--muted); display: grid; gap: 4px }
 button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px }
+.tabs { display: flex; gap: 4px; border-bottom: 1px solid var(--line); overflow-x: auto }
+.tabs button { font: inherit; font-weight: 600; color: var(--muted); background: none; border: 0; border-bottom: 3px solid transparent; padding: 8px 12px; cursor: pointer; white-space: nowrap }
+.tabs button[aria-selected="true"] { color: var(--accent); border-bottom-color: var(--accent) }
+.p-thieu { background: var(--bad-soft); color: var(--bad) } .p-thua { background: var(--warn-soft); color: var(--warn) } .p-khop { background: var(--ok-soft); color: var(--ok) }
+.p-tam { background: var(--raise); color: var(--muted); border: 1px solid var(--line) }
+.tw { background: var(--surface); border: 1px solid var(--line); border-radius: 12px; overflow-x: auto }
+table.dc { width: 100%; border-collapse: collapse; font-size: .92rem }
+table.dc th, table.dc td { padding: 8px 10px; border-bottom: 1px solid var(--line); text-align: right; vertical-align: top }
+table.dc th { font-size: .74rem; text-transform: uppercase; letter-spacing: .05em; color: var(--muted); font-weight: 600; background: var(--raise) }
+table.dc th:first-child, table.dc td:first-child { text-align: left }
+table.dc tr:last-child td { border-bottom: 0 }
+@media (max-width: 520px) { table.dc { font-size: .86rem } table.dc th, table.dc td { padding: 8px 6px } table.dc th:first-child, table.dc td:first-child { padding-left: 10px } }
+table.dc td.n { font-variant-numeric: tabular-nums; white-space: nowrap }
+table.dc .d { display: block; font-size: .8rem; font-weight: 600; white-space: normal }
+.d.thieu { color: var(--bad) } .d.thua { color: var(--warn) } .d.khop, .d.khong { color: var(--muted); font-weight: 400 }
+.bar2 { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between }
+.chk { display: inline-flex; gap: 6px; align-items: center; font-size: .9rem; cursor: pointer }
 </style>
 
 <div class="wrap">
   <div class="head">
     <div><h1>Báo cáo lỗi An Tâm</h1><div class="sub" id="sub">Agent kiểm tra các web lúc 11:47 và 21:47 mỗi ngày.</div></div>
-    <label class="small muted" for="run">Lần kiểm tra <select id="run" disabled><option>Đang tải…</option></select></label>
+    <label class="small muted" for="run" id="run-l">Lần kiểm tra <select id="run" disabled><option>Đang tải…</option></select></label>
+    <label class="small muted" for="dcd" id="dcd-l" hidden>Đơn ngày <select id="dcd" disabled><option>Đang tải…</option></select></label>
   </div>
+  <div class="tabs" role="tablist">
+    <button type="button" role="tab" data-tab="bc" aria-selected="true">Lỗi các web</button>
+    <button type="button" role="tab" data-tab="dc" aria-selected="false">Đối chiếu sản xuất</button>
+  </div>
+  <div id="view-dc" hidden><div class="empty"><b>Chưa có đối chiếu nào</b><span>Agent so đơn Đóng hàng với phiếu nhập sản xuất và xuất kho của Kho thành phẩm lúc 7:23 (chốt ngày hôm kia) và 17:23 (tạm tính hôm qua) mỗi ngày.</span></div></div>
   <div id="view"><div class="empty"><b>Chưa có báo cáo nào</b><span>Sau lần chạy đầu tiên của agent, tình trạng từng web (lỗi trang, dữ liệu bất thường, tác vụ định kỳ) hiện ở đây.</span></div></div>
-  <div class="how">
+  <div class="how" id="how-bc">
     <span><b>Lỗi trang</b>: lỗi xảy ra trên máy người dùng khi mở web (Đóng hàng, Kho, Giao hàng, Quỹ tiền mặt, Kế toán bán hàng, Kho vận), các web tự ghi lại.</span>
     <span><b>Dữ liệu</b>: tồn âm, phiếu chờ duyệt, đơn chưa sang Kho, bảng phân tuyến trùng, quỹ âm, phiếu chi chưa có hóa đơn, dữ liệu MISA lâu chưa cập nhật…</span>
     <span><b>Tác vụ</b>: các tác vụ định kỳ cập nhật Kho vận có chạy được không.</span>
+  </div>
+  <div class="how" id="how-dc" hidden>
+    <span><b>Đặt</b>: tổng số lượng trên bảng Đóng hàng + Tuyến 123 của ngày đơn, quy ra mã Kho thành phẩm (cây thịt 5/12/18 kg tính ra kg; bánh không hương, không đường, bánh tươi… vào mã "… Đặt").</span>
+    <span><b>SX nhập</b>: phiếu nhập từ bộ phận sản xuất của Kho TP ngày hôm sau. <b>Xuất</b>: phiếu xuất kho cùng ngày đó. Phiếu chờ duyệt / bị từ chối không tính.</span>
+    <span><b>Lệch</b>: chênh quá 2 đơn vị và quá 2% số đặt. Thịt, phô mai, khoai tây không có phiếu nhập sản xuất nên chỉ so số xuất. Bánh kebab sản xuất và xuất rải trong ngày nên hay lệch với số đặt.</span>
   </div>
 </div>
 
@@ -81,7 +111,8 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); o
     const byWeb = Object.fromEntries(webs.map(w => [w, items.filter(i => i.web === w)]));
     const shown = S.web ? items.filter(i => i.web === S.web) : items;
     const nL = items.filter(i => i.muc_do === 'loi').length, nC = items.filter(i => i.muc_do === 'canh_bao').length;
-    $('#sub').textContent = `Lần kiểm tra ${r.at || r.id}${r.ky ? ' · ' + r.ky : ''}`;
+    $('#sub').dataset.bc = `Lần kiểm tra ${r.at || r.id}${r.ky ? ' · ' + r.ky : ''}`;
+    if (!$('#view').hidden) $('#sub').textContent = $('#sub').dataset.bc;
     $('#view').innerHTML = `<div style="display:grid;gap:18px">
       <section class="sum"><span class="lbl">Tóm tắt</span><div class="t">${esc(r.tom_tat || (nL || nC ? `${nL} lỗi, ${nC} cảnh báo` : 'Không có lỗi'))}</div>
         <div class="webs">${webs.map(w => { const l = byWeb[w], wl = worst(l), a = l.filter(i => i.muc_do === 'loi').length, b = l.filter(i => i.muc_do === 'canh_bao').length;
@@ -95,13 +126,62 @@ button:focus-visible, select:focus-visible { outline: 2px solid var(--accent); o
     document.querySelectorAll('[data-web]').forEach(b => b.onclick = () => { S.web = S.web === b.dataset.web ? '' : b.dataset.web; draw(); });
   }
   $('#run').onchange = e => { S.cur = e.target.value; S.web = ''; draw(); };
+
+  /* ---- Đối chiếu Đóng hàng – Kho (dc/<ngày đơn>) ---- */
+  const D = { list: [], cur: '', chiLech: true };
+  const KQ = { khop: 'Khớp', thieu: 'Thiếu', thua: 'Thừa', khong: '—' };
+  const fmt = x => (Math.round((+x || 0) * 1000) / 1000).toLocaleString('vi-VN');
+  const sg = x => (x > 0 ? '+' : '') + fmt(x);
+  const dmy = s => (s || '').split('-').reverse().slice(0, 2).join('/');
+  try { D.chiLech = localStorage.getItem('bc-dc-all') !== '1'; } catch (e) {}
+  function cell(v, d, k) {
+    return `<td class="n">${fmt(v)}${k === 'khong' ? '<span class="d khong">không SX</span>' : `<span class="d ${esc(k)}">${k === 'khop' ? 'khớp' : esc(KQ[k] || k) + ' ' + sg(d)}</span>`}</td>`;
+  }
+  function drawDc() {
+    const sel = $('#dcd');
+    if (!D.list.length) { sel.disabled = true; sel.innerHTML = '<option>Chưa có</option>'; return; }
+    sel.disabled = false;
+    sel.innerHTML = D.list.map(r => `<option value="${esc(r.id)}"${r.id === D.cur ? ' selected' : ''}>${esc(dmy(r.dh_ngay))}${r.chot ? '' : ' (tạm)'} · SX lệch ${+r.so_lech_sx || 0} · xuất lệch ${+r.so_lech_xuat || 0}</option>`).join('');
+    const r = D.list.find(x => x.id === D.cur) || D.list[0];
+    const rows = (r.rows || []).filter(x => !D.chiLech || ['thieu', 'thua'].includes(x.sx) || x.xk !== 'khop');
+    const src = (r.nguon_dh || []).map(n => `${/t123/.test(n.ma) ? 'Tuyến 123' : 'Đóng hàng'} sửa lúc ${n.at || '?'}`).join(' · ');
+    $('#view-dc').innerHTML = `<div style="display:grid;gap:14px">
+      <section class="sum"><span class="lbl">Đơn ngày ${esc(dmy(r.dh_ngay))} → Kho ngày ${esc(dmy(r.kho_ngay))} <span class="pill ${r.chot ? 'p-ok' : 'p-tam'}" style="text-transform:none;letter-spacing:0">${r.chot ? 'Đã chốt' : 'Tạm tính, Kho còn đang làm'}</span></span>
+        <div class="t">${esc(r.tom_tat || '')}</div>
+        ${r.nhan_xet ? `<div class="ct" style="white-space:pre-wrap">${esc(r.nhan_xet)}</div>` : ''}
+        <div class="small muted">${esc(src || 'Không có đơn Đóng hàng')}${r.phieu_cho_duyet ? ` · <b>${+r.phieu_cho_duyet} phiếu Kho chờ duyệt chưa tính</b>` : ''} · chạy lúc ${esc(r.at || '')}</div></section>
+      <div class="bar2"><span class="small muted">${rows.length} / ${(r.rows || []).length} mã</span>
+        <label class="chk"><input type="checkbox" id="dc-lech"${D.chiLech ? ' checked' : ''}> Chỉ hiện mã lệch</label></div>
+      ${rows.length ? `<div class="tw"><table class="dc"><thead><tr><th>Sản phẩm</th><th>Đặt</th><th>SX nhập</th><th>Xuất kho</th></tr></thead><tbody>
+        ${rows.map(x => `<tr><td><b>${esc(x.ten || x.code)}</b><span class="d khop mono">${esc(x.code)}${x.dvt ? ' · ' + esc(x.dvt) : ''}</span></td><td class="n"><b>${fmt(x.dat)}</b></td>${cell(x.nhap, x.lech_sx, x.sx)}${cell(x.xuat, x.lech_xuat, x.xk)}</tr>`).join('')}
+        </tbody></table></div>` : '<div class="empty">Tất cả mã đều khớp.</div>'}
+      ${(r.chua_ma || []).length ? `<section class="item canh_bao"><div class="bar"></div><div class="bd"><div class="tt"><span class="pill p-canh_bao">Chưa gán mã</span><span>Cột đơn chưa biết thuộc mã Kho nào</span></div>
+        <div class="ct">${r.chua_ma.map(c => esc(c.cot) + ': ' + fmt(c.sl)).join('\n')}</div></div></section>` : ''}</div>`;
+    $('#dc-lech').onchange = e => { D.chiLech = e.target.checked; try { localStorage.setItem('bc-dc-all', D.chiLech ? '0' : '1'); } catch (er) {} drawDc(); };
+  }
+  $('#dcd').onchange = e => { D.cur = e.target.value; drawDc(); };
+  function tab(t) {
+    const dc = t === 'dc';
+    document.querySelectorAll('[data-tab]').forEach(b => b.setAttribute('aria-selected', String(b.dataset.tab === t)));
+    $('#view').hidden = dc; $('#how-bc').hidden = dc; $('#run-l').hidden = dc;
+    $('#view-dc').hidden = !dc; $('#how-dc').hidden = !dc; $('#dcd-l').hidden = !dc;
+    $('#sub').textContent = dc ? 'Đơn Đóng hàng so với nhập sản xuất và xuất của Kho thành phẩm.' : (S.runs.length ? $('#sub').dataset.bc || '' : 'Agent kiểm tra các web lúc 11:47 và 21:47 mỗi ngày.');
+    try { history.replaceState(null, '', dc ? '#doi-chieu' : '#'); } catch (e) {}
+  }
+  document.querySelectorAll('[data-tab]').forEach(b => b.onclick = () => tab(b.dataset.tab));
+  if (/doi-chieu/.test(location.hash)) tab('dc');
   (async () => {
     const db = window.claude && window.claude.use ? await window.claude.use('db').catch(() => null) : null;
-    if (!db) { $('#view').innerHTML = '<div class="empty"><b>Chưa kết nối được dữ liệu</b><span>Mở trang trên claude.ai khi đã đăng nhập.</span></div>'; return; }
+    if (!db) { $('#view-dc').innerHTML = '<div class="empty"><b>Chưa kết nối được dữ liệu</b><span>Mở trang trên claude.ai khi đã đăng nhập.</span></div>'; $('#view').innerHTML = '<div class="empty"><b>Chưa kết nối được dữ liệu</b><span>Mở trang trên claude.ai khi đã đăng nhập.</span></div>'; return; }
     db.collection('bc').orderBy('at', 'desc').limit(60).onSnapshot(q => {
       S.runs = q.docs.map(d => Object.assign({ id: d.id }, d.data()));
       if (!S.runs.some(r => r.id === S.cur)) S.cur = S.runs[0] ? S.runs[0].id : '';
       if (S.runs.length) draw();
+    }, () => {});
+    db.collection('dc').orderBy('dh_ngay', 'desc').limit(40).onSnapshot(q => {
+      D.list = q.docs.map(d => Object.assign({ id: d.id }, d.data()));
+      if (!D.list.some(r => r.id === D.cur)) D.cur = D.list[0] ? D.list[0].id : '';
+      if (D.list.length) drawDc();
     }, () => {});
   })();
 })();

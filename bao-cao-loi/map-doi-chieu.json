@@ -1,0 +1,21 @@
+{
+ "ghi_chu": "Cột đơn Đóng hàng / Tuyến 123 (viết hoa, bỏ khoảng trắng khi so) → mã Kho TP; he_so = số đơn vị Kho cho 1 đơn vị đặt (cây thịt 5 kg = 5 kg Thịt KEBAB). Bánh đặc biệt (không hương, không đường, bánh tươi…) vào mã 'TP TACOS SIZE … Đặt'.",
+ "sai_lech": {"tuyet_doi": 2, "ty_le": 0.02},
+ "bo_qua": ["SẢN PHẨM KHÁC", "BILL"],
+ "khong_sx": ["TPNHAN003", "TPSOI001", "HHNHAN001"],
+ "cols": {
+  "22 CM": {"code": "TPTAC2200"}, "25 CM": {"code": "TPTAC2500"}, "28 CM": {"code": "TPTAC2800"}, "31 CM": {"code": "TPTAC3100"}, "34 CM": {"code": "TPTAC3400"},
+  "22CM BÁNH THAN TRE": {"code": "TPTAC2202"}, "25CM BÁNH THAN TRE": {"code": "TPTAC2502"},
+  "22CM KHÔNG HƯƠNG": {"code": "TPTAC2201"}, "22CM KHÔNG HƯƠNG BƠ, KHÔNG ĐƯỜNG": {"code": "TPTAC2201"}, "BÁNH TƯƠI 22 CM": {"code": "TPTAC2201"},
+  "BÁNH TƯƠI 25 CM": {"code": "TPTAC2501"},
+  "28CM KHÔNG HƯƠNG": {"code": "TPTAC2801"}, "28CM KHÔNG HƯƠNG, KHÔNG ĐƯỜNG, ÍT BỘT PHỦ": {"code": "TPTAC2801"}, "BÁNH TƯƠI 28 CM": {"code": "TPTAC2801"},
+  "31CM KHÔNG HƯƠNG": {"code": "TPTAC3101"}, "31CM KHÔNG ĐƯỜNG": {"code": "TPTAC3101"}, "31CM KHÔNG HƯƠNG BƠ, KHÔNG ĐƯỜNG": {"code": "TPTAC3101"},
+  "31CM KHÔNG HƯƠNG, KHÔNG BƠ": {"code": "TPTAC3101"}, "31 CM -30% HƯƠNG, 30% BỘT SỮA, KHÔNG ĐƯỜNG, GIẢM ĐỘ DAI": {"code": "TPTAC3101"}, "BÁNH TƯƠI 31 CM": {"code": "TPTAC3101"},
+  "BÁNH MÌ KEBAB": {"code": "TPKEB001"}, "VÀNG": {"code": "TPKEB001"},
+  "BÁNH MÌ KEBAB -MÈ ĐEN": {"code": "TPKEB002"}, "ĐEN": {"code": "TPKEB002"},
+  "BÁNH MÌ KEBAB -MÈ TRẮNG": {"code": "TPKEB003"}, "BÁNH MÌ KEBAB -THAN TRE": {"code": "TPKEB004"},
+  "CÂY THỊT 5 KG": {"code": "TPNHAN003", "he_so": 5}, "CÂY THỊT 12KG": {"code": "TPNHAN003", "he_so": 12}, "CÂY THỊT 18 KG": {"code": "TPNHAN003", "he_so": 18},
+  "CÂY THỊT (KG)": {"code": "TPNHAN003"},
+  "PHÔ MAI SỢI": {"code": "TPSOI001"}, "KHOAI TÂY": {"code": "HHNHAN001"}
+ }
+}
