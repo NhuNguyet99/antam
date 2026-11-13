@@ -48,8 +48,9 @@ Phiếu ghi thêm tên nick người lập / sửa / hủy (`tao_nick`, `sua_nic
   Khoản mục riêng: `dm_thu_kt`, `dm_chi_kt`. Số phiếu sổ kế toán bán hàng: `PTBH-ddmm-NN` / `PCBH-ddmm-NN`.
 - **⇄ Chuyển tiền** (VD: kế toán bán hàng nộp tiền hàng về thủ quỹ): lập cùng lúc phiếu chi ở quỹ đi và phiếu thu ở quỹ nhận, khoản mục
   "Chuyển tiền nội bộ", `chuyen: {cap: mã phiếu cặp, quy: quỹ bên kia}`; không cần duyệt, không cần hóa đơn, không tính vào thu – chi; hủy 1 phiếu thì hủy cả cặp.
-- **Tổng tiền mặt công ty** (`#tong`): tồn từng quỹ / bộ phận / cả công ty; bảng theo quỹ (đầu kỳ, thu, chi, nhận chuyển, chuyển đi, cuối kỳ),
-  tồn cuối mỗi ngày, danh sách chuyển tiền, tải CSV.
+- **Báo cáo tổng tiền mặt công ty**: mục riêng, mở bằng nút "📊 Báo cáo tổng công ty" trên đầu trang ("← Về sổ quỹ" để quay lại);
+  có thanh mục riêng: Tổng hợp theo quỹ (`#tong`: đầu kỳ, thu, chi, nhận chuyển, chuyển đi, cuối kỳ), Tồn theo ngày (`#tong-ngay`),
+  Thu – chi theo khoản mục theo bộ phận (`#tong-km`), Chuyển tiền nội bộ (`#tong-cq`); chung kỳ xem và 1 file CSV gồm cả 3 bảng.
 - **Phân quyền theo nick** (Cài đặt, chỉ admin lưu): `cfg/main.phan_quyen = {mã tài khoản: {tq, kt, tong}}`. Nick chỉ thấy / nhập sổ được tích;
   `tong` mở mục Tổng tiền mặt. Nick chưa phân quyền, chủ trang, Editor: tất cả.
 - Số dư đầu kỳ của quỹ luôn tính vào tồn đầu kỳ (kể cả khi kỳ xem bắt đầu trước ngày bắt đầu quỹ).

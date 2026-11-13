@@ -163,6 +163,7 @@ fieldset.grp legend { padding: 0 6px; font-size: .8rem; font-weight: 600; color:
 .mrow .lbl { display: block; font-size: .66rem; margin: 0 }
 .mrow .money { font-size: .92rem }
 .bpsw .lbl { margin: 0 }
+.btn.bcbtn[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink); border-color: var(--accent) }
 .pill.p-nb { background: var(--raise, #eef1ee); color: var(--muted); border: 1px solid var(--line) }
 tr.grp td { font-weight: 600; background: var(--raise, #f3f5f3) }
 tr.tot td { font-weight: 700; border-top: 2px solid var(--ink) }
@@ -455,7 +456,9 @@ html.ng-locked body > *:not([id^="ng-"]):not(script):not(style):not(link):not(ti
     </div>
   </div>
   <div class="wrap"><nav class="tabs" id="tabs" aria-label="Màn hình">
-    <a href="#tong-quan">Tổng quan</a><a href="#so-quy">Sổ quỹ</a><a href="#bao-cao">Báo cáo chi tiêu</a><a href="#kiem-quy">Kiểm quỹ</a><a href="#tong" id="tab-tong">Tổng tiền mặt công ty</a><a href="#cai-dat">Cài đặt</a>
+    <a href="#tong-quan">Tổng quan</a><a href="#so-quy">Sổ quỹ</a><a href="#bao-cao">Báo cáo chi tiêu</a><a href="#kiem-quy">Kiểm quỹ</a><a href="#cai-dat">Cài đặt</a>
+  </nav><nav class="tabs" id="tabs-bc" aria-label="Báo cáo tổng tiền mặt công ty" hidden>
+    <a href="#tong">Tổng hợp theo quỹ</a><a href="#tong-ngay">Tồn theo ngày</a><a href="#tong-km">Thu – chi theo khoản mục</a><a href="#tong-cq">Chuyển tiền nội bộ</a>
   </nav></div>
 </div>
 <main class="wrap" id="view">
@@ -972,13 +975,18 @@ ${nccOf(p) ? `<p class="r">${thu ? 'Đơn vị' : 'Nhà cung cấp'}: <b>${esc(n
 // ---------- các màn hình ----------
 function headerBal() {
   fixBp();
-  const b = balances(), tong = S.view === 'tong', qs = tong ? cfg().quy : quys(), tot = qs.reduce((a, q) => a + (b[q.id] || 0), 0);
+  const b = balances(), tong = isBC(S.view), qs = tong ? cfg().quy : quys(), tot = qs.reduce((a, q) => a + (b[q.id] || 0), 0);
   const al = bpAllowed(), sw = $('#bpsw');
-  sw.hidden = tong || al.length < 2;
-  sw.innerHTML = `<span class="lbl">Sổ của</span><div class="seg bp" role="group" aria-label="Sổ tiền mặt của bộ phận">${al.map(k => `<button type="button" data-bp="${k}" aria-pressed="${k === S.bp}">${BP[k]}</button>`).join('')}</div>`;
+  sw.hidden = !(al.length > 1 || canTong());
+  sw.innerHTML = (tong ? (al.length ? '<button class="btn sm" type="button" id="bc-back">← Về sổ quỹ</button>' : '')
+    : (al.length > 1 ? `<span class="lbl">Sổ của</span><div class="seg bp" role="group" aria-label="Sổ tiền mặt của bộ phận">${al.map(k => `<button type="button" data-bp="${k}" aria-pressed="${k === S.bp}">${BP[k]}</button>`).join('')}</div>` : ''))
+    + (canTong() ? `<button class="btn sm bcbtn" type="button" id="bc-go" aria-pressed="${tong}">📊 Báo cáo tổng công ty</button>` : '');
   $$('[data-bp]', sw).forEach(x => x.onclick = () => { if (S.bp === x.dataset.bp) return; S.bp = x.dataset.bp; store.set('qtm.bp', S.bp); S.f.quy = ''; kqDraft = null; render(); });
-  $('.brand span').textContent = tong ? 'Tổng tiền mặt toàn công ty' : 'Sổ tiền mặt · ' + BP[S.bp];
-  $('#tab-tong').hidden = !canTong();
+  const go = $('#bc-go', sw); if (go) go.onclick = () => { if (!tong) location.hash = '#' + (BC_VIEWS.includes(store.get('qtm.bcview')) ? store.get('qtm.bcview') : 'tong'); };
+  const back = $('#bc-back', sw); if (back) back.onclick = () => { location.hash = '#' + (VIEWS[store.get('qtm.soview')] && !isBC(store.get('qtm.soview')) ? store.get('qtm.soview') : 'tong-quan'); };
+  $('.brand b').textContent = tong ? 'Báo cáo tổng tiền mặt' : 'Quỹ tiền mặt';
+  $('.brand span').textContent = tong ? 'Toàn công ty · Thủ quỹ + Kế toán bán hàng' : 'Sổ tiền mặt · ' + BP[S.bp];
+  $('#tabs').hidden = tong; $('#tabs-bc').hidden = !tong;
   if (tong) {
     $('#bal').innerHTML = BPS.map(k => { const v = cfg().quy.filter(q => q.bp === k).reduce((a, q) => a + (b[q.id] || 0), 0); return `<div><div class="lbl">${BP[k]}</div><div class="money${v < 0 ? ' c-chi' : ''}">${money(v)}</div></div>`; }).join('') +
       `<div><div class="lbl">Tổng tiền mặt công ty</div><div class="money${tot < 0 ? ' c-chi' : ''}">${S.loaded.thang ? money(tot) : '—'}</div></div>`;
@@ -1227,37 +1235,51 @@ function tongData() {
     for (const k of BPS) o[k] = run[k];
     o.tong = BPS.reduce((a, k) => a + run[k], 0); return o;
   });
-  return { rows, add, daily, cq: ps.filter(p => p.chuyen && p.loai === 'chi') };
+  return { rows, add, daily, ps, cq: ps.filter(p => p.chuyen && p.loai === 'chi') };
 }
+const BC_VIEWS = ['tong', 'tong-ngay', 'tong-km', 'tong-cq'];
+const isBC = v => BC_VIEWS.includes(v);
 function viewTong() {
   if (!canTong()) return '<div class="card empty">Tài khoản của bạn chưa được xem báo cáo tổng tiền mặt công ty.</div>';
-  const { from, to } = S.tg, { rows, add, daily, cq } = tongData(), all = add(rows), b = balances();
+  const { from, to } = S.tg, { rows, add, daily, cq, ps } = tongData(), all = add(rows), b = balances(), part = S.view;
   const cur = k => cfg().quy.filter(q => !k || q.bp === k).reduce((a, q) => a + (b[q.id] || 0), 0);
   const narrow = matchMedia('(max-width: 640px)').matches;
   const m4 = (a) => `<div class="mrow">${a.map(([l, v, c]) => `<div><span class="lbl">${l}</span><span class="money ${c || ''}">${v}</span></div>`).join('')}</div>`;
   const tr = (r, label, cls) => narrow ? `<tr class="${cls || ''}"><td><b>${label}</b>${m4([['Đầu kỳ', fmt(r.dau)], ['Thu', fmt(r.thu), 'c-thu'], ['Chi', fmt(r.chi), 'c-chi'], ['Cuối kỳ', `<b>${fmt(r.cuoi)}</b>`, r.cuoi < 0 ? 'c-chi' : '']])}${r.vao || r.ra ? `<div class="small muted">Nhận chuyển ${fmt(r.vao)} · chuyển đi ${fmt(r.ra)}</div>` : ''}</td></tr>` : `<tr class="${cls || ''}"><td>${label}</td><td class="money">${fmt(r.dau)}</td><td class="money c-thu">${fmt(r.thu)}</td><td class="money c-chi">${fmt(r.chi)}</td><td class="money hide-sm">${r.vao ? fmt(r.vao) : ''}</td><td class="money hide-sm">${r.ra ? fmt(r.ra) : ''}</td><td class="money"><b class="${r.cuoi < 0 ? 'c-chi' : ''}">${fmt(r.cuoi)}</b></td></tr>`;
+  const TITLE = { tong: 'Tổng hợp tiền mặt theo quỹ', 'tong-ngay': 'Tồn tiền mặt cuối mỗi ngày', 'tong-km': 'Thu – chi theo khoản mục', 'tong-cq': 'Chuyển tiền giữa các quỹ' };
+  let body = '';
+  if (part === 'tong') body = `<div class="tw"><table>${narrow ? '' : `<thead><tr><th>Quỹ</th><th class="r">Tồn đầu kỳ</th><th class="r">Thu</th><th class="r">Chi</th><th class="r hide-sm">Nhận chuyển</th><th class="r hide-sm">Chuyển đi</th><th class="r">Tồn cuối kỳ</th></tr></thead>`}<tbody>
+      ${BPS.map(k => { const rs = rows.filter(r => r.q.bp === k); return rs.length ? rs.map(r => tr(r, esc(r.q.ten) + (narrow ? '' : ` <span class="muted small">· ${esc(BP[k])}</span>`))).join('') + (rs.length > 1 ? tr(add(rs), 'Cộng ' + BP[k].toLowerCase(), 'grp') : '') : ''; }).join('')}
+      ${tr(all, 'TỔNG TIỀN MẶT CÔNG TY', 'tot')}
+    </tbody></table></div>
+    <p class="small muted" style="margin:10px 0 0">Thu, chi là tiền thật vào / ra công ty. Nhận chuyển / chuyển đi là tiền đổi chỗ giữa các quỹ (VD: kế toán bán hàng nộp về thủ quỹ) – cộng cả công ty luôn bằng 0 nên không làm đổi tổng.</p>`;
+  else if (part === 'tong-ngay') body = `<div class="tw"><table>${narrow ? '' : `<thead><tr><th>Ngày</th><th class="r">Thu</th><th class="r">Chi</th>${BPS.map(k => `<th class="r hide-sm">${BP[k]}</th>`).join('')}<th class="r">Tổng công ty</th></tr></thead>`}<tbody>
+      ${daily.slice().reverse().map(d => narrow ? `<tr><td><b class="num">${vnDate(d.day)}</b>${m4([['Thu', d.thu ? fmt(d.thu) : '–', 'c-thu'], ['Chi', d.chi ? fmt(d.chi) : '–', 'c-chi'], ...BPS.map(k => [k === 'tq' ? 'Thủ quỹ' : 'KT bán hàng', fmt(d[k])])])}<div class="small">Tổng công ty: <b class="money${d.tong < 0 ? ' c-chi' : ''}">${fmt(d.tong)}</b></div></td></tr>` : `<tr><td class="num">${vnDate(d.day)}</td><td class="money c-thu">${d.thu ? fmt(d.thu) : ''}</td><td class="money c-chi">${d.chi ? fmt(d.chi) : ''}</td>${BPS.map(k => `<td class="money hide-sm">${fmt(d[k])}</td>`).join('')}<td class="money"><b class="${d.tong < 0 ? 'c-chi' : ''}">${fmt(d.tong)}</b></td></tr>`).join('') || '<tr><td colspan="6" class="empty">Chọn khoảng ngày.</td></tr>'}
+    </tbody></table></div><p class="small muted" style="margin:10px 0 0">Tồn cuối ngày = tồn đầu kỳ + thu − chi đến hết ngày đó. Thu, chi không gồm tiền chuyển giữa các quỹ.</p>`;
+  else if (part === 'tong-km') {
+    const km = loai => { const m = {}; for (const p of ps.filter(x => real(x) && x.loai === loai)) { const r = m[p.dm] = m[p.dm] || Object.fromEntries(BPS.map(k => [k, 0])); r[bpOf(p.quy)] += p.tien; } return Object.entries(m).map(([dm, r]) => [dm, r, BPS.reduce((a, k) => a + r[k], 0)]).sort((x, y) => y[2] - x[2]); };
+    const tbl = (loai, h) => { const l = km(loai), tot = Object.fromEntries(BPS.map(k => [k, l.reduce((a, x) => a + x[1][k], 0)])), all2 = l.reduce((a, x) => a + x[2], 0), cls = loai === 'thu' ? 'c-thu' : 'c-chi';
+      return `<div class="card"><header><h2>${h}</h2><span class="small muted">${l.length} khoản mục</span></header>${l.length ? `<div class="tw"><table>${narrow ? '' : `<thead><tr><th>Khoản mục</th>${BPS.map(k => `<th class="r">${BP[k]}</th>`).join('')}<th class="r">Cả công ty</th></tr></thead>`}<tbody>
+        ${l.map(([dm, r, t]) => narrow ? `<tr><td>${esc(dm)}${m4([...BPS.map(k => [k === 'tq' ? 'Thủ quỹ' : 'KT bán hàng', r[k] ? fmt(r[k]) : '–']), ['Cả công ty', `<b>${fmt(t)}</b>`, cls]])}</td></tr>` : `<tr><td>${esc(dm)}</td>${BPS.map(k => `<td class="money">${r[k] ? fmt(r[k]) : ''}</td>`).join('')}<td class="money ${cls}"><b>${fmt(t)}</b></td></tr>`).join('')}
+        ${narrow ? `<tr class="tot"><td>Cộng: <b class="money ${cls}">${fmt(all2)}</b></td></tr>` : `<tr class="tot"><td>Cộng</td>${BPS.map(k => `<td class="money">${fmt(tot[k])}</td>`).join('')}<td class="money ${cls}">${fmt(all2)}</td></tr>`}
+      </tbody></table></div>` : '<div class="empty small">Không có khoản nào trong kỳ.</div>'}</div>`; };
+    body = `<div class="grid" style="gap:16px">${tbl('thu', 'Thu theo khoản mục')}${tbl('chi', 'Chi theo khoản mục')}</div>`;
+  } else body = rowsList(cq.slice().reverse());
   return `
   <section class="grid g-tiles">
     <div class="card tile big"><span class="lbl">Tổng tiền mặt công ty hiện tại</span><span class="money${cur() < 0 ? ' c-chi' : ''}">${money(cur())}</span><span class="small muted">Tính đến ${vnDate(today())}, gồm mọi quỹ</span></div>
     ${BPS.map(k => `<div class="card tile"><span class="lbl">${BP[k]}</span><span class="money${cur(k) < 0 ? ' c-chi' : ''}">${money(cur(k))}</span><span class="small muted">${cfg().quy.filter(q => q.bp === k).map(q => esc(q.ten)).join(' · ')}</span></div>`).join('')}
   </section>
-  <section class="card"><header><h2>Tổng hợp tiền mặt theo quỹ</h2><span class="small muted">${vnDate(from)} – ${vnDate(to)}</span></header>
+  <section class="card"><header><h2>${TITLE[part]}</h2><span class="small muted">${vnDate(from)} – ${vnDate(to)}</span></header>
     <div class="filters">
       <label class="field"><span>Từ ngày</span><input type="date" id="t-from" value="${esc(from)}"></label>
       <label class="field"><span>Đến ngày</span><input type="date" id="t-to" value="${esc(to)}"></label>
+      <div class="field"><span>Thu – chi trong kỳ (cả công ty)</span><b style="padding:8px 0"><span class="money c-thu">+${fmt(all.thu)}</span> · <span class="money c-chi">−${fmt(all.chi)}</span></b></div>
       ${S.downloads ? '<button class="btn sm" type="button" id="t-csv" style="margin-bottom:4px">Tải Excel (CSV)</button>' : ''}
     </div>
-    <div class="tw" style="margin-top:12px"><table>${narrow ? '' : `<thead><tr><th>Quỹ</th><th class="r">Tồn đầu kỳ</th><th class="r">Thu</th><th class="r">Chi</th><th class="r hide-sm">Nhận chuyển</th><th class="r hide-sm">Chuyển đi</th><th class="r">Tồn cuối kỳ</th></tr></thead>`}<tbody>
-      ${BPS.map(k => { const rs = rows.filter(r => r.q.bp === k); return rs.length ? rs.map(r => tr(r, esc(r.q.ten))).join('') + (rs.length > 1 ? tr(add(rs), 'Cộng ' + BP[k].toLowerCase(), 'grp') : '') : ''; }).join('')}
-      ${tr(all, 'TỔNG TIỀN MẶT CÔNG TY', 'tot')}
-    </tbody></table></div>
-    <p class="small muted" style="margin:10px 0 0">Thu, chi là tiền thật vào / ra công ty. Nhận chuyển / chuyển đi là tiền đổi chỗ giữa các quỹ (VD: kế toán bán hàng nộp về thủ quỹ) – cộng cả công ty luôn bằng 0 nên không làm đổi tổng.</p>
+    ${part === 'tong-km' ? '' : `<div style="margin-top:12px">${body}</div>`}
   </section>
-  <section class="card"><header><h2>Tồn tiền mặt cuối mỗi ngày</h2><span class="small muted">${daily.length} ngày</span></header>
-    <div class="tw"><table>${narrow ? '' : `<thead><tr><th>Ngày</th><th class="r">Thu</th><th class="r">Chi</th>${BPS.map(k => `<th class="r hide-sm">${BP[k]}</th>`).join('')}<th class="r">Tổng công ty</th></tr></thead>`}<tbody>
-      ${daily.slice().reverse().map(d => narrow ? `<tr><td><b class="num">${vnDate(d.day)}</b>${m4([['Thu', d.thu ? fmt(d.thu) : '–', 'c-thu'], ['Chi', d.chi ? fmt(d.chi) : '–', 'c-chi'], ...BPS.map(k => [k === 'tq' ? 'Thủ quỹ' : 'KT bán hàng', fmt(d[k])])])}<div class="small">Tổng công ty: <b class="money${d.tong < 0 ? ' c-chi' : ''}">${fmt(d.tong)}</b></div></td></tr>` : `<tr><td class="num">${vnDate(d.day)}</td><td class="money c-thu">${d.thu ? fmt(d.thu) : ''}</td><td class="money c-chi">${d.chi ? fmt(d.chi) : ''}</td>${BPS.map(k => `<td class="money hide-sm">${fmt(d[k])}</td>`).join('')}<td class="money"><b class="${d.tong < 0 ? 'c-chi' : ''}">${fmt(d.tong)}</b></td></tr>`).join('') || '<tr><td colspan="6" class="empty">Chọn khoảng ngày.</td></tr>'}
-    </tbody></table></div></section>
-  <section class="card"><header><h2>Chuyển tiền giữa các quỹ</h2><span class="small muted">${cq.length} lần trong kỳ</span></header>${rowsList(cq.slice().reverse())}</section>`;
+  ${part === 'tong-km' ? body : ''}`;
 }
 function bindTong() {
   const f = $('#t-from'), t = $('#t-to');
@@ -1269,6 +1291,9 @@ function bindTong() {
     for (const r of rows) L.push([r.q.ten, BP[r.q.bp], r.dau, r.thu, r.chi, r.vao, r.ra, r.cuoi]);
     const a = add(rows); L.push(['TỔNG CÔNG TY', '', a.dau, a.thu, a.chi, a.vao, a.ra, a.cuoi], [], ['Ngày', 'Thu', 'Chi', ...BPS.map(k => 'Tồn ' + BP[k]), 'Tồn tổng công ty']);
     for (const d of daily) L.push([vnDate(d.day), d.thu, d.chi, ...BPS.map(k => d[k]), d.tong]);
+    const { ps } = tongData(); L.push([], ['Loại', 'Khoản mục', ...BPS.map(k => BP[k]), 'Cả công ty']);
+    for (const loai of ['thu', 'chi']) { const m = {}; for (const p of ps.filter(x => real(x) && x.loai === loai)) { const r = m[p.dm] = m[p.dm] || Object.fromEntries(BPS.map(k => [k, 0])); r[bpOf(p.quy)] += p.tien; }
+      for (const [dm, r] of Object.entries(m)) L.push([loai === 'thu' ? 'Thu' : 'Chi', dm, ...BPS.map(k => r[k]), BPS.reduce((a, k) => a + r[k], 0)]); }
     S.downloads.save({ filename: `tong-tien-mat-${S.tg.from}_${S.tg.to}.csv`, data: new Blob(['\ufeff' + L.map(r => r.map(cell).join(',')).join('\r\n')], { type: 'text/csv' }) })
       .then(r => { if (r && r.status === 'saved') toast('Đã tải báo cáo tổng tiền mặt.'); }).catch(e => { if (e && e.code !== 'declined') toast('Không tải được: ' + (e.message || e.code), true); });
   };
@@ -1338,12 +1363,13 @@ function bindCaiDat() {
 }
 
 // ---------- điều hướng ----------
-const VIEWS = { 'tong-quan': [viewTongQuan], 'so-quy': [viewSoQuy, bindSoQuy], 'bao-cao': [viewBaoCao, () => { const s = $('#r-ym'); if (s) s.onchange = () => { S.rep.ym = s.value; render(); }; }], 'kiem-quy': [viewKiemQuy, bindKiemQuy], tong: [viewTong, bindTong], 'cai-dat': [viewCaiDat, bindCaiDat] };
+const VIEWS = { 'tong-quan': [viewTongQuan], 'so-quy': [viewSoQuy, bindSoQuy], 'bao-cao': [viewBaoCao, () => { const s = $('#r-ym'); if (s) s.onchange = () => { S.rep.ym = s.value; render(); }; }], 'kiem-quy': [viewKiemQuy, bindKiemQuy], tong: [viewTong, bindTong], 'tong-ngay': [viewTong, bindTong], 'tong-km': [viewTong, bindTong], 'tong-cq': [viewTong, bindTong], 'cai-dat': [viewCaiDat, bindCaiDat] };
 function render() {
   fixBp();
-  if (!bpAllowed().length && S.view !== 'tong' && S.view !== 'cai-dat' && canTong()) S.view = 'tong'; // nick chỉ được xem tổng
+  if (isBC(S.view) && !canTong()) S.view = 'tong-quan';
+  if (!bpAllowed().length && !isBC(S.view) && S.view !== 'cai-dat' && canTong()) S.view = 'tong'; // nick chỉ được xem tổng
   headerBal();
-  const noBp = !bpAllowed().length && S.view !== 'tong' && S.view !== 'cai-dat';
+  const noBp = !bpAllowed().length && !isBC(S.view) && S.view !== 'cai-dat';
   const [v0, bind] = VIEWS[S.view] || VIEWS['tong-quan'];
   const v = noBp ? () => '<div class="card empty">Nick của bạn chưa được phân sổ của bộ phận nào. Nhờ quản lý vào Cài đặt → Phân quyền theo nick.</div>' : v0;
   const main = $('#view');
@@ -1355,13 +1381,13 @@ function render() {
     if (bind && !noBp) bind();
     if (focus && $('#' + focus) && focus !== 'f-q') { const el = $('#' + focus); el.focus(); try { if (sel != null && el.setSelectionRange) el.setSelectionRange(sel, sel); } catch (e) { /* ô không hỗ trợ chọn */ } }
   }
-  $$('#tabs a').forEach(a => a.setAttribute('aria-current', a.getAttribute('href') === '#' + S.view ? 'page' : 'false'));
+  $$('#tabs a, #tabs-bc a').forEach(a => a.setAttribute('aria-current', a.getAttribute('href') === '#' + S.view ? 'page' : 'false'));
 }
 document.addEventListener('click', e => { if (e.target.closest('[data-hdcho]')) { Object.assign(S.f, { hd: 'cho', from: today().slice(0, 8) + '01', to: today() }); return; } const r = e.target.closest('[data-p]'); if (r && !e.target.closest('.dlg')) phieuView(r.dataset.p); });
 document.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-p]')) { e.preventDefault(); phieuView(e.target.dataset.p); } });
-function route() { const h = location.hash.slice(1); S.view = VIEWS[h] ? h : 'tong-quan'; if (S.view !== 'cai-dat') cfgDraft = null; store.set('qtm.view', S.view); render(); window.scrollTo(0, 0); }
+function route() { const h = location.hash.slice(1); S.view = VIEWS[h] ? h : 'tong-quan'; if (S.view !== 'cai-dat') cfgDraft = null; store.set('qtm.view', S.view); store.set(isBC(S.view) ? 'qtm.bcview' : 'qtm.soview', S.view); render(); window.scrollTo(0, 0); }
 window.addEventListener('hashchange', route);
-matchMedia('(max-width: 640px)').addEventListener('change', () => { if (S.view === 'so-quy' || S.view === 'tong') render(); });
+matchMedia('(max-width: 640px)').addEventListener('change', () => { if (S.view === 'so-quy' || isBC(S.view)) render(); });
 $('#b-thu').onclick = () => phieuForm('thu');
 $('#b-chi').onclick = () => phieuForm('chi');
 $('#b-cq').onclick = () => chuyenForm();
