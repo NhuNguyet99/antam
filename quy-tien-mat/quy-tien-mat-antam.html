@@ -155,6 +155,17 @@ textarea { resize: vertical; min-height: 64px }
 fieldset.grp { border: 1px solid var(--line); border-radius: 10px; padding: 8px 12px 12px; margin: 0; display: grid; gap: 10px; min-width: 0 }
 fieldset.grp legend { padding: 0 6px; font-size: .8rem; font-weight: 600; color: var(--muted) }
 .seg.hd button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink) }
+.seg.bp button[aria-pressed="true"] { background: var(--accent); color: var(--accent-ink) }
+[hidden] { display: none !important }
+.bpsw { display: flex; align-items: center; gap: 8px; flex-wrap: wrap }
+.acts { flex-wrap: wrap }
+.mrow { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 4px 12px; font-size: .9rem; margin-top: 4px }
+.mrow .lbl { display: block; font-size: .66rem; margin: 0 }
+.mrow .money { font-size: .92rem }
+.bpsw .lbl { margin: 0 }
+.pill.p-nb { background: var(--raise, #eef1ee); color: var(--muted); border: 1px solid var(--line) }
+tr.grp td { font-weight: 600; background: var(--raise, #f3f5f3) }
+tr.tot td { font-weight: 700; border-top: 2px solid var(--ink) }
 .p-hd { background: var(--accent-soft); color: var(--accent) }
 .kv { display: grid; grid-template-columns: minmax(0, 9rem) minmax(0, 1fr); gap: 6px 14px; font-size: .93rem }
 .kv dt { color: var(--muted) } .kv dd { margin: 0; min-width: 0; overflow-wrap: anywhere }
@@ -180,7 +191,7 @@ fieldset.grp legend { padding: 0 6px; font-size: .8rem; font-weight: 600; color:
 @media (max-width: 640px) {
   .bal { width: 100%; margin-left: 0; justify-content: space-between }
   .bal div { text-align: left }
-  .acts { width: 100%; } .acts .btn { flex: 1 }
+  .acts { width: 100%; } .acts .btn { flex: 1 1 auto }
   .tile .money { font-size: 1.3rem }
   .bar { grid-template-columns: minmax(0, 7rem) 1fr auto }
   .hide-sm { display: none }
@@ -435,14 +446,16 @@ html.ng-locked body > *:not([id^="ng-"]):not(script):not(style):not(link):not(ti
       <div><b>Quỹ tiền mặt</b><span>Công ty TNHH SX-TM Ẩm Thực An Tâm</span></div>
     </div>
     <div id="gate-slot"></div>
+    <div class="bpsw" id="bpsw" hidden></div>
     <div class="bal" id="bal"><div><div class="lbl">Tồn quỹ</div><div class="money">—</div></div></div>
     <div class="acts" id="acts">
       <button class="btn thu" type="button" id="b-thu" disabled>+ Phiếu thu</button>
       <button class="btn chi" type="button" id="b-chi" disabled>+ Phiếu chi</button>
+      <button class="btn" type="button" id="b-cq" disabled title="Chuyển tiền giữa các quỹ, VD: kế toán bán hàng nộp tiền về thủ quỹ">⇄ Chuyển tiền</button>
     </div>
   </div>
   <div class="wrap"><nav class="tabs" id="tabs" aria-label="Màn hình">
-    <a href="#tong-quan">Tổng quan</a><a href="#so-quy">Sổ quỹ</a><a href="#bao-cao">Báo cáo chi tiêu</a><a href="#kiem-quy">Kiểm quỹ</a><a href="#cai-dat">Cài đặt</a>
+    <a href="#tong-quan">Tổng quan</a><a href="#so-quy">Sổ quỹ</a><a href="#bao-cao">Báo cáo chi tiêu</a><a href="#kiem-quy">Kiểm quỹ</a><a href="#tong" id="tab-tong">Tổng tiền mặt công ty</a><a href="#cai-dat">Cài đặt</a>
   </nav></div>
 </div>
 <main class="wrap" id="view">
@@ -507,35 +520,66 @@ const DEFAULT_CFG = {
   quy: [{ id: 'tm', ten: 'Tiền mặt tại quỹ', sodu_dau: 0, ngay_dau: today().slice(0, 8) + '01' }],
   dm_thu: ['Thu tiền bán hàng', 'Thu công nợ khách hàng', 'Rút tiền ngân hàng về quỹ', 'Hoàn tạm ứng', 'Thu khác'],
   dm_chi: ['Mua nguyên vật liệu', 'Lương, thưởng', 'Tạm ứng nhân viên', 'Xăng xe, giao hàng', 'Điện, nước, internet', 'Thuê mặt bằng', 'Sửa chữa, bảo trì', 'Văn phòng phẩm', 'Tiếp khách', 'Nộp tiền vào ngân hàng', 'Chi khác'],
+  dm_thu_kt: ['Thu tiền hàng tài xế nộp', 'Khách trả tiền hàng', 'Thu công nợ khách hàng', 'Thu khác'],
+  dm_chi_kt: ['Nộp tiền vào ngân hàng', 'Hoàn tiền cho khách', 'Chi khác'],
   nguong: 2000000,
+  phan_quyen: {},
 };
+// Bộ phận giữ tiền: thủ quỹ (quỹ công ty) và kế toán bán hàng (tiền hàng thu về). Mỗi quỹ thuộc 1 bộ phận.
+const BP = { tq: 'Thủ quỹ', kt: 'Kế toán bán hàng' };
+const BPS = Object.keys(BP);
+const KT_FUND = { id: 'kt', ten: 'Tiền mặt kế toán bán hàng', bp: 'kt', sodu_dau: 0, ngay_dau: '2026-11-01' };
+const DM_CHUYEN = 'Chuyển tiền nội bộ';
 const S = {
   db: null, user: null, assets: null, downloads: null,
   me: { id: null, canEdit: false, write: null }, names: {},
   cfg: null, cfgVer: false, months: {}, duyet: {}, kq: {}, loaded: { thang: false, cfg: false },
-  readonly: false, view: 'tong-quan',
+  readonly: false, view: 'tong-quan', bp: store.get('qtm.bp') || 'tq', accs: {},
+  tg: { from: today().slice(0, 8) + '01', to: today() },
   f: { from: today().slice(0, 8) + '01', to: today(), quy: '', loai: '', dm: '', q: '', wait: false, huy: false, hd: '' },
   rep: { ym: today().slice(0, 7) },
 };
-const cfg = () => S.cfg || DEFAULT_CFG;
-const quyName = id => (cfg().quy.find(q => q.id === id) || {}).ten || id || '';
+let cfgSrc = null, cfgOut = null;
+function cfg() { // cài đặt đã lưu + mặc định; luôn có ít nhất 1 quỹ của kế toán bán hàng
+  const base = S.cfg || DEFAULT_CFG;
+  if (base === cfgSrc) return cfgOut;
+  const c = Object.assign({}, DEFAULT_CFG, base);
+  c.quy = (base.quy || []).map(q => Object.assign({ bp: 'tq' }, q));
+  if (!c.quy.some(q => q.bp === 'kt')) c.quy.push(Object.assign({}, KT_FUND));
+  c.phan_quyen = c.phan_quyen || {};
+  cfgSrc = base; cfgOut = c; return c;
+}
+const quyOf = id => cfg().quy.find(q => q.id === id);
+const bpOf = id => (quyOf(id) || {}).bp || 'tq';
+const quyName = id => (quyOf(id) || {}).ten || id || '';
+const quys = () => cfg().quy.filter(q => q.bp === S.bp); // quỹ của bộ phận đang xem
+const dmThu = (bp = S.bp) => bp === 'kt' ? cfg().dm_thu_kt : cfg().dm_thu;
+const dmChi = (bp = S.bp) => bp === 'kt' ? cfg().dm_chi_kt : cfg().dm_chi;
+// Phân quyền theo nick: {mã tài khoản: {tq, kt, tong}}. Chủ trang / Editor: mọi bộ phận. Nick chưa phân quyền: như trước (mọi bộ phận).
+const nickId = () => (window.ANTAM_NICK || {}).id || '';
+const pqOf = () => (S.me.canEdit || nickId() === 'owner') ? null : cfg().phan_quyen[nickId()] || null;
+const bpAllowed = () => { const a = pqOf(); return a ? BPS.filter(k => a[k]) : BPS.slice(); };
+const canTong = () => { const a = pqOf(); return !a || !!a.tong; };
+function fixBp() { const al = bpAllowed(); if (al.length && !al.includes(S.bp)) { S.bp = al[0]; S.f.quy = ''; kqDraft = null; } }
 
-function allPhieu() {
+function allPhieu() { return allPhieuAll().filter(p => bpOf(p.quy) === S.bp); } // phiếu của bộ phận đang xem
+function allPhieuAll() {
   const out = [];
   for (const m of Object.values(S.months)) for (const [id, p] of Object.entries((m && m.v) || {})) if (p && p.ngay) out.push(Object.assign({ id }, p));
   return out.sort((a, b) => a.ngay < b.ngay ? -1 : a.ngay > b.ngay ? 1 : (a.tao_luc || '') < (b.tao_luc || '') ? -1 : (a.tao_luc || '') > (b.tao_luc || '') ? 1 : 0);
 }
 const approvalOf = p => ((S.duyet[ymOf(p.ngay)] || {}).d || {})[p.id] || null;
-const needsApproval = p => p.loai === 'chi' && !p.huy && Number(cfg().nguong) > 0 && p.tien >= Number(cfg().nguong) && !(approvalOf(p) || {}).ok;
+const needsApproval = p => p.loai === 'chi' && !p.huy && !p.chuyen && Number(cfg().nguong) > 0 && p.tien >= Number(cfg().nguong) && !(approvalOf(p) || {}).ok;
 const live = p => !p.huy;
+const real = p => !p.huy && !p.chuyen; // thu / chi thật (không tính chuyển tiền giữa các quỹ)
 // Hóa đơn của phiếu chi: co = đã có hóa đơn, cho = chưa có (sẽ bổ sung), khong = khoản chi không có hóa đơn
 const HD = { co: 'Có hóa đơn', cho: 'Chưa có hóa đơn', khong: 'Không có hóa đơn' };
-const hdOf = p => p.loai !== 'chi' ? '' : (p.hd && HD[p.hd.tt]) ? p.hd.tt : 'cho';
+const hdOf = p => p.loai !== 'chi' || p.chuyen ? '' : (p.hd && HD[p.hd.tt]) ? p.hd.tt : 'cho';
 const hdPill = p => { const t = hdOf(p); return !t || p.huy ? '' : t === 'co' ? '<span class="pill p-hd">Có HĐ</span>' : t === 'cho' ? '<span class="pill p-wait">Chưa HĐ</span>' : '<span class="pill p-huy">Không HĐ</span>'; };
 const nccOf = p => ((p.ncc && p.ncc.ten) || '').trim();
 const nccLine = n => [n.mst && 'MST ' + n.mst, n.sdt && 'ĐT ' + n.sdt, n.dia_chi].filter(Boolean).join(' · ');
 // danh bạ nhà cung cấp lấy từ các phiếu đã lập (bản ghi mới nhất của mỗi tên)
-function nccBook() { const m = {}; for (const p of allPhieu()) if (nccOf(p)) m[nccOf(p).toLowerCase()] = p.ncc; return m; }
+function nccBook() { const m = {}; for (const p of allPhieuAll()) if (nccOf(p)) m[nccOf(p).toLowerCase()] = p.ncc; return m; }
 const hdBlank = () => ({ tt: 'cho', so: '', ky_hieu: '', ngay: '', thue: 0 });
 function hdHtml(hd) {
   return `<div class="seg hd" role="group" aria-label="Hóa đơn">${Object.entries(HD).map(([k, t]) => `<button type="button" data-hd="${k}" aria-pressed="${hd.tt === k}">${t}</button>`).join('')}</div>
@@ -557,10 +601,10 @@ function bindHd(el, hd) {
   };
 }
 
-function balances(upTo) {
+function balances(upTo) { // tồn từng quỹ (mọi bộ phận)
   const res = {};
   for (const q of cfg().quy) res[q.id] = Number(q.sodu_dau) || 0;
-  for (const p of allPhieu()) {
+  for (const p of allPhieuAll()) {
     if (!live(p) || !(p.quy in res)) continue;
     const q = cfg().quy.find(x => x.id === p.quy);
     if (q && q.ngay_dau && p.ngay < q.ngay_dau) continue;
@@ -569,12 +613,12 @@ function balances(upTo) {
   }
   return res;
 }
-// tồn quỹ trước ngày `day` (đầu kỳ)
-function openingBefore(day, quy) {
-  let s = 0;
-  for (const q of cfg().quy) if (!quy || q.id === quy) s += (q.ngay_dau && q.ngay_dau >= day) ? 0 : Number(q.sodu_dau) || 0;
-  for (const p of allPhieu()) {
-    if (!live(p) || (quy && p.quy !== quy) || p.ngay >= day) continue;
+// tồn trước ngày `day` (đầu kỳ) của 1 quỹ, hoặc cộng các quỹ trong qs (mặc định: quỹ của bộ phận đang xem)
+function openingBefore(day, quy, qs = quys()) {
+  let s = 0; const ids = new Set(qs.filter(q => !quy || q.id === quy).map(q => q.id));
+  for (const q of qs) if (ids.has(q.id)) s += Number(q.sodu_dau) || 0; // số dư đầu = tồn lúc bắt đầu quỹ (kỳ xem bắt đầu trước đó cũng lấy làm đầu kỳ)
+  for (const p of allPhieuAll()) {
+    if (!live(p) || !ids.has(p.quy) || p.ngay >= day) continue;
     const q = cfg().quy.find(x => x.id === p.quy); if (!q || (q.ngay_dau && p.ngay < q.ngay_dau)) continue;
     s += p.loai === 'thu' ? p.tien : -p.tien;
   }
@@ -590,7 +634,7 @@ const who = id => !id ? '' : id === S.me.id ? 'Bạn' : (S.names[id] || 'Ngườ
 const nickName = () => (window.ANTAM_NICK || {}).name || ''; // tên tài khoản đang đăng nhập (nick) – ghi kèm vào phiếu
 
 // ---------- ghi dữ liệu ----------
-function canWrite() { return !!S.db && !S.readonly && S.me.write !== false; }
+function canWrite() { return !!S.db && !S.readonly && S.me.write !== false && bpAllowed().includes(S.bp); }
 function writeFailed(e) {
   if (e && e.code === 'invalid_argument') { S.readonly = true; render(); toast('Bạn chỉ có quyền xem trang này nên không lưu được. Nhờ chủ trang mời bạn với quyền Contributor.', true); }
   else if (e && e.code === 'quota_exceeded') toast('Kho dữ liệu của trang đã đầy, không lưu thêm được. Báo chủ trang dọn bớt dữ liệu cũ.', true);
@@ -611,8 +655,8 @@ async function mergeMonth(ym, patch) {
   if (snap.exists) await ref.update({ v: patch });
   else await ref.set({ ym, v: patch });
 }
-function nextNo(loai, ngay, fresh) {
-  const pre = (loai === 'thu' ? 'PT' : 'PC') + '-' + ngay.slice(8, 10) + ngay.slice(5, 7) + '-';
+function nextNo(loai, ngay, fresh, bp) { // sổ kế toán bán hàng đánh số riêng: PTBH / PCBH
+  const pre = (loai === 'thu' ? 'PT' : 'PC') + (bp === 'kt' ? 'BH' : '') + '-' + ngay.slice(8, 10) + ngay.slice(5, 7) + '-';
   let mx = 0;
   for (const p of Object.values((fresh && fresh.v) || {})) if (p && p.so && p.so.startsWith(pre)) mx = Math.max(mx, parseInt(p.so.slice(pre.length), 10) || 0);
   return pre + pad(mx + 1);
@@ -620,9 +664,9 @@ function nextNo(loai, ngay, fresh) {
 async function savePhieu(p, old) {
   await withLock(async () => {
     const ym = ymOf(p.ngay);
-    if (!old || old.loai !== p.loai || old.ngay !== p.ngay) {
+    if (!old || old.loai !== p.loai || old.ngay !== p.ngay || bpOf(old.quy) !== bpOf(p.quy)) {
       const fresh = await S.db.doc('thang/' + ym).get();
-      p.so = nextNo(p.loai, p.ngay, fresh.exists ? fresh.data() : null);
+      p.so = nextNo(p.loai, p.ngay, fresh.exists ? fresh.data() : null, bpOf(p.quy));
     }
     const rec = Object.assign({}, p); delete rec.id;
     await mergeMonth(ym, { [p.id]: rec });
@@ -671,18 +715,19 @@ document.addEventListener('keydown', e => { if (e.key === 'Escape' && dlgEl && !
 function phieuForm(loai, p) {
   const c = cfg(), edit = !!p, orig = p && p.__orig;
   if (p) { p = Object.assign({}, p); delete p.__orig; }
-  p = p ? Object.assign({}, p) : { id: 'p' + uid(), loai, ngay: today(), quy: (c.quy[0] || {}).id, dm: '', tien: 0, doi_tuong: '', noidung: '', chungtu: '', anh: [] };
+  const qs = quys();
+  p = p ? Object.assign({}, p) : { id: 'p' + uid(), loai, ngay: today(), quy: (qs[0] || {}).id, dm: '', tien: 0, doi_tuong: '', noidung: '', chungtu: '', anh: [] };
   const ncc = Object.assign({ ten: '', mst: '', sdt: '', dia_chi: '' }, p.ncc || {}), hd = Object.assign(hdBlank(), p.hd || {});
   const book = nccBook();
   let anh = (p.anh || []).slice();
-  const dms = () => (p.loai === 'thu' ? c.dm_thu : c.dm_chi);
+  const dms = () => (p.loai === 'thu' ? dmThu(bpOf(p.quy)) : dmChi(bpOf(p.quy)));
   const el = openDlg(p.loai, `
     <header><h2 id="pf-h"></h2><button class="btn ghost sm" type="button" data-x>Đóng</button></header>
     <form class="body" id="pf" novalidate>
       <div class="seg loai" role="group" aria-label="Loại phiếu"><button type="button" class="t" data-l="thu">Phiếu thu</button><button type="button" class="c" data-l="chi">Phiếu chi</button></div>
       <div class="f2">
         <label class="field"><span>Ngày</span><input type="date" id="pf-ngay" value="${esc(p.ngay)}" required></label>
-        <label class="field"><span>Quỹ</span><select id="pf-quy">${c.quy.map(q => `<option value="${esc(q.id)}"${q.id === p.quy ? ' selected' : ''}>${esc(q.ten)}</option>`).join('')}</select></label>
+        <label class="field"><span>Quỹ</span><select id="pf-quy">${(qs.some(q => q.id === p.quy) ? qs : [quyOf(p.quy) || { id: p.quy, ten: p.quy }, ...qs]).map(q => `<option value="${esc(q.id)}"${q.id === p.quy ? ' selected' : ''}>${esc(q.ten)}</option>`).join('')}</select></label>
       </div>
       <label class="field amount"><span>Số tiền (đồng)</span><input type="text" inputmode="numeric" id="pf-tien" value="${p.tien ? fmt(p.tien) : ''}" placeholder="0" autocomplete="off"></label>
       <div class="words" id="pf-words"></div>
@@ -772,7 +817,8 @@ function phieuForm(loai, p) {
 function canChange(p) { return canWrite() && !p.huy && (S.me.canEdit || (p.tao_boi === S.me.id && !(approvalOf(p) || {}).ok)); }
 
 function phieuView(id) {
-  const p = allPhieu().find(x => x.id === id); if (!p) return;
+  const p = allPhieuAll().find(x => x.id === id); if (!p) return;
+  const cap = p.chuyen ? allPhieuAll().find(x => x.id === p.chuyen.cap) : null;
   const ap = approvalOf(p), wait = needsApproval(p);
   resolveNames([p.tao_boi, p.sua_boi, ap && ap.boi, p.huy && p.huy.boi]);
   const state = p.huy ? '<span class="pill p-huy">Đã hủy</span>' : ap && ap.ok ? '<span class="pill p-ok">Đã duyệt</span>' : wait ? '<span class="pill p-wait">Chờ duyệt</span>' : '';
@@ -782,8 +828,9 @@ function phieuView(id) {
       <div><div class="money ${p.loai === 'thu' ? 'c-thu' : 'c-chi'}" style="font-size:1.7rem;font-weight:600">${p.loai === 'thu' ? '+' : '−'}${money(p.tien)}</div><div class="words">${esc(docSo(p.tien))}</div></div>
       <dl class="kv">
         <dt>Ngày</dt><dd>${vnDate(p.ngay)}</dd>
-        <dt>Quỹ</dt><dd>${esc(quyName(p.quy))}</dd>
+        <dt>Quỹ</dt><dd>${esc(quyName(p.quy))} <span class="muted small">· ${esc(BP[bpOf(p.quy)])}</span></dd>
         <dt>Khoản mục</dt><dd>${esc(p.dm)}</dd>
+        ${p.chuyen ? `<dt>${p.loai === 'chi' ? 'Chuyển đến' : 'Nhận từ'}</dt><dd>${esc(quyName(p.chuyen.quy))} <span class="muted small">· ${esc(BP[bpOf(p.chuyen.quy)])}</span>${cap ? `<div class="small muted">Phiếu đi cặp: <span class="so">${esc(cap.so)}</span> – lập tự động, hủy phiếu này thì phiếu cặp cũng hủy</div>` : ''}</dd>` : ''}
         <dt>${p.loai === 'thu' ? 'Người nộp' : 'Người nhận'}</dt><dd>${esc(p.doi_tuong) || '<span class="muted">—</span>'}</dd>
         <dt>Lý do</dt><dd>${esc(p.noidung)}</dd>
         ${nccOf(p) || (p.ncc && p.ncc.mst) ? `<dt>${p.loai === 'thu' ? 'Đơn vị nộp' : 'Nhà cung cấp'}</dt><dd>${esc(nccOf(p)) || '—'}${nccLine(p.ncc) ? `<div class="small muted">${esc(nccLine(p.ncc))}</div>` : ''}</dd>` : ''}
@@ -799,9 +846,9 @@ function phieuView(id) {
     </div>
     <footer>
       ${S.downloads ? '<button class="btn" type="button" id="pv-print">Tải phiếu để in</button>' : ''}
-      ${canChange(p) ? '<button class="btn danger" type="button" id="pv-huy">Hủy phiếu</button><button class="btn" type="button" id="pv-edit">Sửa</button>' : ''}
+      ${canChange(p) ? '<button class="btn danger" type="button" id="pv-huy">Hủy phiếu</button>' + (p.chuyen ? '' : '<button class="btn" type="button" id="pv-edit">Sửa</button>') : ''}
       ${p.loai === 'chi' && !p.huy && canWrite() && !canChange(p) ? '<button class="btn" type="button" id="pv-hd">Cập nhật hóa đơn</button>' : ''}
-      ${S.me.canEdit && canWrite() && !p.huy ? (ap && ap.ok ? '<button class="btn" type="button" id="pv-unap">Bỏ duyệt</button>' : '<button class="btn pri" type="button" id="pv-ap">Duyệt phiếu</button>') : ''}
+      ${S.me.canEdit && canWrite() && !p.huy && !p.chuyen ? (ap && ap.ok ? '<button class="btn" type="button" id="pv-unap">Bỏ duyệt</button>' : '<button class="btn pri" type="button" id="pv-ap">Duyệt phiếu</button>') : ''}
     </footer>`);
   $$('[data-x]', el).forEach(b => b.onclick = closeDlg);
   const pa = $('#pv-anh', el); if (pa) pa.onclick = e => { const b = e.target.closest('button[data-i]'); if (b) lightbox('/_blob/' + p.anh[+b.dataset.i]); };
@@ -816,7 +863,9 @@ function phieuView(id) {
     $('#pv-no', el).onclick = () => { $('#pv-cf', el).innerHTML = ''; };
     $('#pv-yes', el).onclick = async () => {
       const ly = $('#pv-ly', el).value.trim(); if (!ly) { $('#pv-ly', el).focus(); return; }
-      try { await S.db.doc('thang/' + ymOf(p.ngay)).update({ v: { [p.id]: { huy: { boi: S.me.id, nick: nickName(), luc: nowStr(), lydo: ly } } } }); closeDlg(); toast('Đã hủy phiếu ' + p.so); }
+      const h = { huy: { boi: S.me.id, nick: nickName(), luc: nowStr(), lydo: ly } }, patch = { [p.id]: h };
+      if (cap && !cap.huy && ymOf(cap.ngay) === ymOf(p.ngay)) patch[cap.id] = h; // chuyển tiền: hủy luôn phiếu cặp
+      try { await S.db.doc('thang/' + ymOf(p.ngay)).update({ v: patch }); closeDlg(); toast('Đã hủy phiếu ' + p.so + (patch[cap && cap.id] ? ' và phiếu cặp ' + cap.so : '')); }
       catch (x) { writeFailed(x); }
     };
   };
@@ -825,6 +874,62 @@ function phieuView(id) {
     ab.disabled = true;
     try { await setApproval(p, ab.id === 'pv-ap'); toast(ab.id === 'pv-ap' ? 'Đã duyệt phiếu ' + p.so : 'Đã bỏ duyệt phiếu ' + p.so); closeDlg(); }
     catch (x) { ab.disabled = false; writeFailed(x); }
+  };
+}
+
+// Chuyển tiền giữa 2 quỹ (VD: kế toán bán hàng nộp tiền hàng về thủ quỹ): lập 1 phiếu chi ở quỹ đi + 1 phiếu thu ở quỹ nhận, cùng ngày, gắn cặp
+function chuyenForm() {
+  const from = quys(), all = cfg().quy;
+  if (!from.length || all.length < 2) { toast('Cần ít nhất 2 quỹ để chuyển tiền.', true); return; }
+  const defTo = (all.find(q => q.bp !== S.bp) || all.find(q => q.id !== from[0].id)).id;
+  const opt = (list, sel) => list.map(q => `<option value="${esc(q.id)}"${q.id === sel ? ' selected' : ''}>${esc(q.ten)} · ${esc(BP[q.bp])}</option>`).join('');
+  const el = openDlg('', `
+    <header><h2>Chuyển tiền giữa các quỹ</h2><button class="btn ghost sm" type="button" data-x>Đóng</button></header>
+    <form class="body" id="cq" novalidate>
+      <p class="small muted" style="margin:0">Lập cùng lúc <b>phiếu chi</b> ở quỹ chuyển đi và <b>phiếu thu</b> ở quỹ nhận. Tiền chỉ đổi chỗ nên không tính vào thu – chi của công ty.</p>
+      <div class="f2">
+        <label class="field"><span>Từ quỹ</span><select id="cq-from">${opt(from, from[0].id)}</select></label>
+        <label class="field"><span>Đến quỹ</span><select id="cq-to">${opt(all, defTo)}</select></label>
+      </div>
+      <div class="f2">
+        <label class="field"><span>Ngày</span><input type="date" id="cq-ngay" value="${today()}"></label>
+        <label class="field amount"><span>Số tiền (đồng)</span><input type="text" inputmode="numeric" id="cq-tien" placeholder="0" autocomplete="off"></label>
+      </div>
+      <div class="words" id="cq-words"></div>
+      <div class="f2">
+        <label class="field"><span>Người nộp (bên chuyển)</span><input type="text" id="cq-nop" maxlength="120" value="${esc(nickName())}" autocomplete="off"></label>
+        <label class="field"><span>Người nhận (bên nhận)</span><input type="text" id="cq-nhan" maxlength="120" autocomplete="off"></label>
+      </div>
+      <label class="field"><span>Nội dung</span><input type="text" id="cq-nd" maxlength="300" autocomplete="off"></label>
+      <p class="err" id="cq-err" hidden></p>
+    </form>
+    <footer><button class="btn" type="button" data-x>Hủy bỏ</button><button class="btn pri" type="submit" form="cq" id="cq-save">Lập phiếu chuyển tiền</button></footer>`);
+  $$('[data-x]', el).forEach(b => b.onclick = closeDlg);
+  const t = $('#cq-tien', el), nd = $('#cq-nd', el);
+  const defNd = () => { const a = quyOf($('#cq-from', el).value), b = quyOf($('#cq-to', el).value); return a && b ? (a.bp === 'kt' && b.bp === 'tq' ? 'Kế toán bán hàng nộp tiền hàng về thủ quỹ' : `Chuyển tiền từ ${a.ten} sang ${b.ten}`) : ''; };
+  let auto = defNd(); nd.value = auto;
+  const resync = () => { if (nd.value === auto) { auto = defNd(); nd.value = auto; } };
+  $('#cq-from', el).onchange = resync; $('#cq-to', el).onchange = resync;
+  t.oninput = () => { const v = parseMoney(t.value); t.value = v ? fmt(v) : ''; $('#cq-words', el).textContent = v ? 'Viết bằng chữ: ' + docSo(v) : ''; };
+  $('#cq', el).onsubmit = async e => {
+    e.preventDefault();
+    const err = $('#cq-err', el), f = $('#cq-from', el).value, to = $('#cq-to', el).value, ngay = $('#cq-ngay', el).value, tien = parseMoney(t.value);
+    const bad = f === to ? 'Quỹ chuyển đi và quỹ nhận phải khác nhau.' : !/^\d{4}-\d{2}-\d{2}$/.test(ngay) ? 'Chọn ngày.' : !tien ? 'Nhập số tiền.' : !nd.value.trim() ? 'Ghi nội dung.' : '';
+    if (bad) { err.textContent = bad; err.hidden = false; return; }
+    const id1 = 'p' + uid(), id2 = 'p' + uid(), meta = { tao_boi: S.me.id, tao_nick: nickName(), tao_luc: nowStr(), huy: null, ngay, tien, dm: DM_CHUYEN, noidung: nd.value.trim(), chungtu: '', anh: [], ncc: null, hd: null };
+    const nop = $('#cq-nop', el).value.trim(), nhan = $('#cq-nhan', el).value.trim();
+    const pc = Object.assign({ loai: 'chi', quy: f, doi_tuong: nhan, chuyen: { cap: id2, quy: to } }, meta);
+    const pt = Object.assign({ loai: 'thu', quy: to, doi_tuong: nop, chuyen: { cap: id1, quy: f } }, meta);
+    const btn = $('#cq-save', el); btn.disabled = true; btn.textContent = 'Đang lưu…';
+    try {
+      await withLock(async () => {
+        const ym = ymOf(ngay), snap = await S.db.doc('thang/' + ym).get(), fresh = { v: Object.assign({}, snap.exists ? snap.data().v : {}) };
+        pc.so = nextNo('chi', ngay, fresh, bpOf(f)); fresh.v[id1] = pc;
+        pt.so = nextNo('thu', ngay, fresh, bpOf(to));
+        await mergeMonth(ym, { [id1]: pc, [id2]: pt });
+      });
+      closeDlg(); toast(`Đã chuyển ${money(tien)}: ${pc.so} (${quyName(f)}) → ${pt.so} (${quyName(to)}).`);
+    } catch (x) { btn.disabled = false; btn.textContent = 'Lập phiếu chuyển tiền'; writeFailed(x); }
   };
 }
 
@@ -858,7 +963,7 @@ ${nccOf(p) ? `<p class="r">${thu ? 'Đơn vị' : 'Nhà cung cấp'}: <b>${esc(n
 <p class="r">Số tiền: <b>${fmt(p.tien)} đồng</b></p>
 <p class="r">Viết bằng chữ: <i>${esc(docSo(p.tien))}</i></p>
 <p class="r">Kèm theo chứng từ gốc: ${[hdOf(p) === 'co' ? `Hóa đơn số ${esc(p.hd.so)}${p.hd.ky_hieu ? ', ký hiệu ' + esc(p.hd.ky_hieu) : ''}${p.hd.ngay ? ', ngày ' + vnDate(p.hd.ngay) : ''}` : '', esc(p.chungtu)].filter(Boolean).join('; ') || '...........'}</p>
-<div class="sig"><div><b>Giám đốc</b><i>(Ký, họ tên, đóng dấu)</i></div><div><b>Kế toán trưởng</b><i>(Ký, họ tên)</i></div><div><b>Thủ quỹ</b><i>(Ký, họ tên)</i></div><div><b>Người lập phiếu</b><i>(Ký, họ tên)</i></div><div><b>Người ${thu ? 'nộp' : 'nhận'} tiền</b><i>(Ký, họ tên)</i></div></div>
+<div class="sig"><div><b>Giám đốc</b><i>(Ký, họ tên, đóng dấu)</i></div><div><b>Kế toán trưởng</b><i>(Ký, họ tên)</i></div><div><b>${bpOf(p.quy) === 'kt' ? 'Kế toán bán hàng' : 'Thủ quỹ'}</b><i>(Ký, họ tên)</i></div><div><b>Người lập phiếu</b><i>(Ký, họ tên)</i></div><div><b>Người ${thu ? 'nộp' : 'nhận'} tiền</b><i>(Ký, họ tên)</i></div></div>
 <p style="margin-top:90px">Đã ${thu ? 'nhận đủ' : 'nhận đủ'} số tiền (viết bằng chữ): ...............................................................</p>
 </body></html>`;
   S.downloads.save({ filename: `${p.so}.html`, data: new Blob([html], { type: 'text/html' }) }).then(r => { if (r && r.status === 'saved') toast('Đã tải phiếu – mở file bằng trình duyệt rồi bấm In.'); }).catch(e => { if (e && e.code !== 'declined') toast('Không tải được: ' + (e.message || e.code), true); });
@@ -866,10 +971,24 @@ ${nccOf(p) ? `<p class="r">${thu ? 'Đơn vị' : 'Nhà cung cấp'}: <b>${esc(n
 
 // ---------- các màn hình ----------
 function headerBal() {
-  const b = balances(), c = cfg(), tot = Object.values(b).reduce((a, x) => a + x, 0);
+  fixBp();
+  const b = balances(), tong = S.view === 'tong', qs = tong ? cfg().quy : quys(), tot = qs.reduce((a, q) => a + (b[q.id] || 0), 0);
+  const al = bpAllowed(), sw = $('#bpsw');
+  sw.hidden = tong || al.length < 2;
+  sw.innerHTML = `<span class="lbl">Sổ của</span><div class="seg bp" role="group" aria-label="Sổ tiền mặt của bộ phận">${al.map(k => `<button type="button" data-bp="${k}" aria-pressed="${k === S.bp}">${BP[k]}</button>`).join('')}</div>`;
+  $$('[data-bp]', sw).forEach(x => x.onclick = () => { if (S.bp === x.dataset.bp) return; S.bp = x.dataset.bp; store.set('qtm.bp', S.bp); S.f.quy = ''; kqDraft = null; render(); });
+  $('.brand span').textContent = tong ? 'Tổng tiền mặt toàn công ty' : 'Sổ tiền mặt · ' + BP[S.bp];
+  $('#tab-tong').hidden = !canTong();
+  if (tong) {
+    $('#bal').innerHTML = BPS.map(k => { const v = cfg().quy.filter(q => q.bp === k).reduce((a, q) => a + (b[q.id] || 0), 0); return `<div><div class="lbl">${BP[k]}</div><div class="money${v < 0 ? ' c-chi' : ''}">${money(v)}</div></div>`; }).join('') +
+      `<div><div class="lbl">Tổng tiền mặt công ty</div><div class="money${tot < 0 ? ' c-chi' : ''}">${S.loaded.thang ? money(tot) : '—'}</div></div>`;
+    $('#acts').hidden = true; return;
+  }
+  const c = { quy: qs };
   $('#bal').innerHTML = (c.quy.length > 1 ? c.quy.map(q => `<div><div class="lbl">${esc(q.ten)}</div><div class="money${b[q.id] < 0 ? ' c-chi' : ''}">${money(b[q.id])}</div></div>`).join('') : '') +
     `<div><div class="lbl">${c.quy.length > 1 ? 'Tổng tồn quỹ' : 'Tồn quỹ hiện tại'}</div><div class="money${tot < 0 ? ' c-chi' : ''}">${S.loaded.thang ? money(tot) : '—'}</div></div>`;
-  $('#b-thu').disabled = $('#b-chi').disabled = !canWrite() || !S.loaded.thang;
+  $('#b-thu').disabled = $('#b-chi').disabled = !canWrite() || !S.loaded.thang || !qs.length;
+  $('#b-cq').disabled = !canWrite() || !S.loaded.thang || !qs.length || cfg().quy.length < 2;
   $('#acts').hidden = S.readonly || S.me.write === false;
 }
 
@@ -877,7 +996,7 @@ function rowsList(list) {
   if (!list.length) return '<div class="empty">Chưa có phiếu nào.</div>';
   return `<div class="list">${list.map(p => `<div class="row" data-p="${esc(p.id)}" tabindex="0" role="button">
     <span class="pill ${p.loai === 'thu' ? 'p-thu' : 'p-chi'}">${p.loai === 'thu' ? 'Thu' : 'Chi'}</span>
-    <div class="d"><b>${esc(p.noidung)}</b><span class="small muted"><span class="so">${esc(p.so)}</span> · ${vnDate(p.ngay)} · ${esc(p.dm)}${needsApproval(p) ? ' · <span class="c-warn">chờ duyệt</span>' : ''}${hdOf(p) === 'cho' && !p.huy ? ' · <span class="c-warn">chưa có HĐ</span>' : ''}</span></div>
+    <div class="d"><b>${esc(p.noidung)}</b><span class="small muted"><span class="so">${esc(p.so)}</span> · ${vnDate(p.ngay)} · ${esc(p.dm)}${p.chuyen ? ` <span class="pill p-nb">${p.loai === 'chi' ? '→' : '←'} ${esc(quyName(p.chuyen.quy))}</span>` : ''}${needsApproval(p) ? ' · <span class="c-warn">chờ duyệt</span>' : ''}${hdOf(p) === 'cho' && !p.huy ? ' · <span class="c-warn">chưa có HĐ</span>' : ''}</span></div>
     <span class="money ${p.loai === 'thu' ? 'c-thu' : 'c-chi'}">${p.loai === 'thu' ? '+' : '−'}${fmt(p.tien)}</span></div>`).join('')}</div>`;
 }
 
@@ -890,24 +1009,24 @@ function barsHtml(entries, cls) {
 function monthsChart(endYm, n = 6) {
   const yms = []; let [y, m] = endYm.split('-').map(Number);
   for (let i = 0; i < n; i++) { yms.unshift(`${y}-${pad(m)}`); m--; if (!m) { m = 12; y--; } }
-  const ps = allPhieu().filter(live), data = yms.map(ym => { const l = ps.filter(p => ymOf(p.ngay) === ym); return [ym, l.filter(p => p.loai === 'thu').reduce((a, p) => a + p.tien, 0), l.filter(p => p.loai === 'chi').reduce((a, p) => a + p.tien, 0)]; });
+  const ps = allPhieu().filter(real), data = yms.map(ym => { const l = ps.filter(p => ymOf(p.ngay) === ym); return [ym, l.filter(p => p.loai === 'thu').reduce((a, p) => a + p.tien, 0), l.filter(p => p.loai === 'chi').reduce((a, p) => a + p.tien, 0)]; });
   const max = Math.max(1, ...data.map(d => Math.max(d[1], d[2])));
   return `<div class="legend"><span><i style="background:var(--thu)"></i>Thu</span><span><i style="background:var(--chi)"></i>Chi</span><span>Cột cao nhất: ${fmt(max)} đ</span></div>
     <div class="months">${data.map(([ym, t, c]) => `<div class="m" title="${vnMonth(ym)}: thu ${fmt(t)} đ, chi ${fmt(c)} đ"><div class="cols"><i class="t" style="height:${(t / max * 100).toFixed(1)}%"></i><i class="c" style="height:${(c / max * 100).toFixed(1)}%"></i></div><span>T${+ym.slice(5)}/${ym.slice(2, 4)}</span></div>`).join('')}</div>`;
 }
 
 function viewTongQuan() {
-  const ym = today().slice(0, 7), ps = allPhieu(), mon = ps.filter(p => live(p) && ymOf(p.ngay) === ym);
+  const ym = today().slice(0, 7), ps = allPhieu(), mon = ps.filter(p => real(p) && ymOf(p.ngay) === ym);
   const thu = mon.filter(p => p.loai === 'thu').reduce((a, p) => a + p.tien, 0), chi = mon.filter(p => p.loai === 'chi').reduce((a, p) => a + p.tien, 0);
-  const td = ps.filter(p => live(p) && p.ngay === today());
+  const td = ps.filter(p => real(p) && p.ngay === today());
   const tdThu = td.filter(p => p.loai === 'thu').reduce((a, p) => a + p.tien, 0), tdChi = td.filter(p => p.loai === 'chi').reduce((a, p) => a + p.tien, 0);
   const waits = ps.filter(needsApproval).reverse(), recent = ps.filter(live).slice(-10).reverse();
-  const b = balances(), tot = Object.values(b).reduce((a, x) => a + x, 0);
-  const lastKq = Object.values(S.kq).flatMap(m => Object.values((m && m.k) || {})).filter(Boolean).sort((a, b2) => (a.luc < b2.luc ? 1 : -1))[0];
+  const b = balances(), qs = quys(), tot = qs.reduce((a, q) => a + (b[q.id] || 0), 0);
+  const lastKq = Object.values(S.kq).flatMap(m => Object.values((m && m.k) || {})).filter(x => x && bpOf(x.quy) === S.bp).sort((a, b2) => (a.luc < b2.luc ? 1 : -1))[0];
   return `
   ${!S.cfgVer && S.me.canEdit ? `<div class="banner">Sổ quỹ đang dùng cài đặt mặc định (1 quỹ tiền mặt, số dư đầu kỳ 0 đ). Vào <a href="#cai-dat">Cài đặt</a> nhập số dư đầu kỳ thật trước khi lập phiếu.</div>` : ''}
   <section class="grid g-tiles">
-    <div class="card tile big"><span class="lbl">Tồn quỹ hiện tại</span><span class="money${tot < 0 ? ' c-chi' : ''}">${money(tot)}</span><span class="small muted">${cfg().quy.length > 1 ? cfg().quy.map(q => esc(q.ten) + ': ' + fmt(b[q.id])).join(' · ') : 'Tính đến ' + vnDate(today())}</span></div>
+    <div class="card tile big"><span class="lbl">Tồn quỹ hiện tại · ${esc(BP[S.bp])}</span><span class="money${tot < 0 ? ' c-chi' : ''}">${money(tot)}</span><span class="small muted">${qs.length > 1 ? qs.map(q => esc(q.ten) + ': ' + fmt(b[q.id])).join(' · ') : 'Tính đến ' + vnDate(today())}</span></div>
     <div class="card tile"><span class="lbl">Hôm nay ${vnDate(today()).slice(0, 5)}</span><span class="money"><span class="c-thu">+${fmt(tdThu)}</span></span><span class="small"><span class="c-chi">−${fmt(tdChi)}</span> <span class="muted">· ${td.length} phiếu</span></span></div>
     <div class="card tile"><span class="lbl">Thu ${vnMonth(ym)}</span><span class="money c-thu">${money(thu)}</span><span class="small muted">${mon.filter(p => p.loai === 'thu').length} phiếu thu</span></div>
     <div class="card tile"><span class="lbl">Chi ${vnMonth(ym)}</span><span class="money c-chi">${money(chi)}</span><span class="small muted">${mon.filter(p => p.loai === 'chi').length} phiếu chi${mon.some(p => hdOf(p) === 'cho') ? ` · <a class="c-warn" href="#so-quy" data-hdcho>${mon.filter(p => hdOf(p) === 'cho').length} chưa có HĐ</a>` : ''}</span></div>
@@ -928,7 +1047,7 @@ function filtered() {
     && (!q || [p.so, p.noidung, p.doi_tuong, p.dm, p.chungtu, nccOf(p), p.ncc && p.ncc.mst, p.hd && p.hd.so].join(' ').toLowerCase().includes(q)));
 }
 function viewSoQuy() {
-  const f = S.f, c = cfg(), list = filtered();
+  const f = S.f, c = { quy: quys(), dm_thu: dmThu(), dm_chi: dmChi() }, list = filtered();
   let run = openingBefore(f.from, f.quy || null);
   const open = run;
   let tThu = 0, tChi = 0;
@@ -942,7 +1061,7 @@ function viewSoQuy() {
       <td class="money ${p.loai === 'thu' ? 'c-thu' : 'c-chi'}">${p.loai === 'thu' ? '+' : '−'}${fmt(p.tien)}</td>${filteredOnly ? '' : `<td class="money">${on ? fmt(run) : ''}</td>`}</tr>`;
     return `<tr class="click${p.huy ? ' huy' : ''}" data-p="${esc(p.id)}" tabindex="0">
       <td class="num">${vnDate(p.ngay).slice(0, 5)}</td><td class="so">${esc(p.so)}</td>
-      <td style="min-width:14rem">${esc(p.noidung)}<div class="small muted">${esc(p.dm)}${nccOf(p) ? ' · ' + esc(nccOf(p)) : ''}${p.doi_tuong ? ' · ' + esc(p.doi_tuong) : ''}${(p.anh || []).length ? ' · ' + p.anh.length + ' ảnh' : ''}</div></td>
+      <td style="min-width:14rem">${esc(p.noidung)}<div class="small muted">${esc(p.dm)}${p.chuyen ? ` ${p.loai === 'chi' ? '→' : '←'} ${esc(quyName(p.chuyen.quy))}` : ''}${nccOf(p) ? ' · ' + esc(nccOf(p)) : ''}${p.doi_tuong ? ' · ' + esc(p.doi_tuong) : ''}${(p.anh || []).length ? ' · ' + p.anh.length + ' ảnh' : ''}</div></td>
       ${c.quy.length > 1 && !f.quy ? `<td class="small hide-sm">${esc(quyName(p.quy))}</td>` : ''}
       <td class="money c-thu">${p.loai === 'thu' ? fmt(p.tien) : ''}</td><td class="money c-chi">${p.loai === 'chi' ? fmt(p.tien) : ''}</td>
       ${filteredOnly ? '' : `<td class="money">${on ? fmt(run) : ''}</td>`}<td class="keep">${st}</td></tr>`;
@@ -950,7 +1069,7 @@ function viewSoQuy() {
   const cols = (c.quy.length > 1 && !f.quy ? 1 : 0);
   const dmAll = [...new Set([...c.dm_thu, ...c.dm_chi, ...allPhieu().map(p => p.dm)])].filter(Boolean);
   return `<section class="card">
-    <header><h2>Sổ quỹ tiền mặt</h2><span class="small muted">Mẫu S07-DN · ${vnDate(f.from)} – ${vnDate(f.to)}</span></header>
+    <header><h2>Sổ quỹ tiền mặt · ${esc(BP[S.bp])}</h2><span class="small muted">Mẫu S07-DN · ${vnDate(f.from)} – ${vnDate(f.to)}</span></header>
     <div class="filters">
       <label class="field"><span>Từ ngày</span><input type="date" id="f-from" value="${esc(f.from)}"></label>
       <label class="field"><span>Đến ngày</span><input type="date" id="f-to" value="${esc(f.to)}"></label>
@@ -992,13 +1111,13 @@ function bindSoQuy() {
     for (const p of list) lines.push([vnDate(p.ngay), p.so, p.loai === 'thu' ? 'Thu' : 'Chi', quyName(p.quy), p.dm, p.doi_tuong, nccOf(p), (p.ncc || {}).mst || '', (p.ncc || {}).sdt || '', (p.ncc || {}).dia_chi || '', p.noidung, p.chungtu,
       hdOf(p) ? HD[hdOf(p)] : '', (p.hd || {}).so || '', (p.hd || {}).ky_hieu || '', p.hd && p.hd.ngay ? vnDate(p.hd.ngay) : '', (p.hd || {}).thue || '', p.loai === 'thu' ? p.tien : '', p.loai === 'chi' ? p.tien : '',
       p.huy ? 'Đã hủy: ' + p.huy.lydo : needsApproval(p) ? 'Chờ duyệt' : (approvalOf(p) || {}).ok ? 'Đã duyệt' : '', p.tao_nick || who(p.tao_boi), p.tao_luc || ''].map(cell).join(','));
-    S.downloads.save({ filename: `so-quy-${f.from}_${f.to}.csv`, data: new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv' }) })
+    S.downloads.save({ filename: `so-quy-${S.bp === 'kt' ? 'ke-toan-ban-hang' : 'thu-quy'}-${f.from}_${f.to}.csv`, data: new Blob(['﻿' + lines.join('\r\n')], { type: 'text/csv' }) })
       .then(r => { if (r && r.status === 'saved') toast('Đã tải sổ quỹ.'); }).catch(e => { if (e && e.code !== 'declined') toast('Không tải được: ' + (e.message || e.code), true); });
   };
 }
 
 function viewBaoCao() {
-  const ym = S.rep.ym, ps = allPhieu().filter(p => live(p) && ymOf(p.ngay) === ym);
+  const ym = S.rep.ym, ps = allPhieu().filter(p => real(p) && ymOf(p.ngay) === ym);
   const chi = ps.filter(p => p.loai === 'chi'), thu = ps.filter(p => p.loai === 'thu');
   const sChi = chi.reduce((a, p) => a + p.tien, 0), sThu = thu.reduce((a, p) => a + p.tien, 0);
   const yms = [...new Set([today().slice(0, 7), ...allPhieu().map(p => ymOf(p.ngay))])].sort().reverse();
@@ -1007,7 +1126,7 @@ function viewBaoCao() {
   const hdG = t => chi.filter(p => hdOf(p) === t), hdS = t => hdG(t).reduce((a, p) => a + p.tien, 0);
   const cho = hdG('cho').sort((a, b) => b.tien - a.tien);
   return `
-  <section class="card"><header><h2>Báo cáo chi tiêu</h2>
+  <section class="card"><header><h2>Báo cáo chi tiêu · ${esc(BP[S.bp])}</h2>
     <label class="field" style="min-width:11rem"><span class="sr">Tháng</span><select id="r-ym">${yms.map(x => `<option value="${x}"${x === ym ? ' selected' : ''}>${vnMonth(x)}</option>`).join('')}</select></label></header>
     <div class="grid g-tiles">
       <div class="tile"><span class="lbl">Tổng thu</span><span class="money c-thu">${money(sThu)}</span></div>
@@ -1037,12 +1156,12 @@ function viewBaoCao() {
 const DENOMS = [500000, 200000, 100000, 50000, 20000, 10000, 5000, 2000, 1000, 500];
 let kqDraft = null;
 function viewKiemQuy() {
-  const c = cfg();
-  if (!kqDraft) kqDraft = { quy: (c.quy[0] || {}).id, n: {}, ghichu: '', thanhphan: '' };
+  const c = { quy: quys() };
+  if (!kqDraft || !c.quy.some(q => q.id === kqDraft.quy)) kqDraft = { quy: (c.quy[0] || {}).id, n: {}, ghichu: '', thanhphan: '' };
   const book = balances()[kqDraft.quy] || 0, real = DENOMS.reduce((a, d) => a + d * (Number(kqDraft.n[d]) || 0), 0), diff = real - book;
-  const hist = Object.values(S.kq).flatMap(m => Object.entries((m && m.k) || {}).filter(([, x]) => x).map(([id, x]) => Object.assign({ id }, x))).sort((a, b) => (a.luc < b.luc ? 1 : -1));
+  const hist = Object.values(S.kq).flatMap(m => Object.entries((m && m.k) || {}).filter(([, x]) => x && bpOf(x.quy) === S.bp).map(([id, x]) => Object.assign({ id }, x))).sort((a, b) => (a.luc < b.luc ? 1 : -1));
   return `
-  <section class="card"><header><h2>Kiểm kê quỹ tiền mặt</h2><span class="small muted">Biên bản kiểm kê quỹ · Mẫu 08a-TT</span></header>
+  <section class="card"><header><h2>Kiểm kê quỹ tiền mặt · ${esc(BP[S.bp])}</h2><span class="small muted">Biên bản kiểm kê quỹ · Mẫu 08a-TT</span></header>
     <div class="filters" style="margin-bottom:14px">
       ${c.quy.length > 1 ? `<label class="field"><span>Quỹ</span><select id="k-quy">${c.quy.map(q => `<option value="${esc(q.id)}"${q.id === kqDraft.quy ? ' selected' : ''}>${esc(q.ten)}</option>`).join('')}</select></label>` : ''}
       <div class="field"><span>Tồn theo sổ quỹ lúc này</span><b class="money" style="padding:8px 0">${money(book)}</b></div>
@@ -1090,6 +1209,71 @@ function bindKiemQuy() {
   };
 }
 
+// ---------- tổng tiền mặt toàn công ty ----------
+function tongData() {
+  const { from, to } = S.tg, qs = cfg().quy, ps = allPhieuAll().filter(p => live(p) && p.ngay >= from && p.ngay <= to && quyOf(p.quy));
+  const rows = qs.map(q => {
+    const l = ps.filter(p => p.quy === q.id && (!q.ngay_dau || p.ngay >= q.ngay_dau)), sum = f => l.filter(f).reduce((a, p) => a + p.tien, 0);
+    const r = { q, dau: openingBefore(from, q.id, qs), thu: sum(p => p.loai === 'thu' && !p.chuyen), chi: sum(p => p.loai === 'chi' && !p.chuyen), vao: sum(p => p.loai === 'thu' && p.chuyen), ra: sum(p => p.loai === 'chi' && p.chuyen) };
+    r.cuoi = r.dau + r.thu - r.chi + r.vao - r.ra; return r;
+  });
+  const add = list => list.reduce((a, r) => { for (const k of ['dau', 'thu', 'chi', 'vao', 'ra', 'cuoi']) a[k] += r[k]; return a; }, { dau: 0, thu: 0, chi: 0, vao: 0, ra: 0, cuoi: 0 });
+  // tồn cuối từng ngày theo bộ phận
+  const days = []; for (let d = new Date(from + 'T00:00'); isoDay(d) <= to && days.length < 92; d.setDate(d.getDate() + 1)) days.push(isoDay(d));
+  const run = Object.fromEntries(BPS.map(k => [k, add(rows.filter(r => r.q.bp === k)).dau]));
+  const daily = days.map(day => {
+    const l = ps.filter(p => p.ngay === day && (!quyOf(p.quy).ngay_dau || p.ngay >= quyOf(p.quy).ngay_dau)), o = { day, thu: 0, chi: 0, n: l.length };
+    for (const p of l) { const k = bpOf(p.quy), v = p.loai === 'thu' ? p.tien : -p.tien; run[k] += v; if (!p.chuyen) { if (p.loai === 'thu') o.thu += p.tien; else o.chi += p.tien; } }
+    for (const k of BPS) o[k] = run[k];
+    o.tong = BPS.reduce((a, k) => a + run[k], 0); return o;
+  });
+  return { rows, add, daily, cq: ps.filter(p => p.chuyen && p.loai === 'chi') };
+}
+function viewTong() {
+  if (!canTong()) return '<div class="card empty">Tài khoản của bạn chưa được xem báo cáo tổng tiền mặt công ty.</div>';
+  const { from, to } = S.tg, { rows, add, daily, cq } = tongData(), all = add(rows), b = balances();
+  const cur = k => cfg().quy.filter(q => !k || q.bp === k).reduce((a, q) => a + (b[q.id] || 0), 0);
+  const narrow = matchMedia('(max-width: 640px)').matches;
+  const m4 = (a) => `<div class="mrow">${a.map(([l, v, c]) => `<div><span class="lbl">${l}</span><span class="money ${c || ''}">${v}</span></div>`).join('')}</div>`;
+  const tr = (r, label, cls) => narrow ? `<tr class="${cls || ''}"><td><b>${label}</b>${m4([['Đầu kỳ', fmt(r.dau)], ['Thu', fmt(r.thu), 'c-thu'], ['Chi', fmt(r.chi), 'c-chi'], ['Cuối kỳ', `<b>${fmt(r.cuoi)}</b>`, r.cuoi < 0 ? 'c-chi' : '']])}${r.vao || r.ra ? `<div class="small muted">Nhận chuyển ${fmt(r.vao)} · chuyển đi ${fmt(r.ra)}</div>` : ''}</td></tr>` : `<tr class="${cls || ''}"><td>${label}</td><td class="money">${fmt(r.dau)}</td><td class="money c-thu">${fmt(r.thu)}</td><td class="money c-chi">${fmt(r.chi)}</td><td class="money hide-sm">${r.vao ? fmt(r.vao) : ''}</td><td class="money hide-sm">${r.ra ? fmt(r.ra) : ''}</td><td class="money"><b class="${r.cuoi < 0 ? 'c-chi' : ''}">${fmt(r.cuoi)}</b></td></tr>`;
+  return `
+  <section class="grid g-tiles">
+    <div class="card tile big"><span class="lbl">Tổng tiền mặt công ty hiện tại</span><span class="money${cur() < 0 ? ' c-chi' : ''}">${money(cur())}</span><span class="small muted">Tính đến ${vnDate(today())}, gồm mọi quỹ</span></div>
+    ${BPS.map(k => `<div class="card tile"><span class="lbl">${BP[k]}</span><span class="money${cur(k) < 0 ? ' c-chi' : ''}">${money(cur(k))}</span><span class="small muted">${cfg().quy.filter(q => q.bp === k).map(q => esc(q.ten)).join(' · ')}</span></div>`).join('')}
+  </section>
+  <section class="card"><header><h2>Tổng hợp tiền mặt theo quỹ</h2><span class="small muted">${vnDate(from)} – ${vnDate(to)}</span></header>
+    <div class="filters">
+      <label class="field"><span>Từ ngày</span><input type="date" id="t-from" value="${esc(from)}"></label>
+      <label class="field"><span>Đến ngày</span><input type="date" id="t-to" value="${esc(to)}"></label>
+      ${S.downloads ? '<button class="btn sm" type="button" id="t-csv" style="margin-bottom:4px">Tải Excel (CSV)</button>' : ''}
+    </div>
+    <div class="tw" style="margin-top:12px"><table>${narrow ? '' : `<thead><tr><th>Quỹ</th><th class="r">Tồn đầu kỳ</th><th class="r">Thu</th><th class="r">Chi</th><th class="r hide-sm">Nhận chuyển</th><th class="r hide-sm">Chuyển đi</th><th class="r">Tồn cuối kỳ</th></tr></thead>`}<tbody>
+      ${BPS.map(k => { const rs = rows.filter(r => r.q.bp === k); return rs.length ? rs.map(r => tr(r, esc(r.q.ten))).join('') + (rs.length > 1 ? tr(add(rs), 'Cộng ' + BP[k].toLowerCase(), 'grp') : '') : ''; }).join('')}
+      ${tr(all, 'TỔNG TIỀN MẶT CÔNG TY', 'tot')}
+    </tbody></table></div>
+    <p class="small muted" style="margin:10px 0 0">Thu, chi là tiền thật vào / ra công ty. Nhận chuyển / chuyển đi là tiền đổi chỗ giữa các quỹ (VD: kế toán bán hàng nộp về thủ quỹ) – cộng cả công ty luôn bằng 0 nên không làm đổi tổng.</p>
+  </section>
+  <section class="card"><header><h2>Tồn tiền mặt cuối mỗi ngày</h2><span class="small muted">${daily.length} ngày</span></header>
+    <div class="tw"><table>${narrow ? '' : `<thead><tr><th>Ngày</th><th class="r">Thu</th><th class="r">Chi</th>${BPS.map(k => `<th class="r hide-sm">${BP[k]}</th>`).join('')}<th class="r">Tổng công ty</th></tr></thead>`}<tbody>
+      ${daily.slice().reverse().map(d => narrow ? `<tr><td><b class="num">${vnDate(d.day)}</b>${m4([['Thu', d.thu ? fmt(d.thu) : '–', 'c-thu'], ['Chi', d.chi ? fmt(d.chi) : '–', 'c-chi'], ...BPS.map(k => [k === 'tq' ? 'Thủ quỹ' : 'KT bán hàng', fmt(d[k])])])}<div class="small">Tổng công ty: <b class="money${d.tong < 0 ? ' c-chi' : ''}">${fmt(d.tong)}</b></div></td></tr>` : `<tr><td class="num">${vnDate(d.day)}</td><td class="money c-thu">${d.thu ? fmt(d.thu) : ''}</td><td class="money c-chi">${d.chi ? fmt(d.chi) : ''}</td>${BPS.map(k => `<td class="money hide-sm">${fmt(d[k])}</td>`).join('')}<td class="money"><b class="${d.tong < 0 ? 'c-chi' : ''}">${fmt(d.tong)}</b></td></tr>`).join('') || '<tr><td colspan="6" class="empty">Chọn khoảng ngày.</td></tr>'}
+    </tbody></table></div></section>
+  <section class="card"><header><h2>Chuyển tiền giữa các quỹ</h2><span class="small muted">${cq.length} lần trong kỳ</span></header>${rowsList(cq.slice().reverse())}</section>`;
+}
+function bindTong() {
+  const f = $('#t-from'), t = $('#t-to');
+  if (f) f.onchange = () => { if (f.value) { S.tg.from = f.value; render(); } };
+  if (t) t.onchange = () => { if (t.value) { S.tg.to = t.value; render(); } };
+  const csv = $('#t-csv'); if (csv) csv.onclick = () => {
+    const { rows, add, daily } = tongData(), cell = v => /[",\n;]/.test(String(v)) ? '"' + String(v).replace(/"/g, '""') + '"' : String(v);
+    const L = [['Tổng hợp tiền mặt công ty ' + vnDate(S.tg.from) + ' - ' + vnDate(S.tg.to)], ['Quỹ', 'Bộ phận', 'Tồn đầu kỳ', 'Thu', 'Chi', 'Nhận chuyển', 'Chuyển đi', 'Tồn cuối kỳ']];
+    for (const r of rows) L.push([r.q.ten, BP[r.q.bp], r.dau, r.thu, r.chi, r.vao, r.ra, r.cuoi]);
+    const a = add(rows); L.push(['TỔNG CÔNG TY', '', a.dau, a.thu, a.chi, a.vao, a.ra, a.cuoi], [], ['Ngày', 'Thu', 'Chi', ...BPS.map(k => 'Tồn ' + BP[k]), 'Tồn tổng công ty']);
+    for (const d of daily) L.push([vnDate(d.day), d.thu, d.chi, ...BPS.map(k => d[k]), d.tong]);
+    S.downloads.save({ filename: `tong-tien-mat-${S.tg.from}_${S.tg.to}.csv`, data: new Blob(['\ufeff' + L.map(r => r.map(cell).join(',')).join('\r\n')], { type: 'text/csv' }) })
+      .then(r => { if (r && r.status === 'saved') toast('Đã tải báo cáo tổng tiền mặt.'); }).catch(e => { if (e && e.code !== 'declined') toast('Không tải được: ' + (e.message || e.code), true); });
+  };
+}
+
 let cfgDraft = null;
 function viewCaiDat() {
   const adm = S.me.canEdit && canWrite();
@@ -1098,17 +1282,27 @@ function viewCaiDat() {
   return `
   ${adm ? '' : '<div class="banner">Chỉ chủ trang và người được mời quyền Editor mới sửa được cài đặt. Bạn đang xem.</div>'}
   <section class="card"><header><h2>Quỹ và số dư đầu kỳ</h2><span class="small muted">Tồn quỹ = số dư đầu kỳ + thu − chi, tính từ ngày bắt đầu</span></header>
-    <div class="tw"><table><thead><tr><th>Tên quỹ</th><th class="r">Số dư đầu kỳ (đ)</th><th>Từ ngày</th><th></th></tr></thead><tbody>
+    <div class="tw"><table><thead><tr><th>Tên quỹ</th><th>Bộ phận giữ tiền</th><th class="r">Số dư đầu kỳ (đ)</th><th>Từ ngày</th><th></th></tr></thead><tbody>
     ${c.quy.map((q, i) => `<tr><td><input type="text" id="q-ten-${i}" value="${esc(q.ten)}" maxlength="60"${dis}></td>
+      <td><select id="q-bp-${i}"${dis}>${BPS.map(k => `<option value="${k}"${q.bp === k ? ' selected' : ''}>${BP[k]}</option>`).join('')}</select></td>
       <td><input type="text" inputmode="numeric" id="q-sd-${i}" value="${fmt(q.sodu_dau)}" style="text-align:right;font-family:var(--f-num)"${dis}></td>
       <td><input type="date" id="q-nd-${i}" value="${esc(q.ngay_dau)}"${dis}></td>
-      <td>${adm && c.quy.length > 1 && !allPhieu().some(p => p.quy === q.id) ? `<button class="btn sm danger" type="button" data-rmq="${i}">Bỏ</button>` : ''}</td></tr>`).join('')}
+      <td>${adm && c.quy.length > 1 && !allPhieuAll().some(p => p.quy === q.id) ? `<button class="btn sm danger" type="button" data-rmq="${i}">Bỏ</button>` : ''}</td></tr>`).join('')}
     </tbody></table></div>
     ${adm ? '<button class="btn sm" type="button" id="q-add" style="margin-top:10px">+ Thêm quỹ (VD: quỹ xưởng, tiền gửi ngân hàng)</button>' : ''}
   </section>
   <section class="grid g-2">
-    <div class="card"><header><h2>Khoản mục thu</h2><span class="small muted">Mỗi dòng một khoản</span></header><textarea id="c-thu" rows="7"${dis}>${esc(c.dm_thu.join('\n'))}</textarea></div>
-    <div class="card"><header><h2>Khoản mục chi</h2><span class="small muted">Mỗi dòng một khoản</span></header><textarea id="c-chi" rows="7"${dis}>${esc(c.dm_chi.join('\n'))}</textarea></div>
+    <div class="card"><header><h2>Khoản mục thu · Thủ quỹ</h2><span class="small muted">Mỗi dòng một khoản</span></header><textarea id="c-thu" rows="7"${dis}>${esc(c.dm_thu.join('\n'))}</textarea></div>
+    <div class="card"><header><h2>Khoản mục chi · Thủ quỹ</h2><span class="small muted">Mỗi dòng một khoản</span></header><textarea id="c-chi" rows="7"${dis}>${esc(c.dm_chi.join('\n'))}</textarea></div>
+    <div class="card"><header><h2>Khoản mục thu · Kế toán bán hàng</h2><span class="small muted">Mỗi dòng một khoản</span></header><textarea id="c-thu-kt" rows="5"${dis}>${esc(c.dm_thu_kt.join('\n'))}</textarea></div>
+    <div class="card"><header><h2>Khoản mục chi · Kế toán bán hàng</h2><span class="small muted">Nộp tiền về thủ quỹ: dùng nút ⇄ Chuyển tiền</span></header><textarea id="c-chi-kt" rows="5"${dis}>${esc(c.dm_chi_kt.join('\n'))}</textarea></div>
+  </section>
+  <section class="card"><header><h2>Phân quyền theo nick</h2><span class="small muted">Nick nào nhập sổ của bộ phận nào</span></header>
+    ${Object.keys(S.accs).length ? `<div class="tw"><table><thead><tr><th>Nick</th><th>Họ tên</th>${BPS.map(k => `<th>${BP[k]}</th>`).join('')}<th>Xem tổng công ty</th></tr></thead><tbody>
+      ${Object.entries(S.accs).sort((x, y) => x[1].user < y[1].user ? -1 : 1).map(([id, a]) => { const r = c.phan_quyen[id] || { tq: true, kt: true, tong: true };
+        return `<tr${a.active === false ? ' class="huy"' : ''}><td><b>${esc(a.user)}</b></td><td>${esc(a.name)}</td>${[...BPS, 'tong'].map(k => `<td><input type="checkbox" data-pq="${esc(id)}" data-k="${k}"${r[k] ? ' checked' : ''}${dis} aria-label="${esc(a.user)} – ${k === 'tong' ? 'xem tổng công ty' : BP[k]}"></td>`).join('')}</tr>`; }).join('')}
+    </tbody></table></div>` : '<div class="empty small">Chưa có nick nào. Tạo nick ở nút tài khoản (👤) trên đầu trang.</div>'}
+    <p class="small muted" style="margin:10px 0 0">Nick chỉ thấy và nhập sổ của bộ phận được tích. "Xem tổng công ty" mở thêm mục Tổng tiền mặt công ty. Chủ trang và người có quyền Editor luôn xem và nhập được tất cả.</p>
   </section>
   <section class="card"><header><h2>Duyệt phiếu chi</h2></header>
     <label class="field" style="max-width:20rem"><span>Phiếu chi từ số tiền này cần duyệt (0 = không cần duyệt)</span><input type="text" inputmode="numeric" id="c-ng" value="${fmt(c.nguong)}" style="text-align:right;font-family:var(--f-num)"${dis}></label>
@@ -1120,19 +1314,23 @@ function bindCaiDat() {
   const c = cfgDraft;
   c.quy.forEach((q, i) => {
     $('#q-ten-' + i).oninput = e => { q.ten = e.target.value; };
+    $('#q-bp-' + i).onchange = e => { q.bp = e.target.value; };
     const sd = $('#q-sd-' + i); sd.oninput = () => { q.sodu_dau = parseMoney(sd.value); sd.value = fmt(q.sodu_dau); };
     $('#q-nd-' + i).onchange = e => { q.ngay_dau = e.target.value; };
   });
   $$('[data-rmq]').forEach(b => b.onclick = () => { c.quy.splice(+b.dataset.rmq, 1); render(); });
-  const add = $('#q-add'); if (add) add.onclick = () => { c.quy.push({ id: 'q' + uid(), ten: 'Quỹ mới', sodu_dau: 0, ngay_dau: today() }); render(); };
+  const add = $('#q-add'); if (add) add.onclick = () => { c.quy.push({ id: 'q' + uid(), ten: 'Quỹ mới', bp: 'tq', sodu_dau: 0, ngay_dau: today() }); render(); };
   const lines = s => [...new Set(s.split('\n').map(x => x.trim()).filter(Boolean))].slice(0, 60);
   $('#c-thu').oninput = e => { c.dm_thu = lines(e.target.value); };
   $('#c-chi').oninput = e => { c.dm_chi = lines(e.target.value); };
+  $('#c-thu-kt').oninput = e => { c.dm_thu_kt = lines(e.target.value); };
+  $('#c-chi-kt').oninput = e => { c.dm_chi_kt = lines(e.target.value); };
+  $$('[data-pq]').forEach(x => x.onchange = () => { const id = x.dataset.pq; c.phan_quyen = Object.assign({}, c.phan_quyen); c.phan_quyen[id] = Object.assign({ tq: true, kt: true, tong: true }, c.phan_quyen[id], { [x.dataset.k]: x.checked }); });
   const ng = $('#c-ng'); ng.oninput = () => { c.nguong = parseMoney(ng.value); ng.value = fmt(c.nguong); };
   const rs = $('#c-reset'); if (rs) rs.onclick = () => { cfgDraft = null; render(); };
   const sv = $('#c-save'); if (sv) sv.onclick = async () => {
     if (c.quy.some(q => !q.ten.trim() || !/^\d{4}-\d{2}-\d{2}$/.test(q.ngay_dau))) { toast('Mỗi quỹ cần có tên và ngày bắt đầu.', true); return; }
-    if (!c.dm_thu.length || !c.dm_chi.length) { toast('Cần ít nhất một khoản mục thu và một khoản mục chi.', true); return; }
+    if (!c.dm_thu.length || !c.dm_chi.length || !c.dm_thu_kt.length || !c.dm_chi_kt.length) { toast('Mỗi bộ phận cần ít nhất một khoản mục thu và một khoản mục chi.', true); return; }
     sv.disabled = true;
     try { await S.db.doc('cfg/main').set(Object.assign({}, c, { sua_boi: S.me.id, sua_luc: nowStr() })); cfgDraft = null; toast('Đã lưu cài đặt.'); }
     catch (x) { sv.disabled = false; writeFailed(x); }
@@ -1140,17 +1338,21 @@ function bindCaiDat() {
 }
 
 // ---------- điều hướng ----------
-const VIEWS = { 'tong-quan': [viewTongQuan], 'so-quy': [viewSoQuy, bindSoQuy], 'bao-cao': [viewBaoCao, () => { const s = $('#r-ym'); if (s) s.onchange = () => { S.rep.ym = s.value; render(); }; }], 'kiem-quy': [viewKiemQuy, bindKiemQuy], 'cai-dat': [viewCaiDat, bindCaiDat] };
+const VIEWS = { 'tong-quan': [viewTongQuan], 'so-quy': [viewSoQuy, bindSoQuy], 'bao-cao': [viewBaoCao, () => { const s = $('#r-ym'); if (s) s.onchange = () => { S.rep.ym = s.value; render(); }; }], 'kiem-quy': [viewKiemQuy, bindKiemQuy], tong: [viewTong, bindTong], 'cai-dat': [viewCaiDat, bindCaiDat] };
 function render() {
+  fixBp();
+  if (!bpAllowed().length && S.view !== 'tong' && S.view !== 'cai-dat' && canTong()) S.view = 'tong'; // nick chỉ được xem tổng
   headerBal();
-  const [v, bind] = VIEWS[S.view] || VIEWS['tong-quan'];
+  const noBp = !bpAllowed().length && S.view !== 'tong' && S.view !== 'cai-dat';
+  const [v0, bind] = VIEWS[S.view] || VIEWS['tong-quan'];
+  const v = noBp ? () => '<div class="card empty">Nick của bạn chưa được phân sổ của bộ phận nào. Nhờ quản lý vào Cài đặt → Phân quyền theo nick.</div>' : v0;
   const main = $('#view');
   if (!S.db) {
     main.innerHTML = '<div class="card empty">Trang chưa kết nối được kho dữ liệu. Hãy đăng nhập claude.ai và mở lại link do chủ trang gửi.</div>';
   } else {
     const focus = document.activeElement && document.activeElement.id, sel = focus && document.activeElement.selectionStart;
     main.innerHTML = (S.readonly ? '<div class="banner">Bạn đang có quyền <b>chỉ xem</b> nên không lập hoặc sửa phiếu được. Cần nhập liệu: nhờ chủ trang mời bằng email với quyền <b>Contributor</b>.</div>' : '') + v();
-    if (bind) bind();
+    if (bind && !noBp) bind();
     if (focus && $('#' + focus) && focus !== 'f-q') { const el = $('#' + focus); el.focus(); try { if (sel != null && el.setSelectionRange) el.setSelectionRange(sel, sel); } catch (e) { /* ô không hỗ trợ chọn */ } }
   }
   $$('#tabs a').forEach(a => a.setAttribute('aria-current', a.getAttribute('href') === '#' + S.view ? 'page' : 'false'));
@@ -1159,9 +1361,11 @@ document.addEventListener('click', e => { if (e.target.closest('[data-hdcho]')) 
 document.addEventListener('keydown', e => { if ((e.key === 'Enter' || e.key === ' ') && e.target.matches && e.target.matches('[data-p]')) { e.preventDefault(); phieuView(e.target.dataset.p); } });
 function route() { const h = location.hash.slice(1); S.view = VIEWS[h] ? h : 'tong-quan'; if (S.view !== 'cai-dat') cfgDraft = null; store.set('qtm.view', S.view); render(); window.scrollTo(0, 0); }
 window.addEventListener('hashchange', route);
-matchMedia('(max-width: 640px)').addEventListener('change', () => { if (S.view === 'so-quy') render(); });
+matchMedia('(max-width: 640px)').addEventListener('change', () => { if (S.view === 'so-quy' || S.view === 'tong') render(); });
 $('#b-thu').onclick = () => phieuForm('thu');
 $('#b-chi').onclick = () => phieuForm('chi');
+$('#b-cq').onclick = () => chuyenForm();
+window.addEventListener('antam-nick', () => { if (S.db) rerender(); });
 
 // ---------- khởi động ----------
 let rt = 0; const rerender = () => { clearTimeout(rt); rt = setTimeout(render, 60); };
@@ -1181,6 +1385,7 @@ let rt = 0; const rerender = () => { clearTimeout(rt); rt = setTimeout(render, 6
   db.doc('cfg/main').onSnapshot(s => { S.cfg = s.exists ? Object.assign({}, DEFAULT_CFG, s.data()) : null; S.cfgVer = s.exists; S.loaded.cfg = true; rerender(); }, () => {});
   db.collection('thang').onSnapshot(s => { const m = {}; s.docs.forEach(d => { m[d.id] = d.data(); }); S.months = m; S.loaded.thang = true;
     resolveNames(allPhieu().map(p => p.tao_boi)); if (!dlgEl) rerender(); else headerBal(); }, () => { S.loaded.thang = true; rerender(); });
+  db.doc('auth/accounts').onSnapshot(s => { const a = (s.exists && s.data().a) || {}; S.accs = Object.fromEntries(Object.entries(a).filter(([, x]) => x).map(([id, x]) => [id, { user: x.user, name: x.name, active: x.active }])); if (S.view === 'cai-dat') rerender(); }, () => {});
   db.collection('duyet').onSnapshot(s => { const m = {}; s.docs.forEach(d => { m[d.id] = d.data(); }); S.duyet = m; if (!dlgEl) rerender(); }, () => {});
   db.collection('kiemquy').onSnapshot(s => { const m = {}; s.docs.forEach(d => { m[d.id] = d.data(); }); S.kq = m;
     resolveNames(Object.values(m).flatMap(x => Object.values((x && x.k) || {}).map(k => k && k.boi))); if (S.view !== 'kiem-quy') rerender(); }, () => {});

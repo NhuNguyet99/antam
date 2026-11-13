@@ -39,3 +39,17 @@ Chủ trang vào thẳng, bấm nút 👤 trên đầu trang › **+ Thêm tài 
 (nhớ 30 ngày trên máy). Danh sách ở `auth/accounts` `{a: {id: {user, name, salt, pw (PBKDF2), active, at}}, ep}` – chỉ chủ trang / Editor
 sửa được (rules `auth write: admin`). Khóa tài khoản, đổi mật khẩu hoặc "Đăng xuất tất cả máy" thì máy đang dùng nick đó bị đăng xuất ngay.
 Phiếu ghi thêm tên nick người lập / sửa / hủy (`tao_nick`, `sua_nick`, `huy.nick`), biên bản kiểm quỹ ghi `nick`.
+
+## Sổ kế toán bán hàng và tổng tiền mặt công ty
+
+- Mỗi quỹ trong `cfg/main.quy` có `bp`: `tq` (Thủ quỹ, mặc định) hoặc `kt` (Kế toán bán hàng). Chưa có quỹ `kt` thì trang tự thêm quỹ
+  `{id: 'kt', ten: 'Tiền mặt kế toán bán hàng', ngay_dau: '2026-11-01'}` (lưu thật khi admin bấm Lưu cài đặt).
+- Nút "Sổ của: Thủ quỹ | Kế toán bán hàng" trên đầu trang chọn sổ; Tổng quan, Sổ quỹ, Báo cáo chi tiêu, Kiểm quỹ và nút lập phiếu chỉ theo quỹ của sổ đó.
+  Khoản mục riêng: `dm_thu_kt`, `dm_chi_kt`. Số phiếu sổ kế toán bán hàng: `PTBH-ddmm-NN` / `PCBH-ddmm-NN`.
+- **⇄ Chuyển tiền** (VD: kế toán bán hàng nộp tiền hàng về thủ quỹ): lập cùng lúc phiếu chi ở quỹ đi và phiếu thu ở quỹ nhận, khoản mục
+  "Chuyển tiền nội bộ", `chuyen: {cap: mã phiếu cặp, quy: quỹ bên kia}`; không cần duyệt, không cần hóa đơn, không tính vào thu – chi; hủy 1 phiếu thì hủy cả cặp.
+- **Tổng tiền mặt công ty** (`#tong`): tồn từng quỹ / bộ phận / cả công ty; bảng theo quỹ (đầu kỳ, thu, chi, nhận chuyển, chuyển đi, cuối kỳ),
+  tồn cuối mỗi ngày, danh sách chuyển tiền, tải CSV.
+- **Phân quyền theo nick** (Cài đặt, chỉ admin lưu): `cfg/main.phan_quyen = {mã tài khoản: {tq, kt, tong}}`. Nick chỉ thấy / nhập sổ được tích;
+  `tong` mở mục Tổng tiền mặt. Nick chưa phân quyền, chủ trang, Editor: tất cả.
+- Số dư đầu kỳ của quỹ luôn tính vào tồn đầu kỳ (kể cả khi kỳ xem bắt đầu trước ngày bắt đầu quỹ).
