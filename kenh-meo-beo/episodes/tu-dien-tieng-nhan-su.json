@@ -1,0 +1,11 @@
+{"id":"tu-dien-tieng-nhan-su","tag":"Từ điển tiếng Nhân sự · Tập 2","hook":"Từ điển tiếng Nhân sự\ndịch chuẩn 100%","hook_secs":3.2,"end":"Tập sau:\nTừ điển tiếng Khách hàng",
+"scenes":[
+{"id":"s0","min":3.6,"place":{"A":"boss_desk","T":"guest_chair","M":"boss_stand"},"props":{"M":["book"]},"lines":[["M","Từ điển tiếng Nhân sự. Tập hai.",0.6,{"lookcam":["M"]}]]},
+{"id":"s1","place":{"A":"boss_desk","T":"guest_chair","M":"boss_stand"},"props":{"M":["book"]},"lines":[["A","Công ty mình có môi trường rất năng động.",0.2],["M","Dịch: thiếu người, một người làm ba việc.",null,{"lookcam":["M"]}]]},
+{"id":"s2","place":{"A":"boss_desk","T":"guest_chair","M":"boss_stand"},"props":{"M":["book"]},"lines":[["A","Lương thỏa thuận em nhé.",0.2],["T","Dạ, thỏa thuận thế nào ạ?",null],["M","Dịch: chị nói bao nhiêu thì là bấy nhiêu.",null,{"lookcam":["M"]}]]},
+{"id":"s3","place":{"A":"boss_desk","T":"guest_chair","M":"boss_stand"},"props":{"M":["book"]},"lines":[["A","Chế độ đãi ngộ cực kỳ hấp dẫn!",0.2],["T","Ôi, có những gì ạ?",null,{"pose":{"T":"happy"}}],["A","Trà đá miễn phí!",null,{"pose":{"T":"shock"},"props":{"A":["milktea"]}}],["M","Dịch: thế thôi đấy.",null,{"lookcam":["M"]}]]},
+{"id":"s4","place":{"A":"boss_desk","T":"guest_chair","M":"boss_stand"},"props":{"M":["book"]},"door_open":true,"moves":[["G","door","side","L1e",1.3]],
+ "lines":[["A","Bên chị cần người chịu được áp lực cao.",0.2],["M","Dịch: sếp tên là Ngỗng.",null,{"lookcam":["M"]}],["G","Quác? Ai vừa nhắc tên tôi đấy?",null,{"pose":{"G":"angry","M":"nervous"},"cam":"close:G"}]]},
+{"id":"s5","place":{"A":"boss_desk","T":"guest_chair","M":"boss_stand","G":"side"},"pose":{"G":"squint"},"props":{"M":["book"]},"pad":2.4,
+ "lines":[["T","Dạ em đồng ý hết ạ!",0.2,{"pose":{"T":"celebrate"}}],["A","Thật á? Em là người đầu tiên đồng ý đấy!",null,{"pose":{"A":"shock"}}],["M","Chuyện nhỏ... cậu ấy chưa đọc từ điển.",null,{"pose":{"M":"smug"},"lookcam":["M"],"cam":"close:M"}]]}],
+"sfx":[["music","s0",0],["sting","s4","L2",1.0],["ding","s5",0.1,1.0]]}
