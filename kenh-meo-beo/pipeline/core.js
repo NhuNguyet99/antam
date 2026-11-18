@@ -166,7 +166,7 @@ function renderAt(t){TT=t;const sc=EP.scenes.find(s=>t<s.end)||EP.scenes[EP.scen
  for(const k in C){reset(C[k]);C[k].g.visible=false;C[k].spot=null;if(C[k].props)for(const n in C[k].props)C[k].props[n].visible=false;}
  C.G.br.forEach(b=>b.rotation.z=0);C.G.bl.forEach(b=>b.material.opacity=0);C.M.phone.visible=false;bag.visible=stand.visible=false;
  papers.forEach(p=>{p.visible=!!sc.papers;});doorP.rotation.y=sc.door_open?-1.3*ease(ls/0.5):0;blanket.visible=true;tred.scale.y=0.1;
- chair.position.set(-0.5,0,0.95);chair.rotation.set(0,Math.PI,0);setLook(set);
+ chair.position.set(-0.5,0,0.95);chair.rotation.set(0,Math.PI,0);chair.visible=sc.chair!==false;setLook(set);
  const SP=SPOTS[set==='office_night'?'office':set];
  for(const[k,s]of Object.entries(sc.place||{})){const c=C[k],p=SP[s];if(!p)continue;c.g.visible=true;c.spot=p;c.g.position.set(p[0],p[1],p[2]);
   if(p[4]==='side')c.g.rotation.set(0,p[3],Math.PI/2);else if(p[4]==='lie')c.g.rotation.set(-Math.PI/2,0,0);else if(p[4]==='recline'){c.g.rotation.set(-0.75,p[3],0);}else if(p[4]==='slump')c.g.rotation.set(0.35,p[3],0);else c.g.rotation.y=p[3];

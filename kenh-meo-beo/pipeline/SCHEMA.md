@@ -18,6 +18,7 @@ Mẫu đầy đủ: `episodes/tu-dien-tieng-nhan-su.json`. Chạy: `kenh-meo-beo
 | `lookcam` | `[mã]`: nhân vật quay mặt nhìn camera |
 | `moves` | `[[mã, từ_vị_trí, đến_vị_trí, bắt_đầu, thời_lượng_hoặc_mốc_kết_thúc]]` |
 | `door_open`, `papers` | `true` để mở cửa hoặc rải giấy dưới sàn |
+| `chair` | `false` để ẩn ghế xoay văn phòng (ghế hay che mặt nhân vật ở `desk_sleep` khi quay cận) |
 | `overlays` | `[{type:"pill"\|"big"\|"card", text, from, to, color:"#rrggbb", y}]` |
 | `min`, `pad` | độ dài tối thiểu của cảnh; khoảng nghỉ sau câu cuối (cảnh cuối nên để `pad` ≥ 2.2 cho màn hình kết thúc) |
 | `lines` | `[[mã, "lời thoại", offset_hoặc_null, {opt}]]`. `null` = nói ngay sau câu trước |
