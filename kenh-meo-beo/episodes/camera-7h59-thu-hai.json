@@ -1,0 +1,16 @@
+{"id":"camera-7h59-thu-hai","tag":"Camera văn phòng · Tập 1","hook":"Camera văn phòng\n7h59 sáng thứ Hai","hook_secs":3,"end":"Tập sau:\nCamera văn phòng:\n17h59 chiều thứ Sáu",
+"scenes":[
+{"id":"s0","cctv":true,"clock":"07:58:02","min":3.4,"place":{"M":"desk_sleep","T":"door"},"pose":{"M":"sleep","T":"nervous"},"moves":[["T","door","a",0.4,1.4]],
+ "lines":[["N","Thứ Hai. Còn hai phút nữa là chấm công.",0.3]]},
+{"id":"s1","cctv":true,"clock":"07:58:09","min":5,"place":{"M":"desk_sleep","T":"a"},"pose":{"M":"sleep"},
+ "lines":[["T","Kịp rồi! Em đến sớm nhất phòng!",0.2,{"pose":{"T":"celebrate"}}],["T","Áo mặc trái, dép hai màu... nhưng kịp giờ!",null,{"pose":{"T":"happy"}}]]},
+{"id":"s2","cctv":true,"clock":"07:58:52","min":8,"place":{"M":"desk_sleep","T":"a","A":"door"},"pose":{"M":"sleep"},"props":{"A":["phone"]},"moves":[["A","door","b",0,1.5]],
+ "lines":[["A","Cả nhà ơi, chị đang chạy vào chấm công nè!",0.3,{"pose":{"A":"happy"}}],["T","Chị ơi, còn đúng một phút thôi!",null,{"pose":{"T":"nervous"}}],["A","Chấm công thì trễ được, chốt đơn thì không!",null,{"pose":{"A":"smug"}}]]},
+{"id":"s3","cctv":true,"clock":"07:59:20","min":9.5,"place":{"M":"desk_sleep","T":"a","A":"b","G":"door"},"pose":{"M":"sleep","G":"nervous"},"props":{"A":["phone"]},"moves":[["G","door","boss_desk",0.2,1.6]],
+ "lines":[["G","Suỵt! Ai hỏi thì tôi đến từ bảy giờ.",0.3,{"lookcam":["G"]}],["G","Quác! Sao giờ này mọi người mới tới?",null,{"pose":{"G":"angry","T":"shock","A":"shock"},"lookcam":[]}],["T","Sếp ơi, sếp còn đội mũ bảo hiểm kìa.",null,{"pose":{"T":"raise_hand"}}],["G","Quác! Đây là... mũ thời trang!",null,{"pose":{"G":"nervous","A":"squint"}}]]},
+{"id":"s4","cctv":true,"clock":"07:59:58","min":8,"place":{"M":"desk_sleep","T":"a","A":"b","G":"boss_desk"},"pose":{"M":"sleep","T":"nervous","A":"nervous","G":"nervous"},"props":{"A":["phone"]},
+ "overlays":[{"type":"big","text":"2","from":0,"to":1,"color":"#ff3b3b"},{"type":"big","text":"1","from":1,"to":2,"color":"#ff3b3b"},{"type":"pill","text":"08:00:00 · KHÓA CHẤM CÔNG","from":2,"to":4,"color":"#d62828","y":300}],
+ "lines":[["G","Tám giờ rồi! Từ giờ ai đến là đi muộn!",2.3,{"pose":{"G":"angry","T":"happy","A":"happy"}}],["T","Ủa... anh Mỡ đâu ạ?",null,{"pose":{"T":"squint"}}],["A","Mỡ hả? Chắc còn ngủ ở nhà á em!",null,{"pose":{"A":"smug"}}]]},
+{"id":"s5","pad":2.4,"place":{"M":"desk_sleep","T":"a","A":"b","G":"boss_desk"},"pose":{"M":"sleep"},"props":{"A":["phone"]},
+ "lines":[["M","Ơ... sáng thứ Hai rồi à?",0.3,{"pose":{"M":"squint","T":"shock","A":"shock","G":"shock"},"cam":"reveal:M"}],["A","Trời đất! Ổng ở đây hồi nào vậy?",null],["T","Anh Mỡ đến lúc mấy giờ ạ?",null],["M","Chuyện nhỏ... tôi chưa về từ thứ Sáu.",null,{"pose":{"M":"smug"},"lookcam":["M"],"cam":"close:M"}]]}],
+"sfx":[["music","s0",0],["pop","s3","L2e",0.6],["ding","s4",2.0,1.2],["sting","s5","L0e",1.0]]}
