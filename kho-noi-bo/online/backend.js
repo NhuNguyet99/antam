@@ -424,7 +424,7 @@ const Backend = (() => {
   function must(me, k, what) { if (!may(me, k)) throw new ApiError(403, `Tài khoản của bạn chưa được cấp quyền ${what} – nhờ Quản lý phân quyền ở mục Tài khoản nhân viên.`); }
   const DOC_PERM = { stocktake: ['kiemke', 'lưu biên bản kiểm kê'], handover: ['bangiao', 'lưu biên bản bàn giao'], routing: ['phantuyen', 'lưu phân tuyến giao hàng'] };
   // Phiếu điều chỉnh có lý do chứa một trong các cụm này được duyệt tự động (không cần chờ Quản lý duyệt)
-  const AUTO_DUYET = ['khách trả hàng', 'chuột cắn'];
+  const AUTO_DUYET = ['khách trả hàng', 'chuột cắn', 'khách không thanh toán'];
   const foldTxt = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().replace(/\s+/g, ' ');
   const autoDuyet = reason => AUTO_DUYET.find(k => foldTxt(reason).includes(foldTxt(k))) || '';
   const lockedFor = (v, me) => v.type === 'D' && !v.status && me && !may(me, 'duyet');

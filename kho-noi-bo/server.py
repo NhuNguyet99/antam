@@ -453,7 +453,7 @@ def voucher_full(con, vid):
 
 
 # Phiếu điều chỉnh có lý do chứa một trong các cụm này được duyệt tự động (giống online/backend.js)
-AUTO_DUYET = ["khách trả hàng", "chuột cắn"]
+AUTO_DUYET = ["khách trả hàng", "chuột cắn", "khách không thanh toán"]
 
 
 def _fold(s):
