@@ -452,7 +452,22 @@ def voucher_full(con, vid):
     return v
 
 
-def approval_of(old, vtype, me, who):
+# Phiếu điều chỉnh có lý do chứa một trong các cụm này được duyệt tự động (giống online/backend.js)
+AUTO_DUYET = ["khách trả hàng", "chuột cắn"]
+
+
+def _fold(s):
+    import unicodedata
+    s = unicodedata.normalize("NFD", str(s or "")).replace("đ", "d").replace("Đ", "D")
+    return " ".join("".join(c for c in s if not unicodedata.combining(c)).lower().split())
+
+
+def auto_duyet(reason):
+    r = _fold(reason)
+    return next((k for k in AUTO_DUYET if _fold(k) in r), "")
+
+
+def approval_of(old, vtype, me, who, reason=""):
     """Trạng thái duyệt của phiếu sau khi lưu. me = (id, tài khoản) đang đăng nhập, None nếu chưa dùng tài khoản nhân viên."""
     cur = {k: (old[k] or "") if old else "" for k in APPROVAL_COLS}
     if old and old["type"] == "D" and not cur["status"] and me and not me[1].get("admin"):
@@ -465,6 +480,9 @@ def approval_of(old, vtype, me, who):
         if not old:  # Quản lý tự lập: duyệt luôn
             cur.update(approved_by=who, approved_at=now_str())
         return cur
+    auto = auto_duyet(reason)
+    if auto:  # lý do được duyệt tự động
+        return dict(cur, status="", review_note="", approved_by="Tự động (lý do: %s)" % auto, approved_at=now_str())
     # nhân viên lập / sửa: gửi (lại) cho Quản lý duyệt
     return dict(cur, status="pending", approved_by="", approved_at="")
 
@@ -529,7 +547,7 @@ def save_voucher(con, wh, data, vid=None, who="", me=None):
         if not old_row:
             raise ApiError(404, "Không tìm thấy phiếu")
         wh = old_row["wh"]  # phiếu luôn giữ kho ban đầu
-    ap = approval_of(old_row, vtype, me, who)
+    ap = approval_of(old_row, vtype, me, who, data.get("reason"))
     d = valid_date(data.get("date"))
     lines = data.get("lines") or []
     clean = []

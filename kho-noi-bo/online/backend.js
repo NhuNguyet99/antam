@@ -423,8 +423,12 @@ const Backend = (() => {
   const may = (me, k) => !me || staffPerms(me[1]).has(k);
   function must(me, k, what) { if (!may(me, k)) throw new ApiError(403, `Tài khoản của bạn chưa được cấp quyền ${what} – nhờ Quản lý phân quyền ở mục Tài khoản nhân viên.`); }
   const DOC_PERM = { stocktake: ['kiemke', 'lưu biên bản kiểm kê'], handover: ['bangiao', 'lưu biên bản bàn giao'], routing: ['phantuyen', 'lưu phân tuyến giao hàng'] };
+  // Phiếu điều chỉnh có lý do chứa một trong các cụm này được duyệt tự động (không cần chờ Quản lý duyệt)
+  const AUTO_DUYET = ['khách trả hàng', 'chuột cắn'];
+  const foldTxt = s => String(s || '').normalize('NFD').replace(/[\u0300-\u036f]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().replace(/\s+/g, ' ');
+  const autoDuyet = reason => AUTO_DUYET.find(k => foldTxt(reason).includes(foldTxt(k))) || '';
   const lockedFor = (v, me) => v.type === 'D' && !v.status && me && !may(me, 'duyet');
-  function approvalOf(old, type, me) {
+  function approvalOf(old, type, me, reason) {
     const cur = Object.fromEntries(APPROVAL_COLS.map(k => [k, (old && old[k]) || '']));
     if (old && lockedFor(old, me)) throw new ApiError(403, `Phiếu điều chỉnh ${old.no} đã được duyệt – chỉ người có quyền duyệt phiếu sửa / xóa được`);
     if (!old) Object.assign(cur, { created_by: st.who || '', created_by_id: me ? me[0] : '' });
@@ -433,6 +437,8 @@ const Backend = (() => {
       if (!old) Object.assign(cur, { approved_by: st.who || '', approved_at: nowStr() }); // người có quyền duyệt tự lập: duyệt luôn
       return cur;
     }
+    const auto = autoDuyet(reason);
+    if (auto) return Object.assign(cur, { status: '', review_note: '', approved_by: 'Tự động (lý do: ' + auto + ')', approved_at: nowStr() });
     return Object.assign(cur, { status: 'pending', approved_by: '', approved_at: '' }); // nhân viên lập / sửa: gửi (lại) Quản lý duyệt
   }
   async function reviewVoucher(id, ok, note, me) {
@@ -481,7 +487,7 @@ const Backend = (() => {
       for (const w of WAREHOUSES) { if (st.days[w]) { old = voucherById(w, vid); if (old) { wh = w; break; } } }
       if (!old) throw new ApiError(404, 'Không tìm thấy phiếu');
     }
-    const ap = approvalOf(old, type, me);
+    const ap = approvalOf(old, type, me, data.reason);
     const d = validDate(data.date);
     const pm = productMap(wh);
     const clean = [];
@@ -509,7 +515,7 @@ const Backend = (() => {
     await mergeInto(ref.day(wh, d), { v: { [id]: stored } }, { date: d });
     applyLocalVoucher(wh, d, id, stored);
     // lịch sử: lưu đủ nội dung phiếu trước / sau khi sửa để xem lại chi tiết
-    await log(old ? 'Sửa phiếu' : 'Lập phiếu' + (ap.status === 'pending' ? ' (chờ duyệt)' : ''), no,
+    await log(old ? 'Sửa phiếu' : 'Lập phiếu' + (ap.status === 'pending' ? ' (chờ duyệt)' : /^Tự động/.test(ap.approved_by) && type === 'D' ? ' (duyệt tự động)' : ''), no,
       old ? { 'trước': logSnap(old), 'sau': logSnap(v), id } : { 'sau': logSnap(v), id }, wh);
     return id;
   }

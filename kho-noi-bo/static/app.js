@@ -730,7 +730,7 @@ async function viewVoucherForm(main, m, q) {
   function approvalBox() {
     if (!S.account || v.type !== 'D') return '';
     const by = (name, at) => `${esc(name || '—')}${at ? ' lúc ' + esc(at) : ''}`;
-    if (!editing || v.saved_type !== 'D') return isAdmin ? '' : '<div class="callout">Phiếu điều chỉnh nhân viên lập sẽ <b>chờ Quản lý duyệt</b> – chỉ tính vào tồn kho sau khi được duyệt.</div>';
+    if (!editing || v.saved_type !== 'D') return isAdmin ? '' : '<div class="callout">Phiếu điều chỉnh nhân viên lập sẽ <b>chờ Quản lý duyệt</b> – chỉ tính vào tồn kho sau khi được duyệt. Lý do có <b>“khách trả hàng”</b> hoặc <b>“chuột cắn”</b> thì phiếu được <b>duyệt tự động</b>.</div>';
     if (v.status === 'pending') return `<div class="callout warn">⏳ <b>Chờ Quản lý duyệt</b> – chưa tính vào tồn kho. Người lập: ${by(v.created_by)}.
       ${isAdmin ? '<div style="margin-top:8px"><button class="btn primary" id="btn-approve">✔ Duyệt phiếu</button> <button class="btn danger" id="btn-reject">✖ Từ chối</button></div>' : ''}</div>`;
     if (v.status === 'rejected') return `<div class="callout warn">✖ <b>Bị từ chối</b> bởi ${by(v.approved_by, v.approved_at)}: <b>${esc(v.review_note)}</b>
@@ -956,7 +956,7 @@ async function viewVoucherForm(main, m, q) {
     if (!res) return;
     S.dirty = false;
     store('lastVoucher_' + S.wh + '_' + v.type, { giver: v.giver, receiver: v.receiver });
-    toast(res.status === 'pending' ? `Đã lưu phiếu ${res.no} – đang chờ Quản lý duyệt` : `Đã lưu phiếu ${res.no}`);
+    toast(res.status === 'pending' ? `Đã lưu phiếu ${res.no} – đang chờ Quản lý duyệt` : /^Tự động/.test(res.approved_by || '') && v.type === 'D' && !isAdmin ? `Đã lưu phiếu ${res.no} – ${res.approved_by.toLowerCase().replace('tự động', 'duyệt tự động')}` : `Đã lưu phiếu ${res.no}`);
     lsxAutoToast(res.lsx_auto);
     loadMeta();
     if (andPrint) printHtml(voucherDoc(res), 'portrait', res.no);
