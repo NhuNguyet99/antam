@@ -900,6 +900,7 @@ body[data-wh="NVL"] input:focus, body[data-wh="NVL"] select:focus, body[data-wh=
 body[data-wh="NVL"] .btn.primary:hover { background: #184d88; }
 #nav [data-only] { display: none; }
 body[data-wh="TP"] #nav [data-only="TP"], body[data-wh="NVL"] #nav [data-only="NVL"] { display: block; }
+#nav [hidden] { display: none !important; } /* mục bị ẩn (phân quyền, trang chung An Tâm) */
 @media (max-width: 560px) { .wh-badge { display: none; } }
 
 /* xem trước bản in (bản online) */
@@ -7228,11 +7229,13 @@ const roleOfPerms = set => { const r = KHO_ROLES.find(([, , l]) => l.length === 
 const ROUTE_PERM = { 'phieu/moi': ['pN', 'pX', 'pD'], phieu: ['phieu', 'pN', 'pX', 'pD'], 'so-nx': ['phieu'], 'phan-tuyen': ['phantuyen'], 'kh-ngay': ['kehoach'], 'kh-tuan': ['kehoach'],
   'kh-thang': ['kehoach'], nxt: ['baocao'], 'the-kho': ['baocao'], 'kiem-ke': ['kiemke'], 'ban-giao': ['bangiao'], hang: ['hang'], tuyen: ['tuyen'], 'giao-hang-tk': ['taixe'],
   'cai-dat': ['caidat'], 'lich-su': ['lichsu'], lsx: ['sanxuat'], 'dinh-muc': ['sanxuat'] };
-const routeOk = path => { const key = /^phieu\/moi/.test(path) ? 'phieu/moi' : path.split('/')[0]; const need = ROUTE_PERM[key]; return !need || need.some(can); };
+// trang chung An Tâm: tuyến / nơi nhận, người giao & kết quả giao, phân tuyến giao hàng không còn ở Kho (làm bên Đóng hàng)
+const HOP_OFF = window.ANTAM_HOP && !GIAO_APP ? ['tuyen', 'giao-hang-tk', 'phan-tuyen'] : [];
+const routeKey = path => /^phieu\/moi/.test(path) ? 'phieu/moi' : path.split('/')[0];
+const routeOk = path => { const key = routeKey(path); if (HOP_OFF.includes(key)) return false; const need = ROUTE_PERM[key]; return !need || need.some(can); };
 function applyPerms() {
   $$('#nav a[data-route]').forEach(a => { a.hidden = !routeOk(a.dataset.route); });
   const nd = $('#nav-duyet'); if (nd) nd.hidden = !(S.account && can('duyet'));
-  const ng = window.ANTAM_HOP && $('#nav a[data-route="giao-hang-tk"]'); if (ng) ng.textContent = 'Người giao & kết quả giao'; // tạo / sửa tài khoản ở web Đóng hàng // mục Duyệt phiếu: chỉ người có quyền duyệt phiếu điều chỉnh
   $$('#wh-switch button').forEach(b => { b.hidden = !can('kho' + b.dataset.wh); });
 }
 const HANDOVER_REASONS = ['Bàn giao ca', 'Bàn giao thủ kho (nghỉ phép/nghỉ việc)', 'Bàn giao cuối ngày', 'Chuyển kho', 'Khác'];
@@ -7714,6 +7717,7 @@ async function render() {
   });
   refreshPend();
   const main = $('#main');
+  if (HOP_OFF.includes(routeKey(path))) { main.innerHTML = '<div class="callout">Mục này không còn ở Kho – tuyến, người giao và phân tuyến giao hàng làm ở web <b>Đóng hàng</b>. <a href="#/">← Về Tổng quan kho</a></div>'; return; }
   if (!routeOk(path)) { main.innerHTML = '<div class="callout warn">Tài khoản của bạn chưa được cấp quyền vào mục này – nhờ Quản lý phân quyền ở mục <b>Tài khoản nhân viên</b>.</div>'; return; }
   main.innerHTML = '<p class="muted">Đang tải…</p>';
   for (const [re, fn] of ROUTES) {
@@ -10691,7 +10695,7 @@ async function bootKho() {
   S.user = store('user') || '';
   S.staffToken = (!GIAO_APP && !VIEW && store('staffToken')) || '';
   S.wh = !GIAO_APP && store('wh') === 'NVL' ? 'NVL' : 'TP';
-  if (GIAO_LINKED && !$('#nav-giao-link')) {
+  if (GIAO_LINKED && !HOP_OFF.length && !$('#nav-giao-link')) {
     // người giao dùng trang riêng Giao hàng An Tâm (nhận dữ liệu từ Phân tuyến của web kho)
     const a = document.createElement('a');
     a.href = GIAO_URL; a.target = '_blank'; a.rel = 'noopener'; a.dataset.only = 'TP'; a.id = 'nav-giao-link';

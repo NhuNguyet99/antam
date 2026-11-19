@@ -250,6 +250,7 @@ body[data-wh="NVL"] input:focus, body[data-wh="NVL"] select:focus, body[data-wh=
 body[data-wh="NVL"] .btn.primary:hover { background: #184d88; }
 #nav [data-only] { display: none; }
 body[data-wh="TP"] #nav [data-only="TP"], body[data-wh="NVL"] #nav [data-only="NVL"] { display: block; }
+#nav [hidden] { display: none !important; } /* mục bị ẩn (phân quyền, trang chung An Tâm) */
 @media (max-width: 560px) { .wh-badge { display: none; } }
 
 /* xem trước bản in (bản online) */
