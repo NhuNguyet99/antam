@@ -4857,7 +4857,7 @@ async function viewHandover(main, m) {
       <div id="h-kpi" class="kpis"></div>
       <div class="table-wrap"><table class="data" id="h-table"><thead><tr>${TICK_TH}<th>STT</th><th>Mã hàng</th><th>Tên hàng hóa</th><th>ĐVT</th><th class="num">Tồn sổ sách</th>
       <th class="num" style="width:120px">SL thực tế bàn giao</th><th class="num">Chênh lệch</th><th class="num">Giá trị tồn</th><th>Tình trạng hàng</th><th>Ghi chú</th></tr></thead><tbody id="h-rows"></tbody></table></div>
-      <div class="form-actions"><button class="btn primary" id="h-save">💾 Lưu biên bản</button><button class="btn" id="h-print">🖨 In biên bản</button>
+      <div class="form-actions"><button class="btn primary" id="h-save">💾 Lưu biên bản</button><button class="btn primary" id="h-saveprint">💾🖨 Lưu &amp; in</button><button class="btn" id="h-print">🖨 In biên bản</button>
       <button class="btn" id="h-refresh">↻ Lấy lại danh sách tồn</button>${doc.id ? '<button class="btn danger" id="h-del">Xóa</button>' : ''}<a class="btn ghost" href="#/ban-giao">← Danh sách</a></div>`;
     const b = (id, k) => { $(id).oninput = $(id).onchange = () => { d[k] = $(id).value; markDirty(); }; };
     b('#h-wh', 'warehouse'); b('#h-reason', 'reason'); b('#h-gn', 'giver_name'); b('#h-gt', 'giver_title'); b('#h-rn', 'receiver_name');
@@ -4865,7 +4865,9 @@ async function viewHandover(main, m) {
     $('#h-date').onchange = () => { doc.date = $('#h-date').value; markDirty(); };
     $('#h-scope').onchange = () => { d.scope = $('#h-scope').value; markDirty(); };
     $('#h-refresh').onclick = async () => { await guard(fetchRows); markDirty(); drawRows(); };
-    $('#h-save').onclick = () => guard(() => { doc.title = `${d.reason}: ${d.giver_name || '—'} → ${d.receiver_name || '—'} (${d.rows.length} mã)`; return saveDoc(doc).then(draw); });
+    const save = () => guard(async () => { doc.title = `${d.reason}: ${d.giver_name || '—'} → ${d.receiver_name || '—'} (${d.rows.length} mã)`; await saveDoc(doc); draw(); return true; });
+    $('#h-save').onclick = save;
+    $('#h-saveprint').onclick = async () => { if (await save()) printIt(); }; // lưu xong mở bản in luôn
     $('#h-print').onclick = printIt;
     if (doc.id) $('#h-del').onclick = () => deleteDoc(doc);
     drawRows();
