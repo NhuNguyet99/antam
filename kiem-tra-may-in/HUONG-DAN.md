@@ -17,6 +17,20 @@ Công cụ cho máy tính Windows ở quầy: tự kiểm tra **máy in tem nhã
 
 Mỗi lần trạng thái thay đổi sẽ được ghi vào file `nhat-ky-may-in.log` trong cùng thư mục.
 
+## Tự tìm & kết nối máy in nhiệt (máy in hoá đơn)
+
+Nhấp đúp `TimKetNoiMayInNhiet.bat`, rồi bấm **Yes** khi Windows hỏi quyền Administrator. Script sẽ tự làm các việc sau:
+
+1. Bật lại dịch vụ in Print Spooler nếu đang tắt.
+2. Nếu máy in hoá đơn đã cài:
+   - tắt chế độ "Use Printer Offline" và xoá lệnh in bị kẹt
+   - nếu máy in bị cắm sang **lỗ USB khác**, chuyển máy in sang cổng mới
+   - nếu máy in LAN bị **đổi IP**, tìm IP mới và cập nhật
+3. Nếu chưa cài: tìm máy in nhiệt đang cắm USB hoặc trong mạng LAN (cổng 9100), rồi tự thêm vào Windows. Máy in văn phòng (HP, Canon, Brother…) và máy in tem sẽ được bỏ qua.
+4. Hỏi có muốn in thử 1 tờ không.
+
+Nếu máy chưa có driver của hãng, script tạm dùng driver "Generic / Text Only" (chỉ in được chữ không dấu). Nên cài driver của hãng (ví dụ Xprinter) rồi chạy lại.
+
 ## Script kiểm tra những gì
 
 | Kiểu kết nối | Cách kiểm tra |
