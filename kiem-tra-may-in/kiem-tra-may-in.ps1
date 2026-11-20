@@ -31,7 +31,7 @@ $TenMayInHoaDon = ""
 # Từ khoá nhận diện máy in tem nhãn (Xprinter XP-3xx/4xx, TSC, Zebra, Godex, Gprinter, Brother QL, ...)
 $MauTem = '(?i)label|\btem\b|nh[aã]n|barcode|m[aã] v[aạ]ch|zebra|\bz[dt]\d|\bg[kx]4\d|godex|\bg5[03]0\b|\bdt[24]\d|\btsc\b|ttp-|\bte[23]\d0|\bql-\d|dymo|xp-?(3\d\d|4\d\d|d\d|tt\d|dt\d|h\d)|\bht3\d0|gp-?(1\d{3}|3\d{3}|9\d{3})'
 # Từ khoá nhận diện máy in hoá đơn nhiệt (Xprinter XP-58/80/K/Q/N, Epson TM, Rongta, Bixolon, POS-80, K80...)
-$MauHoaDon = '(?i)receipt|h(o[aá]|ó[aá]?)\s*[dđ][oơ]n|\bpos\b|pos-?(58|80)|xp-?(58|76|80|a\d|c\d|e\d|k\d|n\d|q\d|t\d|v\d)|\bk(58|80)\b|\btm-?[tmhu]\d|\brp-?(58|80|3\d\d)|rongta|bixolon|\bsrp-|\btsp\d|\bct-s\d|\btp-?(58|80|8\d\d)|sewoo|\b(58|80) ?mm\b|thermal|\b(58|80)c?\b'
+$MauHoaDon = '(?i)receipt|ipos|\bitp-?\d|h(o[aá]|ó[aá]?)\s*[dđ][oơ]n|\bpos\b|pos-?(58|80)|xp-?(58|76|80|a\d|c\d|e\d|k\d|n\d|q\d|t\d|v\d)|\bk(58|80)\b|\btm-?[tmhu]\d|\brp-?(58|80|3\d\d)|rongta|bixolon|\bsrp-|\btsp\d|\bct-s\d|\btp-?(58|80|8\d\d)|sewoo|\b(58|80) ?mm\b|thermal|\b(58|80)c?\b'
 # Máy in ảo – bỏ qua
 $MauAo = '(?i)pdf|xps|onenote|\bfax\b|anydesk|teamviewer|ultraviewer|snagit|send to|microsoft print|foxit'
 

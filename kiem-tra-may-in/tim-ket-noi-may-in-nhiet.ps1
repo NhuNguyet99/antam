@@ -20,7 +20,7 @@ $TenMayInMoi    = "May in hoa don"    # tên đặt cho máy in khi script phả
 # ==================================================================
 
 $MauTem = '(?i)label|\btem\b|nh[aã]n|barcode|m[aã] v[aạ]ch|zebra|\bz[dt]\d|\bg[kx]4\d|godex|\bg5[03]0\b|\bdt[24]\d|\btsc\b|ttp-|\bte[23]\d0|\bql-\d|dymo|xp-?(3\d\d|4\d\d|d\d|tt\d|dt\d|h\d)|\bht3\d0|gp-?(1\d{3}|3\d{3}|9\d{3})'
-$MauHoaDon = '(?i)receipt|h(o[aá]|ó[aá]?)\s*[dđ][oơ]n|\bpos\b|pos-?(58|80)|xp-?(58|76|80|a\d|c\d|e\d|k\d|n\d|q\d|t\d|v\d)|\bk(58|80)\b|\btm-?[tmhu]\d|\brp-?(58|80|3\d\d)|rongta|bixolon|\bsrp-|\btsp\d|\bct-s\d|\btp-?(58|80|8\d\d)|sewoo|\b(58|80) ?mm\b|thermal|\b(58|80)c?\b'
+$MauHoaDon = '(?i)receipt|ipos|\bitp-?\d|h(o[aá]|ó[aá]?)\s*[dđ][oơ]n|\bpos\b|pos-?(58|80)|xp-?(58|76|80|a\d|c\d|e\d|k\d|n\d|q\d|t\d|v\d)|\bk(58|80)\b|\btm-?[tmhu]\d|\brp-?(58|80|3\d\d)|rongta|bixolon|\bsrp-|\btsp\d|\bct-s\d|\btp-?(58|80|8\d\d)|sewoo|\b(58|80) ?mm\b|thermal|\b(58|80)c?\b'
 $MauMayInVanPhong = '(?i)\bhp\b|hewlett|laserjet|officejet|deskjet|canon|brother|ricoh|kyocera|xerox|lexmark|konica|sharp|samsung|fuji|toshiba e-studio|epson (l|wf|et|xp)-?\d'
 
 try { [Console]::OutputEncoding = [System.Text.Encoding]::UTF8 } catch {}
@@ -216,6 +216,16 @@ foreach ($c in $usbDangCam) {
     $dung = if ($q.Count) { "đang dùng bởi: $($q -join ', ')" } else { 'CHƯA có máy in nào trong Windows dùng cổng này' }
     TinB "- $c : $($congUsb[$c].MoTa)  ($dung)"
 }
+
+# Thiết bị đang cắm nhưng CHƯA có driver / bị lỗi driver
+$chuaDriver = @(Get-CimInstance Win32_PnPEntity -ErrorAction SilentlyContinue | Where-Object {
+    $_.ConfigManagerErrorCode -and [int]$_.ConfigManagerErrorCode -ne 0 -and
+    ("$($_.PNPClass) $($_.Name) $($_.DeviceID)" -match '(?i)printer|print|usbprint|pos|label|xprinter|unknown|không xác định|ch340|usb serial|usb-serial') })
+foreach ($d in $chuaDriver) {
+    Loi "Thiết bị `"$($d.Name)`" đang cắm nhưng lỗi/chưa có driver (mã $($d.ConfigManagerErrorCode)) – cần cài driver của hãng máy in"
+}
+$comUsb = @(Get-CimInstance Win32_PnPEntity -ErrorAction SilentlyContinue | Where-Object { $_.Name -match '(?i)(ch340|ch341|usb.?serial|prolific|cp210).*\(COM\d+\)' })
+foreach ($d in $comUsb) { TinB "- Có thiết bị cổng COM qua USB: $($d.Name) – có thể là máy in nối bằng dây Serial/COM" }
 
 # 3. Kiểm tra / sửa máy in hoá đơn đã cài
 Buoc '3. Máy in hoá đơn đã cài trong Windows'
