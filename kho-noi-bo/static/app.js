@@ -396,32 +396,46 @@ function setPrintContent(html, orientation) {
   document.body.classList.toggle('has-print', !!html);
 }
 const IS_MAC = /Mac|iPhone|iPad/.test(navigator.platform || navigator.userAgent);
+// Gọi thẳng window.print() (không mở cửa sổ mới – trình duyệt điện thoại / máy POS chặn pop-up). CSS @media print chỉ in #print-root.
+// Trang bị chặn hộp thoại In (VD: khung nhúng không cho phép) thì window.print() không làm gì và không có sự kiện beforeprint → báo onBlocked.
+function tryPrint(onBlocked) {
+  let fired = false;
+  const on = () => { fired = true; };
+  window.addEventListener('beforeprint', on);
+  try { window.print(); } catch (e) { /* bị chặn */ }
+  setTimeout(() => { window.removeEventListener('beforeprint', on); if (!fired && !document.hidden && onBlocked) onBlocked(); }, 900);
+}
+let printModal = null;
 function printHtml(html, orientation = 'portrait', filename = 'ban-in-kho') {
-  if (!ONLINE) {
-    setPrintContent(html, orientation);
-    setTimeout(() => window.print(), 60);
-    return;
-  }
-  // Trang trên claude.ai không được tự mở hộp thoại In: chuẩn bị sẵn bản in, người dùng bấm Ctrl+P / ⌘+P
   setPrintContent(html, orientation);
+  if (!ONLINE) { setTimeout(() => window.print(), 60); return; }
+  if (printModal) { printModal.close(); printModal = null; }
   const safe = String(filename).replace(/[^\w.\- ]+/g, '-').replace(/-+/g, '-') || 'ban-in-kho';
-  const m = openModal({
-    title: 'Xem trước bản in', wide: true, saveText: '⬇ Tải file để in',
-    onClose: () => setPrintContent(''),
-    body: `<div class="callout" style="margin:0 0 12px">Để in ngay: bấm <kbd>${IS_MAC ? '⌘' : 'Ctrl'}</kbd> + <kbd>P</kbd> trên bàn phím
-      (điện thoại: menu trình duyệt → In / Chia sẻ → In). Hộp thoại In chỉ in phiếu bên dưới.
-      <span class="small muted">Nếu máy không in được theo cách này, bấm <b>Tải file để in</b>.</span></div>
-      <div class="print-preview ${orientation}">${html}</div>`,
-    onSave: async () => {
-      const dl = await claude.use('downloads');
-      if (!dl) throw new Error('Trang này chưa được phép tải file xuống. Hãy mở trang trên claude.ai.');
-      try { await dl.save({ filename: safe + '.html', data: printableFile(html, orientation, safe) }); }
-      catch (e) { if (e && e.code === 'declined') return false; throw new Error('Không tải được file: ' + (e && e.message ? e.message : e)); }
-      toast('Đã tải file ' + safe + '.html – mở file để in');
-      return true;
-    },
-  });
-  return m;
+  const showPreview = blocked => {
+    setPrintContent(html, orientation);
+    const m = printModal = openModal({
+      title: 'Xem trước bản in', wide: true, saveText: '⬇ Tải file để in',
+      onClose: () => { printModal = null; setPrintContent(''); },
+      body: `<div class="callout ${blocked ? 'warn' : ''}" style="margin:0 0 12px">${blocked
+          ? '<b>Trình duyệt chưa mở được hộp thoại In trong trang này.</b> Bấm <b>🖨 In lại</b> để thử lần nữa; vẫn không được thì bấm <b>⬇ Tải file để in</b> rồi mở file vừa tải (file tự mở hộp thoại In), hoặc dùng menu trình duyệt ⋮ → Chia sẻ → In.'
+          : `Bấm <b>🖨 In</b> (hoặc <kbd>${IS_MAC ? '⌘' : 'Ctrl'}</kbd> + <kbd>P</kbd>). Hộp thoại In chỉ in phiếu bên dưới.`}
+        <div style="margin-top:8px"><button class="btn primary" type="button" id="pp-print">🖨 ${blocked ? 'In lại' : 'In'}</button></div></div>
+        <div class="print-preview ${orientation}">${html}</div>`,
+      onSave: async () => {
+        const dl = await claude.use('downloads');
+        if (!dl) throw new Error('Trang này chưa được phép tải file xuống. Hãy mở trang trên claude.ai.');
+        try { await dl.save({ filename: safe + '.html', data: printableFile(html, orientation, safe) }); }
+        catch (e) { if (e && e.code === 'declined') return false; throw new Error('Không tải được file: ' + (e && e.message ? e.message : e)); }
+        toast('Đã tải file ' + safe + '.html – mở file để in');
+        return true;
+      },
+    });
+    $('#pp-print', m.root).onclick = () => tryPrint(() => toast('Trình duyệt vẫn chặn hộp thoại In – bấm “Tải file để in”.', true));
+    return m;
+  };
+  // in ngay; không mở được hộp thoại In thì hiện bản xem trước kèm cách in khác
+  window.addEventListener('afterprint', function clr() { window.removeEventListener('afterprint', clr); if (!printModal) setPrintContent(''); });
+  tryPrint(() => showPreview(true));
 }
 async function saveTextFile(filename, data) {
   if (!ONLINE) {

@@ -228,6 +228,7 @@ table.data tr.row-warn td { background: var(--warn-bg); }
   #toasts, .modal-back { display: none !important; }
   /* có bản in đang mở: chỉ in bản in; không có thì in nguyên màn hình đang xem */
   body.has-print #app { display: none !important; }
+  body.has-print > :not(#print-root) { display: none !important; } /* chỉ in vùng bản in (ẩn nút bộ phận, thanh tài khoản…) */
   body.has-print #print-root { display: block; }
 }
 
