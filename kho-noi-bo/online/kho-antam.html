@@ -2554,9 +2554,13 @@ const Backend = (() => {
     if (res === 'log' && method === 'GET') {
       must(me, 'lichsu', 'xem lịch sử thao tác');
       if (VIEW) return [];
-      const snap = await ref.logs().orderBy('date', 'desc').limit(31).get();
-      const out = [];
-      snap.docs.forEach(d => live((d.data() || {}).e).forEach(([id, e]) => out.push(Object.assign({ id }, e))));
+      // đọc từng ngày (mới nhất trước) – mỗi ngày ~100 KB, đọc gộp 31 ngày một lần quá lớn nên bị trả rỗng
+      const out = [], day = new Date(today() + 'T12:00:00');
+      for (let i = 0; i < 31 && out.length < 500; i += 4) {
+        const ds = [0, 1, 2, 3].map(k => { const x = new Date(day); x.setDate(x.getDate() - i - k); return x.toISOString().slice(0, 10); });
+        const snaps = await Promise.all(ds.map(d => ref.logDay(d).get().catch(() => null)));
+        snaps.forEach(sn => { if (sn && sn.exists) live((sn.data() || {}).e).forEach(([id, e]) => out.push(Object.assign({ id }, e))); });
+      }
       return out.sort((a, b) => (a.at < b.at ? 1 : a.at > b.at ? -1 : 0)).slice(0, 500);
     }
 
