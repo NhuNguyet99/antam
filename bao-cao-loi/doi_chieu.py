@@ -63,6 +63,7 @@ prods = (json.load(open(prod_p, encoding='utf-8')).get('p') or {}) if os.path.ex
 days_dir = os.path.join(base, 'kho', 'TP', 'days')
 days_p = os.path.join(days_dir, D1 + '.json')
 nhap, xuat, dchinh, cho_duyet = {}, {}, {}, 0
+d1_vouchers = []  # phiếu đã tính của ngày Kho D1 (để xem giờ lập)
 ton_dau = {c: float(p.get('opening_qty') or 0) for c, p in prods.items()}
 day_files = sorted(f for f in os.listdir(days_dir) if f.endswith('.json')) if os.path.isdir(days_dir) else []
 co_ton = bool(prods) and any(f[:-5] < D1 for f in day_files)  # có lịch sử trước D1 thì mới tính được tồn đầu
@@ -81,6 +82,8 @@ for f in day_files:
                 cho_duyet += 1
             continue
         sg = -1 if t == 'X' else 1
+        if dt == D1:
+            d1_vouchers.append(v)
         for l in v.get('lines') or []:
             q = float(l.get('q') or 0)
             if dt < D1:
@@ -135,6 +138,66 @@ for c in codes:
 bad_sx = [r for r in rows if r['sx'] in ('thieu', 'thua')]
 bad_xk = [r for r in rows if r['xk'] != 'khop']
 
+# ---- cảnh báo cách ghi sổ (phần lệch bị che: nhập và xuất cùng ghi theo kế hoạch / đơn thay vì số thực)
+canh_bao = []
+byc = {r['code']: r for r in rows}
+hm = lambda s: str(s or '')[11:16]
+# 1. phiếu xuất lập trước khi có phiếu nhập sản xuất mà tồn đầu không đủ → số xuất lấy theo đơn / kế hoạch
+first_n = {}
+for v in d1_vouchers:
+    if v.get('type') == 'N':
+        for l in v.get('lines') or []:
+            t = v.get('created_at') or ''
+            if t and (l['c'] not in first_n or t < first_n[l['c']]):
+                first_n[l['c']] = t
+truoc = []  # (tên, số xuất trước, tồn đầu, giờ xuất đầu, giờ nhập SX đầu)
+for c, tn in sorted(first_n.items()):
+    r = byc.get(c)
+    if not r or c in KHONG_SX:
+        continue
+    xs = [v for v in d1_vouchers if v.get('type') == 'X' and (v.get('created_at') or '') < tn and any(l['c'] == c for l in v.get('lines') or [])]
+    q = sum(float(l.get('q') or 0) for v in xs for l in v.get('lines') or [] if l['c'] == c)
+    if xs and q > r.get('ton_dau', 0) + 0.001:
+        truoc.append((r['ten'] or c, q, r.get('ton_dau', 0), min(v.get('created_at') or '' for v in xs), tn))
+if truoc:
+    truoc.sort(key=lambda x: -(x[1] - x[2]))
+    canh_bao.append({'loai': 'xuat_truoc_nhap', 'muc_do': 'canh_bao', 'code': '',
+                     'tieu_de': '%d mã lập phiếu xuất trước khi có phiếu nhập sản xuất' % len(truoc),
+                     'chi_tiet': 'Số xuất đang lấy theo đơn / kế hoạch, chưa theo số thực bốc lên xe – giao thiếu sẽ bị che (nhập và xuất cùng dư, tồn vẫn khớp). '
+                                 'Kho kiểm tra số thực xuất từng tuyến. ' + '; '.join(
+                                     '%s: xuất %s lúc %s, tồn đầu %s, nhập SX lúc %s' % (t, fmt(q), hm(x0), fmt(t0), hm(n0)) for t, q, t0, x0, n0 in truoc[:8])
+                                 + (' và %d mã khác' % (len(truoc) - 8) if len(truoc) > 8 else '') + '.'})
+# 2. nhập sản xuất đúng y số đặt (mã số lượng lớn) → có thể chép kế hoạch thay vì đếm thực tế
+for r in rows:
+    if r['sx'] != 'khong' and r['dat'] >= 50 and abs(r['nhap'] - r['dat']) < 0.001:
+        canh_bao.append({'loai': 'nhap_bang_dat', 'muc_do': 'canh_bao', 'code': r['code'],
+                         'tieu_de': '%s: nhập sản xuất đúng bằng số đặt (%s)' % (r['ten'] or r['code'], fmt(r['dat'])),
+                         'chi_tiet': 'Nếu số nhập chép từ kế hoạch thay vì đếm khi bánh vào kho, phần làm thiếu bị che '
+                                     '(nhập và xuất cùng dư, tồn vẫn khớp). Kho xác nhận đây là số đếm thực tế.'})
+# 3. phiếu điều chỉnh của ngày Kho D1 bị xóa (nhật ký thao tác log/<ngày>, thư mục dữ liệu/log) → lệch kiểm kê bị che
+log_dir = os.path.join(base, 'log')
+if os.path.isdir(log_dir):
+    for f in sorted(os.listdir(log_dir)):
+        if not f.endswith('.json'):
+            continue
+        for e in (json.load(open(os.path.join(log_dir, f), encoding='utf-8')).get('e') or {}).values():
+            if not e or e.get('action') != 'Xóa phiếu' or 'DCK' not in str(e.get('target')) or '[TP]' not in str(e.get('target')):
+                continue
+            det = e.get('detail')
+            try:
+                det = json.loads(det) if isinstance(det, str) else (det or {})
+            except ValueError:
+                det = {}
+            tr = det.get('trước') or {}
+            if tr.get('ngày') != D1:
+                continue
+            canh_bao.append({'loai': 'xoa_dieu_chinh', 'muc_do': 'loi', 'code': '',
+                             'tieu_de': 'Phiếu điều chỉnh %s bị xóa' % str(e.get('target')).replace('[TP] ', ''),
+                             'chi_tiet': '%s xóa lúc %s. Phiếu ngày %s: %s · lý do: %s. Phiếu điều chỉnh (nhất là theo kiểm kê) phản ánh lệch thực tế '
+                                         '– xóa đi thì phần lệch bị che; Quản lý hỏi lại người xóa.' % (
+                                             e.get('who', '?'), e.get('at', '?'), tr.get('ngày', '?'), ', '.join(tr.get('dòng') or []),
+                                             ((tr.get('v') or {}).get('reason') or '—'))})
+
 
 def ds(lst, k):
     lst = sorted(lst, key=lambda r: -abs(r[k]))
@@ -157,9 +220,12 @@ else:
                       (' %d mã tồn âm (%s)' % (len(ta), ', '.join(r['ten'] or r['code'] for r in ta[:4])) if ta else '') + '.')
     if chua_ma:
         tom += ' %d cột đơn chưa gán mã Kho.' % len(chua_ma)
+    if canh_bao:
+        nl = sum(x['muc_do'] == 'loi' for x in canh_bao)
+        tom += ' Cách ghi sổ: %d cảnh báo%s.' % (len(canh_bao), (' (%d phiếu điều chỉnh bị xóa)' % nl) if nl else '')
 out = {'dh_ngay': D, 'kho_ngay': D1, 'nguon_dh': [{'ma': a, 'stamp': b, 'at': c} for a, b, c in nguon],
        'co_phieu_kho': os.path.exists(days_p), 'co_ton': co_ton,
        'so_ton_am': sum(r.get('danh_gia') == 'ton_am' for r in rows), 'so_thieu_hang': sum(r.get('danh_gia') == 'thieu_hang' for r in rows), 'phieu_cho_duyet': cho_duyet, 'rows': rows,
        'chua_ma': [{'cot': k, 'sl': v} for k, v in sorted(chua_ma.items())],
-       'so_lech_sx': len(bad_sx), 'so_lech_xuat': len(bad_xk), 'tom_tat': tom}
+       'so_lech_sx': len(bad_sx), 'so_lech_xuat': len(bad_xk), 'tom_tat': tom, 'canh_bao': canh_bao}
 json.dump(out, sys.stdout, ensure_ascii=False, indent=1)

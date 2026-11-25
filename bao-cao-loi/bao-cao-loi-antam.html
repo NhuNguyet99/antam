@@ -142,12 +142,14 @@ table.dc .d { display: block; font-size: .8rem; font-weight: 600; white-space: n
         <div class="webs">${webs.map(w => { const l = byWeb[w], wl = worst(l), a = l.filter(i => i.muc_do === 'loi').length, b = l.filter(i => i.muc_do === 'canh_bao').length;
           return `<button type="button" class="web" data-web="${esc(w)}" aria-pressed="${S.web === w}"><b>${esc(w)}</b><span><span class="pill p-${wl}">${a ? a + ' lỗi' : b ? b + ' cảnh báo' : 'Ổn'}</span>${a && b ? ` <span class="pill p-canh_bao">${b} cảnh báo</span>` : ''}</span></button>`; }).join('')}</div>
         ${S.web ? `<span class="small"><button type="button" class="web" data-web="" style="display:inline-block;padding:3px 10px">Xem tất cả web</button></span>` : ''}</section>
+      ${S.web ? '' : dcCard()}
       <section class="grp">${shown.length ? shown.map(i => `<div class="item ${esc(i.muc_do)}"><div class="bar"></div><div class="bd">
           <div class="tt"><span class="pill p-${esc(i.muc_do)}">${LV[i.muc_do] || esc(i.muc_do)}</span><span>${esc(i.tieu_de)}</span></div>
           <div class="small muted">${esc(i.web)}${i.nhom ? ' · ' + esc(i.nhom) : ''}</div>
           ${i.chi_tiet ? `<div class="ct">${esc(i.chi_tiet)}</div>` : ''}</div></div>`).join('')
         : '<div class="empty">Không có mục nào.</div>'}</section></div>`;
     document.querySelectorAll('[data-web]').forEach(b => b.onclick = () => { S.web = S.web === b.dataset.web ? '' : b.dataset.web; draw(); });
+    const g = document.getElementById('go-dc'); if (g) g.onclick = () => { const r = D.list.find(x => x.chot) || D.list[0]; if (r) D.cur = r.id; drawDc(); tab('dc'); window.scrollTo(0, 0); };
   }
   $('#run').onchange = e => { S.cur = e.target.value; S.web = ''; draw(); };
 
@@ -163,6 +165,21 @@ table.dc .d { display: block; font-size: .8rem; font-weight: 600; white-space: n
   const isLech = x => x.danh_gia ? x.danh_gia !== 'dung' : (['thieu', 'thua'].includes(x.sx) || x.xk !== 'khop');
   function cell(v, d, k, l) {
     return `<td class="n" data-l="${l}">${fmt(v)}${k === 'khong' ? '<span class="d khong">không SX</span>' : `<span class="d ${esc(k)}">${k === 'khop' ? 'khớp' : esc(KQ[k] || k) + ' ' + sg(d)}</span>`}</td>`;
+  }
+  const cbHtml = list => list.slice().sort((a, b) => (rank[a.muc_do] ?? 2) - (rank[b.muc_do] ?? 2)).map(i => `<div class="item ${esc(i.muc_do)}"><div class="bar"></div><div class="bd">
+      <div class="tt"><span class="pill p-${esc(i.muc_do)}">${LV[i.muc_do] || esc(i.muc_do)}</span><span>${esc(i.tieu_de)}</span></div>
+      ${i.chi_tiet ? `<div class="ct">${esc(i.chi_tiet)}</div>` : ''}</div></div>`).join('');
+  // khung tóm tắt đối chiếu mới nhất (ưu tiên bản đã chốt) ở tab Lỗi các web
+  function dcCard() {
+    const r = D.list.find(x => x.chot) || D.list[0];
+    if (!r) return '';
+    const sai = (+r.so_ton_am || 0) + (+r.so_thieu_hang || 0), cb = r.canh_bao || [], nl = cb.filter(x => x.muc_do === 'loi').length;
+    const lv = sai || nl ? 'loi' : (+r.so_lech_sx || +r.so_lech_xuat || cb.length) ? 'canh_bao' : 'ok';
+    return `<section class="item ${lv}"><div class="bar"></div><div class="bd">
+      <div class="tt"><span class="pill p-${lv}">${lv === 'loi' ? 'Cần xử lý' : lv === 'canh_bao' ? 'Cần xem' : 'Khớp'}</span><span>Đối chiếu Đóng hàng – Kho · đơn ${esc(dmy(r.dh_ngay))} → Kho ${esc(dmy(r.kho_ngay))}${r.chot ? '' : ' (tạm tính)'}</span></div>
+      <div class="ct">${esc(r.tom_tat || '')}</div>
+      ${cb.filter(x => x.muc_do === 'loi').map(x => `<div class="small"><b style="color:var(--bad)">● ${esc(x.tieu_de)}</b></div>`).join('')}
+      <div><button type="button" class="web" id="go-dc" style="display:inline-block;padding:3px 10px">Xem đối chiếu chi tiết →</button></div></div></section>`;
   }
   function drawDc() {
     const sel = $('#dcd');
@@ -189,6 +206,7 @@ table.dc .d { display: block; font-size: .8rem; font-weight: 600; white-space: n
           ${ton ? `<td class="n ton" data-l="Tồn cuối"><b style="${x.ton_cuoi < 0 ? 'color:var(--bad)' : ''}">${fmt(x.ton_cuoi)}</b>${x.dieu_chinh ? `<span class="d khop">đ.chỉnh ${sg(x.dieu_chinh)}</span>` : ''}</td>` : ''}</tr>
           ${ton && x.danh_gia ? `<tr class="dgr"><td colspan="${nCol}"><div class="dg"><span class="pill p-${esc(x.danh_gia)}">${DG[x.danh_gia] || esc(x.danh_gia)}</span><span>${esc(x.danh_gia_text || '')}</span></div></td></tr>` : ''}`).join('')}
         </tbody></table></div>` : '<div class="empty">Tất cả mã đều đúng.</div>'}
+      ${(r.canh_bao || []).length ? `<section class="grp"><span class="lbl">Cách ghi sổ (Kho ngày ${esc(dmy(r.kho_ngay))})</span>${cbHtml(r.canh_bao)}</section>` : ''}
       ${(r.chua_ma || []).length ? `<section class="item canh_bao"><div class="bar"></div><div class="bd"><div class="tt"><span class="pill p-canh_bao">Chưa gán mã</span><span>Cột đơn chưa biết thuộc mã Kho nào</span></div>
         <div class="ct">${r.chua_ma.map(c => esc(c.cot) + ': ' + fmt(c.sl)).join('\n')}</div></div></section>` : ''}</div>`;
     $('#dc-lech').onchange = e => { D.chiLech = e.target.checked; try { localStorage.setItem('bc-dc-all', D.chiLech ? '0' : '1'); } catch (er) {} drawDc(); };
@@ -216,6 +234,7 @@ table.dc .d { display: block; font-size: .8rem; font-weight: 600; white-space: n
       D.list = q.docs.map(d => Object.assign({ id: d.id }, d.data()));
       if (!D.list.some(r => r.id === D.cur)) D.cur = D.list[0] ? D.list[0].id : '';
       if (D.list.length) drawDc();
+      if (S.runs.length) draw(); // khung đối chiếu ở tab Lỗi các web
     }, () => {});
   })();
 })();

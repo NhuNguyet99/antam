@@ -25,3 +25,11 @@ So đơn Đóng hàng ngày D (bảng Đóng hàng + Tuyến 123, `khoout/<D>` v
 - **Agent**: tác vụ định kỳ "Đối chiếu Đóng hàng – Kho (7:23, 17:23)" (phiên mới mỗi lần, báo về điện thoại). 7:23 chốt đơn hôm kia (Kho hôm qua đã xong),
   17:23 tạm tính đơn hôm qua; ghi `dc/<D>` = kết quả script + `{at, chot, nhan_xet}` (rules `dc write: admin`). Agent lấy script và bảng gán mã từ
   `cfg/doi-chieu` `{py, map}` của trang Báo cáo lỗi (rules `cfg write: admin`): sửa ở đây thì ghi lại tài liệu đó (ArtifactData set), không cần sửa tác vụ. Chạy lại một ngày: kích hoạt tác vụ kèm "ngày đơn yyyy-mm-dd".
+
+### Kiểm tra cách ghi sổ (`canh_bao`)
+Kết quả đối chiếu có thêm `canh_bao: [{loai, muc_do, tieu_de, chi_tiet}]`, hiện ở tab Đối chiếu (mục "Cách ghi sổ") và khung "Đối chiếu Đóng hàng – Kho"
+đầu tab Lỗi các web (bản đã chốt mới nhất):
+- `xuat_truoc_nhap` (cảnh báo, gộp 1 mục/ngày): mã có phiếu xuất lập trước phiếu nhập sản xuất đầu tiên trong ngày mà tồn đầu không đủ → số xuất lấy theo đơn / kế hoạch.
+- `nhap_bang_dat` (cảnh báo): mã đặt ≥ 50 có nhập sản xuất đúng y số đặt → có thể chép kế hoạch thay vì đếm.
+- `xoa_dieu_chinh` (lỗi): phiếu điều chỉnh Kho TP ngày D+1 bị xóa (đọc nhật ký `log/<D+1>`, `log/<D+2>`).
+Sốt (TPSOT001–006) đã gán mã, chỉ so số xuất.
