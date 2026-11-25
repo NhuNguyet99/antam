@@ -7488,6 +7488,13 @@ const pickNote = sel => sel ? ` · ${sel.size} sản phẩm đã chọn` : '';
 // Ô tích chọn sản phẩm ở đầu dòng (trước STT): có mã đã tích thì nút In in đúng các mã đó, chưa tích thì hỏi chọn sản phẩm
 const TICK_TH = '<th class="tick"><input type="checkbox" data-tick-all title="Chọn / bỏ tất cả dòng đang hiện" aria-label="Chọn tất cả dòng đang hiện"></th>';
 const tickTd = (set, code) => `<td class="tick"><input type="checkbox" data-tick="${esc(code)}"${set.has(code) ? ' checked' : ''} aria-label="Chọn ${esc(code)}"></td>`;
+// Nút "Chỉ xem mã đã tích": hiện khi có mã đã tích; bấm để lọc bảng chỉ còn các mã đó / xem lại tất cả
+function tickOnlyBtn(btn, set, on) {
+  if (!btn) return;
+  btn.hidden = !set.size && !on;
+  btn.classList.toggle('primary', !!on); btn.setAttribute('aria-pressed', String(!!on));
+  btn.textContent = on ? `👁 Đang xem ${set.size} mã đã tích – Xem tất cả` : `👁 Chỉ xem ${set.size} mã đã tích`;
+}
 function bindTicks(root, set, onChange) {
   const boxes = $$('input[data-tick]', root), all = $('input[data-tick-all]', root);
   const sync = () => { const n = boxes.filter(b => b.checked).length; if (all) { all.checked = boxes.length > 0 && n === boxes.length; all.indeterminate = n > 0 && n < boxes.length; } if (onChange) onChange(); };
@@ -8328,7 +8335,7 @@ async function viewNXT(main, m, q) {
     <div class="toolbar"><label class="check"><input type="checkbox" id="n-moved"> Chỉ mã có phát sinh</label>
       <label class="check"><input type="checkbox" id="n-warn"> Chỉ mã có cảnh báo</label>
       <button class="btn" id="n-pick">Sản phẩm: <b id="n-pick-l">Tất cả</b></button><button class="btn sm ghost" id="n-pick-x" hidden>✕ Bỏ chọn</button><div class="grow"></div>
-      <button class="btn sm ghost" id="n-tick-x" hidden></button><button class="btn" id="n-print">🖨 In báo cáo</button></div>
+      <button class="btn sm" id="n-tick-only" hidden></button><button class="btn sm ghost" id="n-tick-x" hidden></button><button class="btn" id="n-print">🖨 In báo cáo</button></div>
     <div id="n-kpi" class="kpis"></div><div id="n-list"></div>
     <p class="hint">Tồn đầu kỳ = Số dư ban đầu (nhập ở Danh mục hàng) + nhập − xuất + điều chỉnh trước "Từ ngày". Bấm dòng để mở thẻ kho.</p>`;
   let data = [];
@@ -8337,7 +8344,7 @@ async function viewNXT(main, m, q) {
     draw();
   }
   function filtered() {
-    return data.filter(r => (!codes || codes.has(r.code)) && (!f.grp || r.grp === f.grp) && stockOk(r) && (!f.moved || r.moved) && (!f.warn || r.warn) && (!f.q || matches(f.q, r.code + ' ' + r.name)));
+    return data.filter(r => (!f.onlyTick || tick.has(r.code)) && (!codes || codes.has(r.code)) && (!f.grp || r.grp === f.grp) && stockOk(r) && (!f.moved || r.moved) && (!f.warn || r.warn) && (!f.q || matches(f.q, r.code + ' ' + r.name)));
   }
   function draw() {
     const rows = filtered();
@@ -8365,8 +8372,12 @@ async function viewNXT(main, m, q) {
     store(tickKey, tick.size ? [...tick] : null);
     $('#n-print').textContent = tick.size ? `🖨 In ${tick.size} mã đã tích` : '🖨 In báo cáo';
     const x = $('#n-tick-x'); x.hidden = !tick.size; x.textContent = `✕ Bỏ tích (${tick.size})`;
+    if (f.onlyTick && !tick.size) { f.onlyTick = false; setTimeout(draw); }
+    else if (f.onlyTick && $$('#n-list input[data-tick]').some(b => !b.checked)) setTimeout(draw); // bỏ tích khi đang lọc: dòng đó ẩn đi
+    tickOnlyBtn($('#n-tick-only'), tick, f.onlyTick);
   }
-  $('#n-tick-x').onclick = () => { tick.clear(); draw(); };
+  $('#n-tick-x').onclick = () => { tick.clear(); f.onlyTick = false; draw(); };
+  $('#n-tick-only').onclick = () => { f.onlyTick = !f.onlyTick; draw(); };
   const upd = () => { f.from = $('#n-from').value; f.to = $('#n-to').value; load(); };
   $('#n-from').onchange = upd; $('#n-to').onchange = upd;
   $$('[data-range]').forEach(b => b.onclick = () => {
@@ -8544,7 +8555,8 @@ async function viewStocktake(main, m) {
       <div id="k-kpi" class="kpis"></div>
       <div class="toolbar"><label class="field">Nhóm<select id="k-grp">${options(groups, view.grp, 'Tất cả')}</select></label>
         <label class="field grow">Tìm<input id="k-q" value="${esc(view.q)}"></label>
-        <label class="check"><input type="checkbox" id="k-diff" ${view.onlyDiff ? 'checked' : ''}> Chỉ dòng lệch</label></div>
+        <label class="check"><input type="checkbox" id="k-diff" ${view.onlyDiff ? 'checked' : ''}> Chỉ dòng lệch</label>
+        <button class="btn sm" id="k-tick-only" hidden></button></div>
       <div class="table-wrap"><table class="data" id="k-table"><thead><tr>${TICK_TH}<th>STT</th><th>Mã hàng</th><th>Tên hàng</th><th>ĐVT</th><th>Nhóm</th><th class="num">Tồn sổ sách</th>
         <th class="num" style="width:120px">Tồn thực tế (đếm/cân)</th><th class="num">Chênh lệch</th><th class="num">% lệch</th><th class="num">Giá trị lệch</th><th>Đánh giá</th><th style="min-width:180px">Nguyên nhân / Hướng xử lý</th></tr></thead>
         <tbody id="k-rows"></tbody></table></div>
@@ -8564,6 +8576,7 @@ async function viewStocktake(main, m) {
     $('#k-grp').onchange = () => { view.grp = $('#k-grp').value; drawRows(); };
     $('#k-q').oninput = debounce(() => { view.q = $('#k-q').value; drawRows(); }, 200);
     $('#k-diff').onchange = () => { view.onlyDiff = $('#k-diff').checked; drawRows(); };
+    $('#k-tick-only').onclick = () => { view.onlyTick = !view.onlyTick; drawRows(); };
     $('#k-save').onclick = () => guard(() => { doc.title = summaryTitle(); return saveDoc(doc).then(() => draw()); });
     $('#k-print').onclick = () => printStocktake(false);
     $('#k-print-blank').onclick = () => printStocktake(true);
@@ -8592,6 +8605,7 @@ async function viewStocktake(main, m) {
       if (view.grp && r.grp !== view.grp) return;
       if (view.q && !matches(view.q, r.code + ' ' + r.name)) return;
       if (view.onlyDiff) { const c = calc(r); if (c.diff === null || c.diff === 0) return; }
+      if (view.onlyTick && !ktick.has(r.code)) return;
       const tr = document.createElement('tr');
       tr.innerHTML = `${tickTd(ktick, r.code)}<td>${i + 1}</td><td>${esc(r.code)}</td><td class="nm">${esc(r.name)}</td><td>${esc(r.unit)}</td><td class="small">${esc(r.grp)}</td>
         <td class="num">${fmt(r.book)}</td><td><input class="num" inputmode="decimal" data-k="actual" value="${r.actual === null || r.actual === undefined ? '' : esc(fmt(r.actual))}"></td>
@@ -8615,6 +8629,8 @@ async function viewStocktake(main, m) {
     bindTicks($('#k-table'), ktick, () => {
       $('#k-print').textContent = ktick.size ? `🖨 In biên bản (${ktick.size} mã đã tích)` : '🖨 In biên bản';
       $('#k-print-blank').textContent = ktick.size ? `🖨 In phiếu đếm (${ktick.size} mã đã tích)` : '🖨 In phiếu đếm (ẩn tồn sổ)';
+      if (view.onlyTick && (!ktick.size || $$('#k-rows input[data-tick]').some(b => !b.checked))) { if (!ktick.size) view.onlyTick = false; setTimeout(drawRows); }
+      tickOnlyBtn($('#k-tick-only'), ktick, view.onlyTick);
     });
   }
   async function printStocktake(blind) {
@@ -8657,6 +8673,7 @@ async function viewStocktake(main, m) {
 async function viewHandover(main, m) {
   const doc = await loadDoc('handover', m[1]);
   const htick = new Set(); // mã đã tích ở đầu dòng (để in)
+  let hOnly = false; // chỉ xem mã đã tích
   const d = doc.data;
   Object.assign(d, Object.assign({ warehouse: S.meta.warehouse.name, giver_name: S.user, giver_title: '', receiver_name: '', receiver_title: '', witness: '',
     reason: 'Bàn giao ca', scope: 'Tất cả', conclusion: '', rows: [] }, d));
@@ -8693,7 +8710,7 @@ async function viewHandover(main, m) {
       <div class="table-wrap"><table class="data" id="h-table"><thead><tr>${TICK_TH}<th>STT</th><th>Mã hàng</th><th>Tên hàng hóa</th><th>ĐVT</th><th class="num">Tồn sổ sách</th>
       <th class="num" style="width:120px">SL thực tế bàn giao</th><th class="num">Chênh lệch</th><th class="num">Giá trị tồn</th><th>Tình trạng hàng</th><th>Ghi chú</th></tr></thead><tbody id="h-rows"></tbody></table></div>
       <div class="form-actions"><button class="btn primary" id="h-save">💾 Lưu biên bản</button><button class="btn primary" id="h-saveprint">💾🖨 Lưu &amp; in</button><button class="btn" id="h-print">🖨 In biên bản</button>
-      <button class="btn" id="h-refresh">↻ Lấy lại danh sách tồn</button>${doc.id ? '<button class="btn danger" id="h-del">Xóa</button>' : ''}<a class="btn ghost" href="#/ban-giao">← Danh sách</a></div>`;
+      <button class="btn" id="h-refresh">↻ Lấy lại danh sách tồn</button><button class="btn sm" id="h-tick-only" hidden></button>${doc.id ? '<button class="btn danger" id="h-del">Xóa</button>' : ''}<a class="btn ghost" href="#/ban-giao">← Danh sách</a></div>`;
     const b = (id, k) => { $(id).oninput = $(id).onchange = () => { d[k] = $(id).value; markDirty(); }; };
     b('#h-wh', 'warehouse'); b('#h-reason', 'reason'); b('#h-gn', 'giver_name'); b('#h-gt', 'giver_title'); b('#h-rn', 'receiver_name');
     b('#h-rt', 'receiver_title'); b('#h-w', 'witness'); b('#h-c', 'conclusion');
@@ -8704,6 +8721,7 @@ async function viewHandover(main, m) {
     $('#h-save').onclick = save;
     $('#h-saveprint').onclick = async () => { if (await save()) printIt(); }; // lưu xong mở bản in luôn
     $('#h-print').onclick = printIt;
+    $('#h-tick-only').onclick = () => { hOnly = !hOnly; drawRows(); };
     if (doc.id) $('#h-del').onclick = () => deleteDoc(doc);
     drawRows();
   }
@@ -8724,6 +8742,7 @@ async function viewHandover(main, m) {
     const tb = $('#h-rows');
     tb.innerHTML = '';
     d.rows.forEach((r, i) => {
+      if (hOnly && !htick.has(r.code)) return;
       const tr = document.createElement('tr');
       tr.innerHTML = `${tickTd(htick, r.code)}<td>${i + 1}</td><td>${esc(r.code)}</td><td class="nm">${esc(r.name)}</td><td>${esc(r.unit)}</td><td class="num">${fmt(r.book)}</td>
         <td><input class="num" inputmode="decimal" data-k="actual" value="${r.actual === null || r.actual === undefined ? '' : esc(fmt(r.actual))}"></td>
@@ -8745,7 +8764,11 @@ async function viewHandover(main, m) {
     });
     if (!d.rows.length) tb.innerHTML = '<tr><td colspan="11" class="muted">Không có mã nào còn tồn trong phạm vi này.</td></tr>';
     drawKpi();
-    bindTicks($('#h-table'), htick, () => { $('#h-print').textContent = htick.size ? `🖨 In biên bản (${htick.size} mã đã tích)` : '🖨 In biên bản'; });
+    bindTicks($('#h-table'), htick, () => {
+      $('#h-print').textContent = htick.size ? `🖨 In biên bản (${htick.size} mã đã tích)` : '🖨 In biên bản';
+      if (hOnly && (!htick.size || $$('#h-rows input[data-tick]').some(b => !b.checked))) { if (!htick.size) hOnly = false; setTimeout(drawRows); }
+      tickOnlyBtn($('#h-tick-only'), htick, hOnly);
+    });
   }
   async function printIt() {
     const sel = await pickOrTicks(htick, { title: 'Chọn sản phẩm in biên bản bàn giao', items: d.rows, key: 'bg' });
