@@ -197,6 +197,12 @@ tr.sum td { font-weight: 700; }
 .lb .lb-bar { display: flex; gap: 8px; align-items: center; justify-content: space-between; }
 .lb button { background: rgba(255, 255, 255, .14); color: #fff; border: 0; border-radius: 9px; padding: 8px 14px; }
 @media (prefers-reduced-motion: no-preference) { .dots::after { content: "…"; animation: blink 1s steps(3) infinite; } @keyframes blink { 50% { opacity: .3; } } }
+
+/* máy tính bảng / điện thoại (màn cảm ứng): chữ ô nhập 16px để điện thoại không tự phóng to khi gõ, ô đánh dấu to dễ bấm */
+@media (pointer: coarse) {
+  input:not([type=checkbox]):not([type=radio]), select, textarea { font-size: 16px; }
+  input[type=checkbox], input[type=radio] { width: 22px; height: 22px; }
+}
 </style>
 <style>
 /* chữ to hơn 15% trên máy tính */

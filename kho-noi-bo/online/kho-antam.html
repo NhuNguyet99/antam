@@ -327,6 +327,39 @@ body.locked #sidebar, body.locked #topbar, body.locked #ro-banner { display: non
   .perm-grid legend { font-size: 16.5px; }
 }
 
+/* =================================================== MÁY TÍNH BẢNG / ĐIỆN THOẠI */
+.grid > * { min-width: 0; } /* bảng rộng trong ô lưới không đẩy tràn trang (bảng tự cuộn ngang trong .table-wrap) */
+#page-title { flex: 1 1 auto; min-width: 0; }
+.toast { max-width: min(420px, calc(100vw - 32px)); }
+@media (max-width: 560px) {
+  .grid.c2, .grid.c3, .grid.c4 { grid-template-columns: minmax(0, 1fr); }
+  #topbar { padding: 8px 10px; gap: 6px; }
+  #page-title { font-size: 16.5px; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  #user-btn { max-width: 34vw; overflow: hidden; text-overflow: ellipsis; display: inline-block; white-space: nowrap; }
+  #toasts { left: 12px; right: 12px; bottom: 12px; }
+  main { padding: 12px 12px 60px; }
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .modal { padding: 14px; }
+}
+/* màn cảm ứng: nút, ô nhập to dễ bấm; chữ ô nhập 16px để điện thoại không tự phóng to khi gõ */
+@media (pointer: coarse) {
+  .btn { min-height: 40px; }
+  .btn.sm { min-height: 34px; }
+  input, select, textarea { font-size: 16px; }
+  #nav a { padding: 10px 12px; }
+  table.data input:not([type=checkbox]):not([type=radio]), table.data select { min-height: 36px; }
+  table.data td > input[type=checkbox], table.data th > input[type=checkbox] { width: 20px; height: 20px; }
+}
+/* bảng trên màn hẹp: chữ không bị bóp thành cột rất hẹp (hàng cao vống) – bảng rộng ra và cuộn ngang trong khung */
+@media (max-width: 1100px) {
+  .table-wrap table.data td:not(.num):not(.tick):not(.nowrap) { min-width: 7.5em; }
+  .table-wrap table.data td.txt-long { min-width: 16em; }
+  .table-wrap { -webkit-overflow-scrolling: touch; }
+}
+@media (max-width: 560px) {
+  .btn { max-width: 100%; white-space: normal; text-align: left; }
+}
+
 /* Web giao hàng An Tâm (điện thoại trước) – dùng chung cho trang /giao-hang và chế độ giao hàng của bản online */
 #gh-root {
   --gh-bg: #f2f4f3;
@@ -4385,7 +4418,7 @@ async function viewVoucherList(main, m, q = {}) {
       <th class="num">Dòng</th><th class="num">Tổng SL</th><th>Người giao → nhận</th><th></th></tr></thead><tbody>
       ${list.map(v => `<tr class="clickable" data-id="${v.id}"><td><input type="checkbox" data-sel="${v.id}" ${sel.has(String(v.id)) ? 'checked' : ''}></td>
         <td class="nowrap">${vnDate(v.date)}</td><td class="nowrap"><b>${esc(v.no)}</b></td><td class="nowrap"><span class="badge ${v.type}">${TYPE_LABEL[v.type]}</span>${STATUS[v.status] ? ` <span class="badge ${STATUS[v.status][0]}">${STATUS[v.status][1]}</span>` : ''}</td>
-        <td>${esc(v.route || v.to_party)}</td><td>${esc(v.reason)}</td><td class="num">${v.line_count}</td><td class="num">${fmt(v.total_qty)}</td>
+        <td>${esc(v.route || v.to_party)}</td><td class="txt-long">${esc(v.reason)}</td><td class="num">${v.line_count}</td><td class="num">${fmt(v.total_qty)}</td>
         <td class="small">${esc(v.giver)}${v.receiver ? ' → ' + esc(v.receiver) : ''}</td>
         <td class="nowrap"><button class="btn sm" data-print="${v.id}">In</button></td></tr>`).join('')}
       </tbody></table></div><p class="hint">${list.length} phiếu${f.status ? (f.status === 'pending' ? ' chờ duyệt (mọi ngày)' : ' bị từ chối (mọi ngày)') : ''}. Bấm vào dòng để xem${f.status === 'pending' && S.account && can('duyet') ? ' và duyệt' : ' / sửa'}.${S.account ? ' Phiếu chờ duyệt / bị từ chối chưa tính vào tồn kho.' : ''}</p>`

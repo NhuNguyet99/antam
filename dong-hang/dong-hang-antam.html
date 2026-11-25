@@ -439,6 +439,20 @@ body.drag-on, body.drag-on * { cursor: grabbing !important; user-select: none; }
 .toast { background: var(--ink); color: var(--bg); padding: 9px 14px; border-radius: 6px; box-shadow: var(--shadow); max-width: 420px; }
 .toast.err { background: var(--bad); color: #fff; }
 
+/* máy tính bảng / điện thoại: các mục thành 1 hàng riêng, vuốt ngang */
+@media (max-width: 1279px) {
+  .tabs { order: 3; flex-basis: 100%; overflow-x: auto; flex-wrap: nowrap; scrollbar-width: none; -webkit-overflow-scrolling: touch; padding-bottom: 2px; }
+  .tabs::-webkit-scrollbar { display: none; }
+  #cf-list td.cedit[data-cf="name"] { min-width: 16em; }
+  #cf-list td.cedit[data-cf="note"] { min-width: 11em; }
+  #cf-list td.cedit[data-cf="q"] { min-width: 6em; }
+  #cf-list td.mono { white-space: nowrap; }
+}
+@media (pointer: coarse) {
+  .btn { min-height: 40px; } .btn.sm { min-height: 34px; }
+  input, select, textarea { font-size: 16px; }
+  .tabs button { padding: 10px 13px; }
+}
 @media (max-width: 640px) {
   .tabs { order: 3; flex-basis: 100%; overflow-x: auto; flex-wrap: nowrap; }
   .orders .cust { min-width: 150px; }

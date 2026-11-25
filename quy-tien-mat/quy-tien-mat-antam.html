@@ -198,6 +198,12 @@ tr.tot td { font-weight: 700; border-top: 2px solid var(--ink) }
   .hide-sm { display: none }
 }
 @media (prefers-reduced-motion: no-preference) { .btn, nav.tabs a { transition: border-color .15s, color .15s, background .15s } }
+
+/* máy tính bảng / điện thoại (màn cảm ứng): chữ ô nhập 16px để điện thoại không tự phóng to khi gõ, ô đánh dấu to dễ bấm */
+@media (pointer: coarse) {
+  input:not([type=checkbox]):not([type=radio]), select, textarea { font-size: 16px; }
+  input[type=checkbox], input[type=radio] { width: 22px; height: 22px; }
+}
 </style>
 <!-- err-log:start -->
 <script>window.ANTAM_ERRLOG = {"web": "Quỹ tiền mặt"};</script>

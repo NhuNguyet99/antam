@@ -82,6 +82,12 @@ table.dc .d { display: block; font-size: .8rem; font-weight: 600; white-space: n
 .d.thieu { color: var(--bad) } .d.thua { color: var(--warn) } .d.khop, .d.khong { color: var(--muted); font-weight: 400 }
 .bar2 { display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; justify-content: space-between }
 .chk { display: inline-flex; gap: 6px; align-items: center; font-size: .9rem; cursor: pointer }
+
+/* máy tính bảng / điện thoại (màn cảm ứng): chữ ô nhập 16px để điện thoại không tự phóng to khi gõ, ô đánh dấu to dễ bấm */
+@media (pointer: coarse) {
+  input:not([type=checkbox]):not([type=radio]), select, textarea { font-size: 16px; }
+  input[type=checkbox], input[type=radio] { width: 22px; height: 22px; }
+}
 </style>
 
 <div class="wrap">

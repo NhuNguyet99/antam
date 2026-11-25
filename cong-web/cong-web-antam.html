@@ -59,6 +59,12 @@ h2 .n { font-family: var(--f-mono); font-size: 13px; color: var(--muted); letter
 .back { font: inherit; font-size: 15.5px; padding: 6px 12px; border-radius: 8px; border: 1px solid var(--accent); background: transparent; color: var(--accent); cursor: pointer; }
 .tip { font-size: 15.5px; color: var(--ink-2); background: var(--panel); border: 1px dashed var(--line); border-radius: var(--r); padding: 10px 14px; margin: 0; }
 @media (prefers-reduced-motion: no-preference) { .card { transition: border-color .15s, box-shadow .15s; } .card:hover { box-shadow: 0 4px 16px rgba(15, 110, 90, .08); } }
+
+/* máy tính bảng / điện thoại (màn cảm ứng): chữ ô nhập 16px để điện thoại không tự phóng to khi gõ, ô đánh dấu to dễ bấm */
+@media (pointer: coarse) {
+  input:not([type=checkbox]):not([type=radio]), select, textarea { font-size: 16px; }
+  input[type=checkbox], input[type=radio] { width: 22px; height: 22px; }
+}
 </style>
 <style>
 /* chữ to hơn 15% trên máy tính */

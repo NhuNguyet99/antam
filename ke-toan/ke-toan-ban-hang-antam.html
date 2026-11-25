@@ -135,6 +135,12 @@ tfoot td { font-weight: 700; background: var(--raise); }
 .ed input[type="text"] { width: 100%; }
 hr { border: 0; border-top: 1px solid var(--line); margin: 0; }
 @media (prefers-reduced-motion: no-preference) { .toast { animation: tin .25s ease; } @keyframes tin { from { transform: translateY(8px); opacity: .4; } } }
+
+/* máy tính bảng / điện thoại (màn cảm ứng): chữ ô nhập 16px để điện thoại không tự phóng to khi gõ, ô đánh dấu to dễ bấm */
+@media (pointer: coarse) {
+  input:not([type=checkbox]):not([type=radio]), select, textarea { font-size: 16px; }
+  input[type=checkbox], input[type=radio] { width: 22px; height: 22px; }
+}
 </style>
 <style>
 /* chữ to hơn 15% trên máy tính */

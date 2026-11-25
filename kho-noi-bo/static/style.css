@@ -324,3 +324,36 @@ body.locked #sidebar, body.locked #topbar, body.locked #ro-banner { display: non
   .login-card h2 { font-size: 27.5px; }
   .perm-grid legend { font-size: 16.5px; }
 }
+
+/* =================================================== MÁY TÍNH BẢNG / ĐIỆN THOẠI */
+.grid > * { min-width: 0; } /* bảng rộng trong ô lưới không đẩy tràn trang (bảng tự cuộn ngang trong .table-wrap) */
+#page-title { flex: 1 1 auto; min-width: 0; }
+.toast { max-width: min(420px, calc(100vw - 32px)); }
+@media (max-width: 560px) {
+  .grid.c2, .grid.c3, .grid.c4 { grid-template-columns: minmax(0, 1fr); }
+  #topbar { padding: 8px 10px; gap: 6px; }
+  #page-title { font-size: 16.5px; line-height: 1.25; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+  #user-btn { max-width: 34vw; overflow: hidden; text-overflow: ellipsis; display: inline-block; white-space: nowrap; }
+  #toasts { left: 12px; right: 12px; bottom: 12px; }
+  main { padding: 12px 12px 60px; }
+  .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 8px; }
+  .modal { padding: 14px; }
+}
+/* màn cảm ứng: nút, ô nhập to dễ bấm; chữ ô nhập 16px để điện thoại không tự phóng to khi gõ */
+@media (pointer: coarse) {
+  .btn { min-height: 40px; }
+  .btn.sm { min-height: 34px; }
+  input, select, textarea { font-size: 16px; }
+  #nav a { padding: 10px 12px; }
+  table.data input:not([type=checkbox]):not([type=radio]), table.data select { min-height: 36px; }
+  table.data td > input[type=checkbox], table.data th > input[type=checkbox] { width: 20px; height: 20px; }
+}
+/* bảng trên màn hẹp: chữ không bị bóp thành cột rất hẹp (hàng cao vống) – bảng rộng ra và cuộn ngang trong khung */
+@media (max-width: 1100px) {
+  .table-wrap table.data td:not(.num):not(.tick):not(.nowrap) { min-width: 7.5em; }
+  .table-wrap table.data td.txt-long { min-width: 16em; }
+  .table-wrap { -webkit-overflow-scrolling: touch; }
+}
+@media (max-width: 560px) {
+  .btn { max-width: 100%; white-space: normal; text-align: left; }
+}

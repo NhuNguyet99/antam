@@ -1016,7 +1016,7 @@ async function viewVoucherList(main, m, q = {}) {
       <th class="num">Dòng</th><th class="num">Tổng SL</th><th>Người giao → nhận</th><th></th></tr></thead><tbody>
       ${list.map(v => `<tr class="clickable" data-id="${v.id}"><td><input type="checkbox" data-sel="${v.id}" ${sel.has(String(v.id)) ? 'checked' : ''}></td>
         <td class="nowrap">${vnDate(v.date)}</td><td class="nowrap"><b>${esc(v.no)}</b></td><td class="nowrap"><span class="badge ${v.type}">${TYPE_LABEL[v.type]}</span>${STATUS[v.status] ? ` <span class="badge ${STATUS[v.status][0]}">${STATUS[v.status][1]}</span>` : ''}</td>
-        <td>${esc(v.route || v.to_party)}</td><td>${esc(v.reason)}</td><td class="num">${v.line_count}</td><td class="num">${fmt(v.total_qty)}</td>
+        <td>${esc(v.route || v.to_party)}</td><td class="txt-long">${esc(v.reason)}</td><td class="num">${v.line_count}</td><td class="num">${fmt(v.total_qty)}</td>
         <td class="small">${esc(v.giver)}${v.receiver ? ' → ' + esc(v.receiver) : ''}</td>
         <td class="nowrap"><button class="btn sm" data-print="${v.id}">In</button></td></tr>`).join('')}
       </tbody></table></div><p class="hint">${list.length} phiếu${f.status ? (f.status === 'pending' ? ' chờ duyệt (mọi ngày)' : ' bị từ chối (mọi ngày)') : ''}. Bấm vào dòng để xem${f.status === 'pending' && S.account && can('duyet') ? ' và duyệt' : ' / sửa'}.${S.account ? ' Phiếu chờ duyệt / bị từ chối chưa tính vào tồn kho.' : ''}</p>`
