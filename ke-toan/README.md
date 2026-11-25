@@ -10,10 +10,20 @@ Chủ trang vào thẳng, bấm nút 👤 ở thanh bên › **+ Thêm tài kho�
 
 ## Báo cáo ca
 
-Mục **Báo cáo ca** lập ngay trên web 3 báo cáo trước đây làm bằng Excel: Tổng hợp đơn hàng (16 chỉ tiêu), Số lượng giao theo loại bánh, Công nợ theo khách hàng. Kèm danh sách đơn chưa thanh toán, nút Copy gửi Zalo, Tải Excel và Chốt báo cáo.
+Mục **Báo cáo ca** lập ngay trên web các báo cáo trước đây làm bằng Excel: Số lượng giao hàng theo loại bánh, Tổng hợp đơn hàng (16 chỉ tiêu), Tổng hợp công nợ theo khách hàng, Danh sách đơn chưa thanh toán. Có Copy gửi Zalo, Tải Excel, Chốt báo cáo và khối **Đối chiếu với file Excel**.
 
-- **Nhập file**: kéo file Đơn đặt hàng (MISA), Thống kê chi tiết bán hàng (CRM) hoặc chính file báo cáo Excel đang dùng. Web nhận sheet theo tên cột, không theo tên sheet. Chọn ngày và ca (ngày / đêm / cập nhật, không theo ca).
-- **Ca**: khoảng số đơn của ca lấy từ các đơn trong file nhập với ca đó (`ca/<ngày>`). Báo cáo loại bánh tính theo cả ngày CRM, như file Excel.
-- **Loại bánh**: TORTILASS gồm TORTILASS và TACOS; BÁNH MỲ KEBAB gồm BÁNH MỲ/BÁNH MÌ; Thịt KEBAB gồm THỊT; bỏ PHỤ PHÍ. Đã giao = "Giao thành công".
-- **Công nợ cũ**: đơn trước ca còn nợ theo lần nhập mới nhất (`cn/open`). Thu nợ cũ = tiền thu thêm của đơn cũ ghi nhận khi nhập file (`cn/pay-<ngày>`). Đầu kỳ = còn lại + thu. Sheet "Công nợ cũ" chỉ dùng để khởi tạo; số chính xác nhất khi nhập định kỳ Đơn đặt hàng MISA từ đầu tháng trước.
-- Dữ liệu: `dh/<ngày đơn>`, `crm/<ngày>`, `ca/<ngày>`, `cn/open`, `cn/pay-<ngày>`, `meta/khht`, `bcca/<ngày>-<ca>` (bản chốt).
+- **Nhập file**: kéo file báo cáo Excel của ca. Web đọc đủ 6 sheet, nhận theo tên cột:
+  - Đơn đặt hàng → `dh/<ngày>`;
+  - BC-CRM → `crm/<ngày>` và `crm/<ngày>-<ca>`;
+  - KH chưa thanh toán (gồm cột Số tiền đã thanh toán nhập tay) và Công nợ cũ → sổ công nợ `cnbook/<yyyy-mm>`;
+  - KHACH HÀNG HO TRO → `meta/khht`;
+  - Báo cáo tổng hợp → `xl/<ngày>-<ca>` (chỉ để đối chiếu).
+  Cũng nhận file xuất thẳng từ MISA / CRM.
+- **Mỗi ca có sổ Công nợ cũ riêng** (file ca ngày chứa đơn ca ngày, file ca đêm chứa đơn ca đêm). Sổ ghi theo ca đã chọn khi nhập.
+- **Sổ công nợ**: mỗi đơn `[ngày, mã KH, giá trị, còn phải thu, đã thanh toán, sổ ca]`. Đơn dán trùng chỉ tính 1 lần, lấy số đã thanh toán lớn nhất. Thực thu MISA tăng ở lần nhập sau được tính là đã thanh toán.
+- **Công thức**: dòng 2–11 từ Đơn đặt hàng (bỏ đơn hủy). 12 = Σ còn phải thu các đơn trước ca trong sổ của ca; 13 = Σ đã thanh toán; 14 = 12 − 13; 15 = 11 + 14. Còn nợ kỳ này = còn phải thu − số đã thanh toán ghi ở KH chưa thanh toán.
+- **Loại bánh**: TORTILASS gồm TORTILASS, TACOS; BÁNH MỲ KEBAB gồm BÁNH MỲ/BÁNH MÌ; Thịt KEBAB gồm THỊT; bỏ PHỤ PHÍ. Luôn hiện các dòng cố định như file Excel. Đã giao = "Giao thành công".
+- **Đối chiếu 24/11/2026**: dòng 2–11 và loại bánh ca đêm khớp Excel. Chỗ lệch đều do lỗi của file Excel:
+  - Công nợ cũ: đơn dán 2 lần; ca đêm dư khoảng 25,8 triệu.
+  - Ca ngày bỏ sót 24 túi TACOS (dòng kiểm tra của file báo 24).
+  - Sheet KH chưa thanh toán ca ngày chỉ có công thức cho 28 dòng nên thiếu 6 đơn.
