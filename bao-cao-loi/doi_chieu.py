@@ -163,17 +163,17 @@ if truoc:
     truoc.sort(key=lambda x: -(x[1] - x[2]))
     canh_bao.append({'loai': 'xuat_truoc_nhap', 'muc_do': 'canh_bao', 'code': '',
                      'tieu_de': '%d mã lập phiếu xuất trước khi có phiếu nhập sản xuất' % len(truoc),
-                     'chi_tiet': 'Số xuất đang lấy theo đơn / kế hoạch, chưa theo số thực bốc lên xe – giao thiếu sẽ bị che (nhập và xuất cùng dư, tồn vẫn khớp). '
-                                 'Kho kiểm tra số thực xuất từng tuyến. ' + '; '.join(
-                                     '%s: xuất %s lúc %s, tồn đầu %s, nhập SX lúc %s' % (t, fmt(q), hm(x0), fmt(t0), hm(n0)) for t, q, t0, x0, n0 in truoc[:8])
-                                 + (' và %d mã khác' % (len(truoc) - 8) if len(truoc) > 8 else '') + '.'})
+                     'chi_tiet': 'Phiếu xuất đang lấy số theo đơn / kế hoạch, chưa theo số thực bốc lên xe nên giao thiếu bị che. '
+                                 'Kho kiểm tra lại số thực xuất từng tuyến.',
+                     'bang': {'cot': ['Sản phẩm', 'Đã xuất', 'Lập phiếu xuất', 'Tồn đầu', 'Nhập SX lúc'],
+                              'dong': [[t, fmt(q), hm(x0), fmt(t0), hm(n0)] for t, q, t0, x0, n0 in truoc]}})
 # 2. nhập sản xuất đúng y số đặt (mã số lượng lớn) → có thể chép kế hoạch thay vì đếm thực tế
-for r in rows:
-    if r['sx'] != 'khong' and r['dat'] >= 50 and abs(r['nhap'] - r['dat']) < 0.001:
-        canh_bao.append({'loai': 'nhap_bang_dat', 'muc_do': 'canh_bao', 'code': r['code'],
-                         'tieu_de': '%s: nhập sản xuất đúng bằng số đặt (%s)' % (r['ten'] or r['code'], fmt(r['dat'])),
-                         'chi_tiet': 'Nếu số nhập chép từ kế hoạch thay vì đếm khi bánh vào kho, phần làm thiếu bị che '
-                                     '(nhập và xuất cùng dư, tồn vẫn khớp). Kho xác nhận đây là số đếm thực tế.'})
+bang_dat = [r for r in rows if r['sx'] != 'khong' and r['dat'] >= 50 and abs(r['nhap'] - r['dat']) < 0.001]
+if bang_dat:
+    canh_bao.append({'loai': 'nhap_bang_dat', 'muc_do': 'canh_bao', 'code': '',
+                     'tieu_de': '%d mã nhập sản xuất đúng bằng số đặt' % len(bang_dat),
+                     'chi_tiet': 'Nếu số nhập chép từ kế hoạch thay vì đếm khi bánh vào kho, phần làm thiếu bị che. Kho xác nhận đây là số đếm thực tế.',
+                     'bang': {'cot': ['Sản phẩm', 'Đặt', 'Nhập SX'], 'dong': [[r['ten'] or r['code'], fmt(r['dat']), fmt(r['nhap'])] for r in bang_dat]}})
 # 3. phiếu điều chỉnh của ngày Kho D1 bị xóa (nhật ký thao tác log/<ngày>, thư mục dữ liệu/log) → lệch kiểm kê bị che
 log_dir = os.path.join(base, 'log')
 if os.path.isdir(log_dir):
@@ -193,10 +193,9 @@ if os.path.isdir(log_dir):
                 continue
             canh_bao.append({'loai': 'xoa_dieu_chinh', 'muc_do': 'loi', 'code': '',
                              'tieu_de': 'Phiếu điều chỉnh %s bị xóa' % str(e.get('target')).replace('[TP] ', ''),
-                             'chi_tiet': '%s xóa lúc %s. Phiếu ngày %s: %s · lý do: %s. Phiếu điều chỉnh (nhất là theo kiểm kê) phản ánh lệch thực tế '
-                                         '– xóa đi thì phần lệch bị che; Quản lý hỏi lại người xóa.' % (
-                                             e.get('who', '?'), e.get('at', '?'), tr.get('ngày', '?'), ', '.join(tr.get('dòng') or []),
-                                             ((tr.get('v') or {}).get('reason') or '—'))})
+                             'chi_tiet': 'Phiếu điều chỉnh (nhất là theo kiểm kê) ghi phần lệch thực tế; xóa đi thì lệch bị che. Quản lý hỏi lại người xóa.',
+                             'bang': {'cot': ['Người xóa', 'Lúc', 'Hàng', 'Lý do'],
+                                      'dong': [[e.get('who', '?'), str(e.get('at', ''))[5:16], ', '.join(tr.get('dòng') or []), ((tr.get('v') or {}).get('reason') or '—')]]}})
 
 
 def ds(lst, k):
