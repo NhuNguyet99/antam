@@ -21,7 +21,7 @@ SITES = [
     ('quy-tien-mat/quy-tien-mat-antam.html', {'site': 'qtm', 'title': 'Quỹ tiền mặt An Tâm', 'slot': '#gate-slot'}, 'Quỹ tiền mặt'),
     ('ke-toan/ke-toan-ban-hang-antam.html', {'site': 'ktbh', 'title': 'Kế toán bán hàng An Tâm', 'slot': '#gate-slot'}, 'Kế toán bán hàng'),
     ('kho-van/kho-van-antam.html', None, 'Kho vận'),
-    ('cham-cong/cham-cong-antam.html', {'site': 'cc', 'title': 'Chấm công An Tâm', 'slot': '#gate-slot'}, 'Chấm công'),
+    ('cham-cong/cham-cong-antam.html', None, 'Chấm công'),
 ]
 
 

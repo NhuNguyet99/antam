@@ -3,7 +3,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Be+Vietnam+Pro:wght@400;500;600;700&family=Roboto+Mono:wght@400;500;600&display=swap">
 <style>
-/* Layout: thanh trên cùng (tên web · menu · tài khoản), vùng chính bên dưới; điện thoại nhân viên là màn chính, máy QR là màn hình lớn đặt ở cửa */
+/* Layout: thanh trên cùng (tên web · menu), vùng chính bên dưới; mục Máy chấm công là màn hình đặt ở cửa, cắm máy đọc mã QR */
 :root {
   --bg: #f2f4f1; --surface: #ffffff; --raise: #f7f9f6; --fg: #18211d; --muted: #5b6862; --line: #dce2dc;
   --accent: #1c6b5a; --accent-fg: #ffffff; --accent-soft: #e0eee8;
@@ -133,15 +133,27 @@ body.kiosk-full .main { max-width: none; }
 .month td.name { position: sticky; left: 0; background: var(--surface); z-index: 1; font-weight: 600; }
 .toasts { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: max(16px, env(safe-area-inset-bottom, 0px)); z-index: 60; display: grid; gap: 8px; width: min(380px, calc(100% - 32px)); }
 .toast { background: var(--fg); color: var(--bg); padding: 10px 14px; border-radius: 10px; font-size: 15.5px; box-shadow: 0 4px 16px rgba(0, 0, 0, .2); }
+/* Máy chấm công */
+.scan-box { gap: 16px; }
+.hit { border-radius: 14px; padding: 28px 20px; display: grid; gap: 8px; justify-items: center; text-align: center; min-height: 230px; align-content: center; background: var(--raise); border: 1px solid var(--line); }
+.hit.ok { background: var(--ok-soft); border-color: var(--ok); }
+.hit.dup { background: var(--info-soft); border-color: var(--info); }
+.hit.bad { background: var(--crit-soft); border-color: var(--crit); color: var(--crit); }
+.hit-l { font-size: 26px; font-weight: 700; }
+.hit-n { font-size: 34px; font-weight: 700; line-height: 1.2; text-wrap: balance; }
+.hit-t { font-size: 30px; font-weight: 600; display: flex; gap: 10px; align-items: center; }
+.hit-t .pill { font-size: 20px; padding: 2px 14px; }
+.btn.big { font-size: 20px; padding: 12px 28px; }
+.scan-in input { flex: 1 1 14em; font-family: var(--f-mono); }
+.mini-qr svg { display: block; width: 44px; height: 44px; border-radius: 4px; }
+details summary { cursor: pointer; }
 </style>
 
 <div class="top"><div class="top-in">
   <div class="brand"><span class="dot"></span>Chấm công An Tâm</div>
   <nav class="nav" id="nav" aria-label="Mục"></nav>
-  <div id="gate-slot"></div>
 </div></div>
 <main class="main" id="view"><div class="empty">Đang tải…</div></main>
-<div id="done" hidden></div>
 <div class="toasts" id="toasts" aria-live="polite"></div>
 <input type="file" id="snap" accept="image/*" capture="environment" hidden>
 
@@ -199,205 +211,17 @@ body.kiosk-full .main { max-width: none; }
 })();
 </script>
 <!-- err-log:end -->
-<!-- nick-gate:start -->
-<script>window.NICK_GATE = {"site": "cc", "title": "Chấm công An Tâm", "slot": "#gate-slot"};</script>
-<style id="nick-gate-css">
-/* Khóa trang bằng nick + mật khẩu: chưa đăng nhập thì ẩn toàn bộ trang, chỉ hiện ô đăng nhập */
-html.ng-locked body > *:not([id^="ng-"]):not(script):not(style):not(link):not(title):not(meta) { display: none !important; }
-#ng-gate { position: fixed; inset: 0; z-index: 9000; display: grid; place-items: center; overflow: auto; background: var(--bg, #f2f4f1); color: var(--fg, var(--ink, #18211d));
-  padding: max(24px, env(safe-area-inset-top, 0px)) max(16px, env(safe-area-inset-right, 0px)) max(24px, env(safe-area-inset-bottom, 0px)) max(16px, env(safe-area-inset-left, 0px)); }
-#ng-gate[hidden], #ng-panel[hidden] { display: none !important; }
-.ng-card { width: min(420px, 100%); background: var(--surface, #fff); border: 1px solid var(--line, #dce2dc); border-radius: 14px; padding: 22px; display: grid; gap: 12px; box-shadow: 0 6px 24px rgba(0, 0, 0, .08); }
-.ng-card h1 { margin: 0; font-size: 1.35em; line-height: 1.25; }
-.ng-card p { margin: 0; color: var(--muted, #5b6862); font-size: .92em; }
-.ng-f { display: grid; gap: 4px; font-size: .9em; color: var(--muted, #5b6862); }
-.ng-f input, .ng-f select { font: inherit; color: var(--fg, var(--ink, #18211d)); border: 1px solid var(--line, #dce2dc); background: var(--surface, #fff); border-radius: 8px; padding: 9px 11px; min-width: 0; width: 100%; }
-.ng-btn { font: inherit; border: 1px solid var(--line, #dce2dc); background: var(--surface, #fff); color: inherit; border-radius: 8px; padding: 8px 14px; cursor: pointer; font-weight: 600; white-space: nowrap; }
-.ng-btn.pri { background: var(--accent, #1c6b5a); border-color: var(--accent, #1c6b5a); color: var(--accent-fg, var(--accent-ink, #fff)); }
-.ng-btn.sm { padding: 4px 10px; font-size: .88em; }
-.ng-btn:disabled { opacity: .55; cursor: default; }
-.ng-err { color: var(--crit, var(--chi, #b42318)); font-size: .9em; min-height: 1.2em; }
-.ng-me { display: inline-flex; gap: 6px; align-items: center; border: 1px solid var(--line, #dce2dc); background: var(--surface, #fff); color: inherit; border-radius: 999px; padding: 4px 11px; font: inherit; font-size: .86em; cursor: pointer; white-space: nowrap; max-width: 100%; overflow: hidden; text-overflow: ellipsis; }
-#ng-fixed { position: fixed; left: calc(10px + env(safe-area-inset-left, 0px)); bottom: calc(10px + env(safe-area-inset-bottom, 0px)); z-index: 8000; }
-#ng-panel { position: fixed; inset: 0; z-index: 9100; background: rgba(10, 16, 14, .42); display: grid; place-items: start center; overflow-y: auto;
-  padding: max(24px, env(safe-area-inset-top, 0px)) max(12px, env(safe-area-inset-right, 0px)) max(24px, env(safe-area-inset-bottom, 0px)) max(12px, env(safe-area-inset-left, 0px)); }
-#ng-panel .ng-card { width: min(680px, 100%); color: var(--fg, var(--ink, #18211d)); }
-.ng-row { display: flex; flex-wrap: wrap; gap: 8px; align-items: center; }
-.ng-grow { flex: 1 1 auto; }
-.ng-tbl { overflow-x: auto; border: 1px solid var(--line, #dce2dc); border-radius: 8px; }
-.ng-tbl table { border-collapse: collapse; width: 100%; font-size: .92em; }
-.ng-tbl th, .ng-tbl td { padding: 7px 9px; text-align: left; border-bottom: 1px solid var(--line, #dce2dc); white-space: nowrap; }
-.ng-tbl th { font-size: .8em; text-transform: uppercase; letter-spacing: .04em; color: var(--muted, #5b6862); }
-.ng-tbl tr.off td { color: var(--muted, #5b6862); }
-.ng-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(min(200px, 100%), 1fr)); gap: 10px; }
-.ng-chk { display: inline-flex; gap: 6px; align-items: center; font-size: .92em; }
-</style>
-<script id="nick-gate">
-(function () {
-  'use strict';
-  const C = window.NICK_GATE || {}, SITE = C.site || 'site', TITLE = C.title || document.title;
-  const KEY = 'ng-' + SITE + '-sess', DAYS = 30, root = document.documentElement;
-  root.classList.add('ng-locked');
-  const $ = (s, r) => (r || document).querySelector(s);
-  const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
-  const norm = v => String(v || '').normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/đ/g, 'd').replace(/Đ/g, 'D').toLowerCase().replace(/[^a-z0-9._-]/g, '');
-  const hex = b => Array.from(new Uint8Array(b)).map(x => x.toString(16).padStart(2, '0')).join('');
-  // mật khẩu băm PBKDF2 (ai được mời vào trang cũng đọc được danh sách tài khoản – không lưu mật khẩu gốc)
-  async function hash(salt, pw) {
-    const key = await crypto.subtle.importKey('raw', new TextEncoder().encode(String(pw)), 'PBKDF2', false, ['deriveBits']);
-    return hex(await crypto.subtle.deriveBits({ name: 'PBKDF2', salt: new TextEncoder().encode(salt), iterations: 120000, hash: 'SHA-256' }, key, 256));
-  }
-  const rid = p => p + Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
-  const sess = { get() { try { return JSON.parse(localStorage.getItem(KEY)); } catch (e) { return null; } }, set(v) { try { if (v) localStorage.setItem(KEY, JSON.stringify(v)); else localStorage.removeItem(KEY); } catch (e) { /* trình duyệt chặn lưu */ } } };
-  const nowStr = () => { const d = new Date(), p = n => String(n).padStart(2, '0'); return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())} ${p(d.getHours())}:${p(d.getMinutes())}`; };
-  const G = { db: null, user: null, owner: false, admin: false, acc: {}, ep: 0, loaded: false, nodb: false, me: null };
-  window.ANTAM_NICK = null;
-
-  const gate = document.createElement('div'); gate.id = 'ng-gate'; document.body.appendChild(gate);
-  const panel = document.createElement('div'); panel.id = 'ng-panel'; panel.hidden = true; document.body.appendChild(panel);
-
-  function current() {
-    const s = sess.get(), a = s && G.acc[s.id];
-    return a && a.active !== false && a.pw && s.sig === a.pw.slice(0, 24) && s.exp > Date.now() && (s.iat || 0) >= (G.ep || 0) ? Object.assign({ id: s.id }, a) : null;
-  }
-  function apply() {
-    if (!G.loaded) { drawGate(); return; }
-    const me = current();
-    if (sess.get() && !me) sess.set(null);
-    G.me = me;
-    window.ANTAM_NICK = me ? { id: me.id, user: me.user, name: me.name || me.user } : G.owner ? { id: 'owner', user: '', name: 'Chủ trang' } : null;
-    const open = !!(me || G.owner);
-    root.classList.toggle('ng-locked', !open); gate.hidden = open;
-    if (!open) drawGate();
-    drawSlot();
-    window.dispatchEvent(new Event('antam-nick'));
-  }
-  function drawGate() {
-    const hasAcc = Object.values(G.acc).some(a => a && a.active !== false);
-    const state = G.nodb ? 'nodb' : !G.loaded ? 'loading' : hasAcc ? 'form' : 'empty';
-    if (gate.dataset.state === state && state === 'form') return; // đang gõ: giữ nguyên ô đăng nhập
-    gate.dataset.state = state;
-    const body = state === 'nodb' ? '<p>Trang cần mở trên claude.ai khi đã đăng nhập, bằng link chủ trang gửi.</p>'
-      : state === 'loading' ? '<p>Đang tải…</p>'
-      : state === 'empty' ? '<p>Trang chưa có tài khoản nào. Chủ trang mở trang để tạo tài khoản đăng nhập cho nhân viên.</p>'
-      : `<p>Đăng nhập bằng nick và mật khẩu do quản lý cấp.</p>
-        <label class="ng-f">Nick<input id="ng-user" autocomplete="username" autocapitalize="none" spellcheck="false" value="${esc(localStorage.getItem('ng-' + SITE + '-last') || '')}"></label>
-        <label class="ng-f">Mật khẩu<input id="ng-pw" type="password" autocomplete="current-password"></label>
-        <button class="ng-btn pri" type="submit">Đăng nhập</button><div class="ng-err" id="ng-err" role="alert"></div>
-        <p>Quên mật khẩu: nhờ quản lý đặt lại.</p>`;
-    gate.innerHTML = `<form class="ng-card" id="ng-form" novalidate><h1>${esc(TITLE)}</h1>${body}</form>`;
-    const f = $('#ng-form', gate), u = $('#ng-user', gate), pw = $('#ng-pw', gate);
-    if (u) (u.value ? pw : u).focus();
-    f.onsubmit = async e => {
-      e.preventDefault(); if (!u) return;
-      const btn = $('button[type=submit]', f), err = $('#ng-err', f);
-      btn.disabled = true; btn.textContent = 'Đang đăng nhập…'; err.textContent = '';
-      const hit = Object.entries(G.acc).find(([, a]) => a && a.active !== false && norm(a.user) === norm(u.value));
-      const ok = hit && (await hash(hit[1].salt, pw.value)) === hit[1].pw;
-      if (!ok) { await new Promise(r => setTimeout(r, 600)); err.textContent = 'Sai nick hoặc mật khẩu.'; btn.disabled = false; btn.textContent = 'Đăng nhập'; pw.select(); return; }
-      sess.set({ id: hit[0], sig: hit[1].pw.slice(0, 24), iat: Date.now(), exp: Date.now() + DAYS * 864e5 });
-      try { localStorage.setItem('ng-' + SITE + '-last', hit[1].user); } catch (x) { /* trình duyệt chặn lưu */ }
-      gate.dataset.state = ''; apply();
-    };
-  }
-  function drawSlot() {
-    let host = C.slot && $(C.slot);
-    if (!host) { host = $('#ng-fixed') || Object.assign(document.createElement('div'), { id: 'ng-fixed' }); if (!host.parentNode) document.body.appendChild(host); }
-    const who = window.ANTAM_NICK;
-    host.innerHTML = who ? `<button type="button" class="ng-me" title="Tài khoản đăng nhập">👤 ${esc(who.name)}</button>` : '';
-    const b = $('.ng-me', host); if (b) b.onclick = openPanel;
-  }
-
-  // ---------- tài khoản của tôi / quản lý tài khoản ----------
-  let edit = null;
-  function closePanel() { panel.hidden = true; panel.innerHTML = ''; edit = null; }
-  document.addEventListener('keydown', e => { if (e.key === 'Escape' && !panel.hidden) closePanel(); });
-  panel.addEventListener('mousedown', e => { if (e.target === panel) closePanel(); });
-  function openPanel() { panel.hidden = false; drawPanel(); }
-  function drawPanel() {
-    if (panel.hidden) return;
-    const me = G.me, list = Object.entries(G.acc).filter(([, a]) => a).sort((x, y) => norm(x[1].user) < norm(y[1].user) ? -1 : 1);
-    const mine = me ? `<div class="ng-row"><div class="ng-grow"><b>${esc(me.name || me.user)}</b> <span style="color:var(--muted,#5b6862)">· nick ${esc(me.user)}</span></div><button class="ng-btn" type="button" id="ng-out">Đăng xuất</button></div>`
-      : `<p>Bạn là <b>chủ trang</b>: vào trang không cần đăng nhập và quản lý được tài khoản.</p>`;
-    const mgr = G.admin ? `<hr style="border:0;border-top:1px solid var(--line,#dce2dc);margin:4px 0">
-      <div class="ng-row"><h2 class="ng-grow" style="margin:0;font-size:1.1em">Tài khoản đăng nhập</h2><button class="ng-btn sm" type="button" id="ng-add">+ Thêm tài khoản</button><button class="ng-btn sm" type="button" id="ng-epoch" title="Bắt mọi người đăng nhập lại">Đăng xuất tất cả máy</button></div>
-      ${edit ? `<form id="ng-edit" class="ng-grid" novalidate style="background:var(--raise,var(--sunk,#f7f9f6));padding:12px;border-radius:10px">
-          <label class="ng-f">Nick<input id="ng-e-user" value="${esc(edit.user)}" autocapitalize="none" spellcheck="false" maxlength="40"></label>
-          <label class="ng-f">Họ tên<input id="ng-e-name" value="${esc(edit.name)}" maxlength="60"></label>
-          <label class="ng-f">${edit.id ? 'Mật khẩu mới (để trống = giữ nguyên)' : 'Mật khẩu (ít nhất 4 ký tự)'}<input id="ng-e-pw" type="text" autocomplete="new-password"></label>
-          <label class="ng-chk"><input type="checkbox" id="ng-e-on"${edit.active !== false ? ' checked' : ''}> Đang dùng (bỏ tích = khóa tài khoản)</label>
-          <div class="ng-row" style="grid-column:1/-1"><button class="ng-btn pri" type="submit">Lưu tài khoản</button><button class="ng-btn" type="button" id="ng-e-x">Hủy</button><span class="ng-err" id="ng-e-err"></span></div>
-        </form>` : ''}
-      <div class="ng-tbl"><table><thead><tr><th>Nick</th><th>Họ tên</th><th>Trạng thái</th><th>Sửa lúc</th><th></th></tr></thead><tbody>
-        ${list.length ? list.map(([id, a]) => `<tr class="${a.active === false ? 'off' : ''}"><td><b>${esc(a.user)}</b></td><td>${esc(a.name)}</td><td>${a.active === false ? 'Đã khóa' : 'Đang dùng'}</td><td>${esc(a.at || '')}</td><td><button class="ng-btn sm" type="button" data-ng-edit="${esc(id)}">Sửa</button></td></tr>`).join('')
-          : '<tr><td colspan="5" style="color:var(--muted,#5b6862)">Chưa có tài khoản nào. Bấm “+ Thêm tài khoản”.</td></tr>'}
-      </tbody></table></div>
-      <p>Mỗi người một nick. Khóa tài khoản hoặc đổi mật khẩu thì máy đang đăng nhập bằng nick đó bị đăng xuất ngay.</p>` : '';
-    panel.innerHTML = `<div class="ng-card" role="dialog" aria-modal="true"><div class="ng-row"><h1 class="ng-grow">Tài khoản · ${esc(TITLE)}</h1><button class="ng-btn sm" type="button" id="ng-x">Đóng</button></div>${mine}${mgr}</div>`;
-    $('#ng-x', panel).onclick = closePanel;
-    const out = $('#ng-out', panel); if (out) out.onclick = () => { sess.set(null); closePanel(); apply(); };
-    const add = $('#ng-add', panel); if (add) add.onclick = () => { edit = { id: '', user: '', name: '', active: true }; drawPanel(); const i = $('#ng-e-user', panel); if (i) i.focus(); };
-    panel.querySelectorAll('[data-ng-edit]').forEach(b => b.onclick = () => { const a = G.acc[b.dataset.ngEdit]; edit = Object.assign({ id: b.dataset.ngEdit }, a); drawPanel(); });
-    const ep = $('#ng-epoch', panel); if (ep) ep.onclick = async () => {
-      if (ep.dataset.sure !== '1') { ep.dataset.sure = '1'; ep.textContent = 'Bấm lần nữa để đăng xuất tất cả'; return; }
-      try { await save(null, null, Date.now()); ep.textContent = 'Đã đăng xuất tất cả máy'; } catch (e) { ep.textContent = 'Không lưu được: ' + (e.message || e.code); }
-    };
-    const f = $('#ng-edit', panel); if (f) {
-      $('#ng-e-x', panel).onclick = () => { edit = null; drawPanel(); };
-      f.onsubmit = async e => {
-        e.preventDefault();
-        const err = $('#ng-e-err', panel), user = $('#ng-e-user', panel).value.trim(), name = $('#ng-e-name', panel).value.trim(), pw = $('#ng-e-pw', panel).value, on = $('#ng-e-on', panel).checked;
-        const dup = Object.entries(G.acc).some(([id, a]) => a && id !== edit.id && norm(a.user) === norm(user));
-        const bad = !norm(user) ? 'Nhập nick (chữ, số, dấu chấm, gạch dưới).' : dup ? 'Nick này đã có người dùng.' : (!edit.id || pw) && pw.length < 4 ? 'Mật khẩu cần ít nhất 4 ký tự.' : '';
-        if (bad) { err.textContent = bad; return; }
-        const id = edit.id || rid('a'), old = G.acc[id] || {};
-        const rec = { user: norm(user), name, active: on, at: nowStr(), salt: old.salt || '', pw: old.pw || '' };
-        if (pw) { rec.salt = rid('s'); rec.pw = await hash(rec.salt, pw); }
-        try { await save(id, rec); edit = null; drawPanel(); } catch (x) { err.textContent = 'Không lưu được: ' + (x.message || x.code) + (x.code === 'invalid_argument' ? ' (chỉ chủ trang / Editor sửa được tài khoản)' : ''); }
-      };
-    }
-  }
-  async function save(id, rec, ep) {
-    const ref = G.db.doc('auth/accounts'), s = await ref.get(), cur = s.exists ? s.data() : { a: {} };
-    const next = { a: Object.assign({}, cur.a || {}), ep: cur.ep || 0 };
-    if (id) next.a[id] = rec;
-    if (ep) next.ep = ep;
-    await ref.set(next);
-  }
-
-  // ---------- khởi động ----------
-  (async function boot() {
-    drawGate();
-    const c = window.claude;
-    const [db, user] = c && c.use ? await Promise.all([c.use('db').catch(() => null), c.use('user').catch(() => null)]) : [null, null];
-    G.db = db; G.user = user;
-    if (!db) { G.nodb = true; G.loaded = true; gate.dataset.state = ''; drawGate(); return; }
-    if (user) {
-      try { G.owner = !!(await user.isOwner()); } catch (e) { /* không rõ */ }
-      try { G.admin = !!(await user.canEdit()); } catch (e) { /* không rõ */ }
-    }
-    db.doc('auth/accounts').onSnapshot(s => {
-      const d = s.exists ? s.data() : {};
-      G.acc = d.a || {}; G.ep = d.ep || 0; G.loaded = true;
-      apply(); drawPanel();
-    }, () => { G.loaded = true; apply(); });
-  })();
-})();
-</script>
-<!-- nick-gate:end -->
 
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script>
 'use strict';
-/* ============ Dữ liệu (kho dữ liệu chung của trang) ============
-   set/app            {link, ca: [{id, ten, vao, ra}], tre, p, gan: {mã tài khoản: mã ca}}  – cài đặt (quản lý sửa)
-   cfg/secret         {k}  – khóa sinh mã QR, chỉ quản lý đọc được
-   cc/<yyyy-mm>/p/<id> {d, u, nm, at, ts, tc, src, note, by}  – một lượt quét (nhân viên ghi)
-   ccv/<yyyy-mm>/v/<id> {st, t, why, u, d, vAt, lech}  – kết quả xác nhận (chỉ máy QR / quản lý ghi)
-   auth/accounts      tài khoản nick (khối đăng nhập dùng chung An Tâm)
-   Mã QR = link trang + "#cc-<số khung giờ>-<mã 6 ký tự>", mã đổi theo chu kỳ p giây (HMAC từ khóa bí mật). */
+/* ============ Dữ liệu (kho dữ liệu chung của trang, chỉ quản lý đọc/ghi) ============
+   nv/list              {a: {mã nv: {ten, bp, ca, ma, on, at}}}  – danh sách nhân viên, ma = số trên thẻ QR
+   set/app              {ca: [{id, ten, vao, ra}], tre}  – cài đặt
+   cc/<yyyy-mm>/p/<id>  {d, u, at, src: 'the'|'anh'|'tay', note, by, huy}  – một lượt chấm công
+   Máy chấm công: máy tính / máy tính bảng ở cửa, cắm máy đọc mã QR (USB, kiểu bàn phím). Máy đọc gõ số trên thẻ rồi Enter. */
 const $ = s => document.querySelector(s);
 const esc = s => String(s == null ? '' : s).replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const pad = n => String(n).padStart(2, '0');
@@ -412,101 +236,40 @@ const DOW = ['CN', 'T2', 'T3', 'T4', 'T5', 'T6', 'T7'];
 const nextMonth = m => { const d = new Date(+m.slice(0, 4), +m.slice(5, 7), 1); return d.getFullYear() + '-' + pad(d.getMonth() + 1); };
 const daysIn = m => new Date(+m.slice(0, 4), +m.slice(5, 7), 0).getDate();
 const at = (iso, t) => { const d = parseISO(iso); const [h, mi] = String(t || '00:00').split(':').map(Number); d.setHours(h || 0, mi || 0, 0, 0); return d.getTime(); };
-const ls = { get(k, d) { try { const v = localStorage.getItem('cc.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem('cc.' + k, JSON.stringify(v)); } catch (e) { /* trình duyệt chặn lưu */ } } };
-const ALPH = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789';
-const DEF = { link: '', p: 30, tre: 10, gan: {}, ca: [{ id: 'hc', ten: 'Hành chính', vao: '08:00', ra: '17:00' }, { id: 'ngay', ten: 'Ca ngày', vao: '07:00', ra: '19:00' }, { id: 'dem', ten: 'Ca đêm', vao: '19:00', ra: '07:00' }] };
-const VIEWS = [['cham', 'Chấm công', 0], ['qr', 'Máy QR', 1], ['bang-cong', 'Bảng công', 1], ['cai-dat', 'Cài đặt', 1]];
+const fmtMa = m => String(m || '').replace(/(\d{3})(\d{3})(\d{4})/, '$1 $2 $3');
+const DEF = { tre: 10, ca: [{ id: 'hc', ten: 'Hành chính', vao: '08:00', ra: '17:00' }, { id: 'ngay', ten: 'Ca ngày', vao: '07:00', ra: '19:00' }, { id: 'dem', ten: 'Ca đêm', vao: '19:00', ra: '07:00' }] };
+const VIEWS = [['may', 'Máy chấm công'], ['bang-cong', 'Bảng công'], ['nhan-vien', 'Nhân viên & thẻ'], ['cai-dat', 'Cài đặt']];
 
-const S = {
-  db: null, user: null, admin: false, ready: false, set: null, acc: {}, secret: null, view: 'cham', f: {},
-  mine: { m: '', p: {}, v: {}, subs: [] }, all: { m: '', p: {}, v: {}, subs: [], known: null, seen: {} }, pending: null, last: null, verifying: new Set(), codes: new Map(),
-};
-const cfg = () => { const s = S.set || {}; return { link: s.link || '', p: +s.p || DEF.p, tre: s.tre == null ? DEF.tre : +s.tre, gan: s.gan || {}, ca: (s.ca && s.ca.length ? s.ca : DEF.ca) }; };
-const me = () => window.ANTAM_NICK;
-const staff = () => Object.entries(S.acc).filter(([, a]) => a && a.active !== false).map(([id, a]) => ({ id, user: a.user, name: a.name || a.user })).sort((a, b) => a.name.localeCompare(b.name, 'vi'));
-const nameOf = id => { const a = S.acc[id]; return a ? (a.name || a.user) : 'Tài khoản đã xóa'; };
-const caOf = id => { const c = cfg(); return c.ca.find(x => x.id === c.gan[id]) || c.ca[0]; };
-
-/* ============ Mã chấm công ============ */
-async function hmacCode(slot) {
-  if (!S.secret) return null;
-  const key = S.secret + '|' + slot; if (S.codes.has(key)) return S.codes.get(key);
-  const k = await crypto.subtle.importKey('raw', new TextEncoder().encode(S.secret), { name: 'HMAC', hash: 'SHA-256' }, false, ['sign']);
-  const b = new Uint8Array(await crypto.subtle.sign('HMAC', k, new TextEncoder().encode('cc:' + slot)));
-  let c = ''; for (let i = 0; i < 6; i++) c += ALPH[b[i] % ALPH.length];
-  if (S.codes.size > 2000) S.codes.clear();
-  S.codes.set(key, c); return c;
-}
-const parseHash = h => { const m = String(h || '').match(/^#?cc-([0-9a-z]+)-([0-9a-z]{6})$/i); return m ? { ts: parseInt(m[1], 36), tc: m[2].toUpperCase() } : null; };
-// Xác nhận một lượt quét (máy QR hoặc trang quản lý đang mở)
-async function judge(p, seen) {
-  if (p.src === 'tay') return { st: 'tay', t: p.at };
-  const P = cfg().p * 1000, ref = seen || p.at, cur = Math.floor(ref / P);
-  let slot = null;
-  if (p.ts != null && Number.isFinite(p.ts)) { if (await hmacCode(p.ts) === p.tc) slot = p.ts; }
-  else { for (let s = cur + 1; s >= cur - 8 && slot == null; s--) if (await hmacCode(s) === p.tc) slot = s; if (slot == null) for (let s = cur - 9; s >= cur - 240 && slot == null; s--) if (await hmacCode(s) === p.tc) slot = s; }
-  if (slot == null) return { st: 'sai', why: 'Mã không đúng' };
-  const age = ref - slot * P;
-  if (age > 150000 || age < -45000) return { st: 'het', why: 'Mã đã hết hạn (quét sau ' + Math.round(age / 60000) + ' phút)' };
-  const lech = !!seen && Math.abs(seen - p.at) > 180000;
-  return { st: 'ok', t: lech ? seen : p.at, lech };
-}
-async function verifyAll() {
-  if (!S.admin || !S.secret || !S.db) return;
-  const A = S.all;
-  for (const [id, p] of Object.entries(A.p)) {
-    if (A.v[id] || S.verifying.has(id)) continue;
-    S.verifying.add(id);
-    try {
-      const r = await judge(p, A.seen[id]);
-      const m = p.d.slice(0, 7);
-      await S.db.doc('ccv/' + m + '/v/' + id).set(Object.assign({ u: p.u, d: p.d, vAt: Date.now() }, r));
-    } catch (e) { S.verifying.delete(id); console.warn(e); }
-  }
-}
+const S = { db: null, user: null, admin: false, ready: false, set: null, nv: {}, nvLoaded: false, view: 'may', f: {}, all: { m: '', p: {}, subs: [] }, last: null, busy: false };
+const cfg = () => { const s = S.set || {}; return { tre: s.tre == null ? DEF.tre : +s.tre, ca: (s.ca && s.ca.length ? s.ca : DEF.ca) }; };
+const staff = (all) => Object.entries(S.nv).filter(([, a]) => a && (all || a.on !== false)).map(([id, a]) => Object.assign({ id }, a)).sort((a, b) => (a.bp || '').localeCompare(b.bp || '', 'vi') || a.ten.localeCompare(b.ten, 'vi'));
+const nameOf = id => (S.nv[id] && S.nv[id].ten) || 'Nhân viên đã xóa';
+const caOf = id => { const c = cfg(), a = S.nv[id]; return c.ca.find(x => x.id === (a && a.ca)) || c.ca[0]; };
+const byMa = ma => Object.entries(S.nv).find(([, a]) => a && a.ma === ma);
 
 /* ============ Đọc dữ liệu ============ */
-function subMine(m) {
-  const u = me(); if (!S.db || !u || u.id === 'owner') return;
-  if (S.mine.m === m + '|' + u.id) return;
-  S.mine.subs.forEach(f => { try { f(); } catch (e) { /* bỏ qua */ } });
-  S.mine = { m: m + '|' + u.id, p: {}, v: {}, subs: [] };
-  [m, nextMonth(m)].forEach(mm => {
-    S.mine.subs.push(S.db.collection('cc/' + mm + '/p').where('u', '==', u.id).onSnapshot(q => { q.docs.forEach(d => { S.mine.p[d.id] = d.data(); }); bump(); }, dbErr));
-    S.mine.subs.push(S.db.collection('ccv/' + mm + '/v').where('u', '==', u.id).onSnapshot(q => { q.docs.forEach(d => { S.mine.v[d.id] = d.data(); }); bump(); }, dbErr));
-  });
-}
 function subAll(m) {
-  if (!S.db || !S.admin || S.all.m === m) return;
+  if (!S.db || S.all.m === m) return;
   S.all.subs.forEach(f => { try { f(); } catch (e) { /* bỏ qua */ } });
-  const A = S.all = { m, p: {}, v: {}, subs: [], known: {}, seen: {} };
-  [m, nextMonth(m)].forEach(mm => {
-    let first = true;
-    A.subs.push(S.db.collection('cc/' + mm + '/p').onSnapshot(q => {
-      const now = Date.now(), ids = new Set();
-      q.docs.forEach(d => { ids.add(d.id); if (!first && !(d.id in A.p)) A.seen[d.id] = now; A.p[d.id] = d.data(); });
-      Object.keys(A.p).forEach(id => { if (A.p[id].d.slice(0, 7) === mm && !ids.has(id)) delete A.p[id]; });
-      first = false; bump(); verifyAll();
-    }, dbErr));
-    A.subs.push(S.db.collection('ccv/' + mm + '/v').onSnapshot(q => { q.docs.forEach(d => { A.v[d.id] = d.data(); }); bump(); }, dbErr));
-  });
+  const A = S.all = { m, p: {}, subs: [] };
+  [m, nextMonth(m)].forEach(mm => A.subs.push(S.db.collection('cc/' + mm + '/p').onSnapshot(q => {
+    const ids = new Set(); q.docs.forEach(d => { ids.add(d.id); A.p[d.id] = d.data(); });
+    Object.keys(A.p).forEach(id => { if (A.p[id].d.slice(0, 7) === mm && !ids.has(id)) delete A.p[id]; });
+    bump();
+  }, dbErr)));
 }
 function dbErr(e) { console.error(e); }
 
 /* ============ Tính công ============ */
-// Gán lượt quét hợp lệ vào ngày công theo ca của từng người (ca đêm: giờ ra sáng hôm sau tính cho ngày hôm trước)
-function shiftWin(D, ca) {
-  const a = at(D, ca.vao); let b = at(D, ca.ra); if (b <= a) b += 864e5;
-  return { a, b, from: a - 4 * 36e5, to: b + 6 * 36e5 };
-}
-function workDays(P, V, filterU) {
+// Ngày công theo ca của từng người: ca đêm ra sáng hôm sau vẫn tính cho ngày vào ca
+function shiftWin(D, ca) { const a = at(D, ca.vao); let b = at(D, ca.ra); if (b <= a) b += 864e5; return { a, b, from: a - 4 * 36e5, to: b + 6 * 36e5 }; }
+function dayOf(u, t) { const ca = caOf(u), d0 = isoOf(new Date(t)); for (const D of [d0, addDays(d0, -1)]) { const w = shiftWin(D, ca); if (t >= w.from && t <= w.to) return D; } return d0; }
+function workDays(P) {
   const out = {}, c = cfg();
-  for (const [id, p] of Object.entries(P)) {
-    const v = V[id]; if (!v || !(v.st === 'ok' || v.st === 'tay')) continue;
-    if (filterU && p.u !== filterU) continue;
-    const t = v.t || p.at, ca = caOf(p.u), d0 = isoOf(new Date(t));
-    let D = d0; for (const cand of [d0, addDays(d0, -1)]) { const w = shiftWin(cand, ca); if (t >= w.from && t <= w.to) { D = cand; break; } }
-    const k = p.u + '|' + D; (out[k] = out[k] || { u: p.u, D, ca, ts: [] }).ts.push(t);
+  for (const p of Object.values(P)) {
+    if (p.huy || !S.nv[p.u]) continue;
+    const D = dayOf(p.u, p.at), k = p.u + '|' + D;
+    (out[k] = out[k] || { u: p.u, D, ca: caOf(p.u), ts: [] }).ts.push(p.at);
   }
   Object.values(out).forEach(r => {
     r.ts.sort((a, b) => a - b); const w = shiftWin(r.D, r.ca);
@@ -517,141 +280,82 @@ function workDays(P, V, filterU) {
   });
   return out;
 }
-const stPill = v => !v ? '<span class="pill">Đang xác nhận</span>' : v.st === 'ok' ? '<span class="pill ok">Hợp lệ</span>' + (v.lech ? ' <span class="pill warn" title="Giờ trên điện thoại lệch quá 3 phút, đã lấy giờ máy QR nhận">Lệch giờ</span>' : '')
-  : v.st === 'tay' ? '<span class="pill info">Chấm tay</span>' : v.st === 'huy' ? '<span class="pill">Đã hủy</span>' : '<span class="pill crit">' + (v.st === 'het' ? 'Hết hạn' : 'Mã sai') + '</span>';
-const SRC = { qr: 'Quét QR', anh: 'Ảnh QR', ma: 'Nhập mã', tay: 'Chấm tay' };
-const fmtH = h => h ? (Math.round(h * 10) / 10).toLocaleString('vi-VN') + ' giờ' : '';
+const n1 = h => (Math.round(h * 10) / 10).toLocaleString('vi-VN');
+const SRC = { the: 'Quét thẻ', anh: 'Chụp thẻ', tay: 'Chấm tay' };
 
 /* ============ Khung trang ============ */
 let raf = 0;
 function bump() { if (raf) return; raf = requestAnimationFrame(() => { raf = 0; render(); }); }
-function route() { const h = (location.hash || '').slice(1); const v = VIEWS.find(x => x[0] === h); if (v && (!v[2] || S.admin)) S.view = h; else if (!parseHash(location.hash)) S.view = S.view || 'cham'; }
+function route() { const h = (location.hash || '').slice(1); if (VIEWS.some(v => v[0] === h)) S.view = h; }
 function go(v) { if (S.view !== v) { S.view = v; S.f = {}; } try { location.hash = v; } catch (e) { /* bỏ qua */ } render(); window.scrollTo(0, 0); }
 function render() {
   const ae = document.activeElement, aid = ae && ae.id;
-  $('#nav').innerHTML = VIEWS.filter(v => !v[2] || S.admin).map(([k, l]) => '<button data-act="go" data-arg="' + k + '"' + (S.view === k ? ' aria-current="page"' : '') + '>' + l + '</button>').join('');
-  document.body.classList.toggle('kiosk-full', S.view === 'qr' && !!S.f.full);
-  const V = { cham: vCham, qr: vQr, 'bang-cong': vBang, 'cai-dat': vSet }[S.view] || vCham;
-  $('#view').innerHTML = !S.ready ? '<div class="empty">Đang tải…</div>' : !S.db ? '<div class="card"><div class="empty"><h2>Chưa kết nối được dữ liệu</h2><p>Mở trang trên claude.ai khi đã đăng nhập, bằng link quản lý gửi.</p></div></div>' : V();
-  if (S.view === 'qr') drawQr();
+  $('#nav').innerHTML = S.admin ? VIEWS.map(([k, l]) => '<button data-act="go" data-arg="' + k + '"' + (S.view === k ? ' aria-current="page"' : '') + '>' + l + '</button>').join('') : '';
+  document.body.classList.toggle('kiosk-full', S.view === 'may' && !!S.f.full);
+  const V = { may: vMay, 'bang-cong': vBang, 'nhan-vien': vNv, 'cai-dat': vSet }[S.view] || vMay;
+  $('#view').innerHTML = !S.ready ? '<div class="empty">Đang tải…</div>'
+    : !S.db ? '<div class="card"><div class="empty"><h2>Chưa kết nối được dữ liệu</h2><p>Mở trang trên claude.ai khi đã đăng nhập.</p></div></div>'
+    : !S.admin ? '<div class="card"><div class="empty"><h2>Trang dành cho quản lý</h2><p>Nhân viên chấm công bằng thẻ QR tại máy ở cửa, không cần mở trang này. Máy chấm công và người quản lý cần quyền chỉnh sửa trang (Editor).</p></div></div>'
+    : V();
   if (aid) { const el = document.getElementById(aid); if (el && el !== document.activeElement) el.focus(); }
+  if (S.view === 'may' && S.admin) focusScan();
 }
 const kpi = (l, v, s) => '<div class="kpi"><span class="l">' + esc(l) + '</span><span class="v">' + v + '</span><span class="s">' + esc(s || '') + '</span></div>';
 
-/* ---- Màn hình nhân viên ---- */
-function vCham() {
-  const u = me();
-  if (!u) return '<div class="empty">Đang tải…</div>';
-  if (u.id === 'owner') return '<div class="head"><div><h1>Chấm công</h1><div class="sub">Bạn đang vào bằng quyền chủ trang.</div></div></div><div class="banner"><span>Chủ trang không chấm công. Nhân viên mở trang bằng nick của mình. Tạo nick cho nhân viên ở nút tài khoản góc trên bên phải, gán ca ở mục Cài đặt, rồi mở <b>Máy QR</b> trên máy tính bảng đặt ở cửa.</span><button class="btn" data-act="go" data-arg="qr">Mở máy QR</button></div>';
-  const now = Date.now(), m = isoOf(new Date()).slice(0, 7), sel = S.f.mm || m;
-  subMine(sel);
-  const wd = workDays(S.mine.p, S.mine.v, u.id), D = todayFor(u.id, now), td = wd[u.id + '|' + D];
-  const ca = caOf(u.id), recent = Object.entries(S.mine.p).map(([id, p]) => Object.assign({ id }, p)).filter(p => now - p.at < 36 * 36e5).sort((a, b) => b.at - a.at);
-  const rows = Object.values(wd).filter(r => r.D.slice(0, 7) === sel).sort((a, b) => (a.D < b.D ? 1 : -1));
-  const tot = rows.reduce((a, r) => { a.cong += r.ra ? 1 : 0.5; a.gio += r.gio; a.muon += r.muonX ? 1 : 0; return a; }, { cong: 0, gio: 0, muon: 0 });
-  return '<div class="head"><div><h1>Xin chào, ' + esc(u.name) + '</h1><div class="sub">' + esc(ca.ten) + ' ' + esc(ca.vao) + '–' + esc(ca.ra) + ' · ngày công ' + DOW[parseISO(D).getDay()] + ' ' + dmy(D) + '</div></div><div class="clock" id="clock">' + hm(now) + '</div></div>' +
-    '<div class="today"><div class="slot' + (td ? ' on' : '') + '"><span class="l">Giờ vào</span><span class="t">' + (td ? hm(td.vao) : '--:--') + '</span><span class="small ' + (td && td.muonX ? '' : 'muted') + '">' + (td ? (td.muonX ? '<span class="pill warn">Muộn ' + td.muon + ' phút</span>' : 'Đúng giờ') : 'Chưa chấm') + '</span></div>' +
-    '<div class="slot' + (td && td.ra ? ' on' : '') + '"><span class="l">Giờ ra</span><span class="t">' + (td && td.ra ? hm(td.ra) : '--:--') + '</span><span class="small muted">' + (td && td.ra ? fmtH(td.gio) + (td.somX ? ' · <span class="pill warn">Về sớm ' + td.som + ' phút</span>' : '') : td ? 'Quét lại khi về' : '') + '</span></div></div>' +
-    '<div class="card"><h2>Cách chấm công</h2><ol class="steps"><li>Mở <b>camera điện thoại</b>, hướng vào mã QR ở máy chấm công.</li><li>Bấm vào link hiện ra. Trang này tự mở và ghi giờ.</li><li>Đến và về đều quét: lần quét đầu là giờ vào, lần cuối là giờ ra.</li></ol>' +
-    '<p class="small muted">Mã QR tự đổi mỗi ' + cfg().p + ' giây nên phải quét tại chỗ. Nếu camera không mở được link, dùng một trong hai cách dưới.</p>' +
-    '<div class="row"><button class="btn pri" data-act="snap">Chụp ảnh mã QR</button><span class="muted small">hoặc nhập mã 6 ký tự dưới mã QR:</span><input id="codeIn" class="code-in" maxlength="6" autocomplete="off" autocapitalize="characters" spellcheck="false" aria-label="Mã chấm công" value="' + esc(S.f.code || '') + '"><button class="btn" data-act="typed">Chấm công</button></div></div>' +
-    (recent.length ? '<div class="card"><h2>Lượt quét gần đây</h2><div class="tbl"><table><thead><tr><th>Ngày</th><th>Giờ</th><th>Cách</th><th>Trạng thái</th></tr></thead><tbody>' +
-      recent.slice(0, 8).map(p => { const v = S.mine.v[p.id]; return '<tr><td>' + dm(p.d) + '</td><td class="mono">' + hms(v && v.t || p.at) + '</td><td>' + esc(SRC[p.src] || p.src) + '</td><td>' + stPill(v) + (v && v.why ? ' <span class="small muted">' + esc(v.why) + '</span>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div></div>' : '') +
-    '<div class="card"><div class="row"><h2 class="grow">Công tháng của tôi</h2><input type="month" id="myMonth" value="' + sel + '" aria-label="Tháng"></div>' +
-    '<div class="kpis">' + kpi('Ngày công', (tot.cong + '').replace('.', ','), rows.length + ' ngày có chấm') + kpi('Tổng giờ', (Math.round(tot.gio * 10) / 10).toLocaleString('vi-VN'), 'giờ') + kpi('Đi muộn', tot.muon, 'lần, quá ' + cfg().tre + ' phút') + '</div>' +
-    (rows.length ? '<div class="tbl"><table><thead><tr><th>Ngày</th><th>Vào</th><th>Ra</th><th class="n">Giờ làm</th><th>Ghi chú</th></tr></thead><tbody>' +
-      rows.map(r => '<tr><td>' + DOW[parseISO(r.D).getDay()] + ' ' + dm(r.D) + '</td><td class="mono">' + hm(r.vao) + '</td><td class="mono">' + (r.ra ? hm(r.ra) : '–') + '</td><td class="n">' + (r.gio ? (Math.round(r.gio * 10) / 10).toLocaleString('vi-VN') : '') + '</td><td>' + (r.muonX ? '<span class="pill warn">Muộn ' + r.muon + '′</span> ' : '') + (r.somX ? '<span class="pill warn">Về sớm ' + r.som + '′</span> ' : '') + (!r.ra ? '<span class="pill info">Thiếu giờ ra</span>' : '') + '</td></tr>').join('') + '</tbody></table></div>' : '<div class="empty">Chưa có ngày công nào trong tháng ' + sel.slice(5) + '/' + sel.slice(0, 4) + '.</div>') + '</div>';
+/* ---- Máy chấm công ---- */
+function vMay() {
+  const today = isoOf(new Date()); subAll(today.slice(0, 7));
+  const P = S.all.p, feed = Object.entries(P).filter(([, p]) => p.d === today || Date.now() - p.at < 14 * 36e5).sort((a, b) => b[1].at - a[1].at).slice(0, 12);
+  const wd = workDays(P), list = staff(), nIn = list.filter(s => wd[s.id + '|' + dayOf(s.id, Date.now())]).length;
+  const L = S.last, fresh = L && Date.now() - L.t < 12000;
+  const res = !fresh ? '<div class="hit idle"><div class="hit-l">Đưa thẻ QR vào máy đọc</div><div class="muted">Mặt có mã QR hướng vào máy, giữ yên 1 giây</div></div>'
+    : L.kind === 'bad' ? '<div class="hit bad"><div class="hit-l">' + esc(L.title) + '</div><div>' + esc(L.msg) + '</div></div>'
+    : '<div class="hit ' + (L.kind === 'dup' ? 'dup' : 'ok') + '"><div class="hit-n">' + esc(L.name) + '</div><div class="hit-t"><span class="pill ' + (L.io === 'Vào' ? 'ok' : 'info') + '">' + L.io + '</span> <span class="mono">' + hm(L.at) + '</span></div><div>' + esc(L.msg) + '</div></div>';
+  return '<div class="kiosk"><div class="card scan-box"><div class="row"><div class="grow"><div class="clock" id="clock">' + hm(Date.now()) + '</div><div class="muted small">' + DOW[new Date().getDay()] + ' ' + dmy(today) + '</div></div>' +
+    (S.f.armed ? '<button class="btn sm" data-act="full">' + (S.f.full ? 'Thoát toàn màn hình' : 'Toàn màn hình') + '</button>' : '') + '</div>' +
+    (S.f.armed ? res : '<div class="hit idle"><div class="hit-l">Bấm “Bắt đầu” để máy chấm công hoạt động</div><div class="muted">Bật âm báo, giữ màn hình sáng và sẵn sàng nhận thẻ.</div><button class="btn pri big" data-act="arm">Bắt đầu</button></div>') +
+    '<div class="row scan-in"><input id="scan" inputmode="none" autocomplete="off" spellcheck="false" aria-label="Mã thẻ (máy đọc tự gõ)" placeholder="Mã thẻ – máy đọc tự gõ vào đây"><button class="btn" data-act="snap">Chụp thẻ bằng camera</button></div>' +
+    '<p class="small muted">Chưa có máy đọc: bấm “Chụp thẻ bằng camera” rồi chụp thẻ, hoặc gõ số trên thẻ và Enter.</p></div>' +
+    '<div class="card"><div class="row"><h2 class="grow">Hôm nay</h2>' + kpi('Đã chấm', nIn + '/' + list.length, 'người') + '</div><div class="feed">' +
+    (feed.length ? feed.map(([, p]) => '<div><span class="t">' + hm(p.at) + '</span><span class="n">' + esc(nameOf(p.u)) + '</span>' + (p.huy ? '<span class="pill">Đã hủy</span>' : p.src === 'tay' ? '<span class="pill info">Chấm tay</span>' : '') + '</div>').join('') : '<p class="muted">Chưa có ai chấm công.</p>') + '</div></div></div>';
 }
-function todayFor(u, now) { const ca = caOf(u), d0 = isoOf(new Date(now)), y = addDays(d0, -1), w = shiftWin(y, ca); return now <= w.b + 2 * 36e5 && now >= w.a ? y : d0; }
-
-/* ---- Chấm công ---- */
-async function punch(ts, tc, src) {
-  const u = me();
-  if (!u || u.id === 'owner') { showDone('crit', 'Chưa đăng nhập nick', 'Đăng nhập bằng nick của bạn rồi quét lại mã.'); return; }
-  const recent = Object.values(S.mine.p).filter(p => p.u === u.id);
-  if (recent.some(p => p.tc === tc && (ts == null || p.ts === ts))) { showDone('', 'Mã này đã quét rồi', 'Bạn đã chấm công bằng mã này. Mỗi mã chỉ tính một lần.'); return; }
-  const last = recent.sort((a, b) => b.at - a.at)[0];
-  if (last && Date.now() - last.at < 60000) { showDone('', 'Bạn vừa chấm công', 'Lượt trước lúc ' + hms(last.at) + '. Đợi 1 phút nếu muốn quét lại.'); return; }
-  const t = Date.now(), d = isoOf(new Date(t)), id = d.replace(/-/g, '') + '-' + u.id + '-' + t.toString(36);
-  const rec = { d, u: u.id, nm: u.name, at: t, ts: ts == null ? null : ts, tc, src };
-  showDone('', 'Đang ghi…', '');
+function focusScan() { const i = $('#scan'); if (i && document.activeElement !== i && !(document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName) && document.activeElement.id !== 'scan')) i.focus({ preventScroll: true }); }
+let audio = null;
+function beep(ok) {
+  try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); const o = audio.createOscillator(), g = audio.createGain(); o.frequency.value = ok ? 1046 : 220; o.type = ok ? 'sine' : 'square'; g.gain.setValueAtTime(0.0001, audio.currentTime); g.gain.exponentialRampToValueAtTime(0.3, audio.currentTime + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + (ok ? 0.25 : 0.6)); o.connect(g).connect(audio.destination); o.start(); o.stop(audio.currentTime + (ok ? 0.3 : 0.65)); } catch (e) { /* không có âm thanh */ }
+}
+async function scanCode(raw, src) {
+  const ma = String(raw || '').replace(/\D/g, '');
+  if (!ma) return;
+  const hit = byMa(ma), now = Date.now();
+  if (!hit) { S.last = { kind: 'bad', title: 'Thẻ không hợp lệ', msg: 'Mã ' + fmtMa(ma) + ' không có trong danh sách hoặc thẻ đã bị thay. Báo quản lý.', t: now }; beep(false); render(); return; }
+  const [u, a] = hit;
+  if (a.on === false) { S.last = { kind: 'bad', title: a.ten, msg: 'Nhân viên đã nghỉ, thẻ không còn dùng được.', t: now }; beep(false); render(); return; }
+  const mine = Object.values(S.all.p).filter(p => p.u === u && !p.huy).sort((x, y) => y.at - x.at);
+  if (mine[0] && now - mine[0].at < 60000) { S.last = { kind: 'dup', name: a.ten, io: ioOf(u, mine[0].at), at: mine[0].at, msg: 'Đã chấm rồi, không cần quét lại.', t: now }; beep(true); render(); return; }
+  if (S.busy) return; S.busy = true;
+  const d = isoOf(new Date(now)), id = d.replace(/-/g, '') + '-' + u + '-' + now.toString(36), rec = { d, u, at: now, src };
   try {
     await S.db.doc('cc/' + d.slice(0, 7) + '/p/' + id).set(rec);
-    S.mine.p[id] = rec; S.last = { id, at: t };
-    showDone('wait', hm(t), 'Đã ghi giờ chấm công. Đang chờ máy QR xác nhận…');
-  } catch (e) {
-    showDone('crit', 'Chưa ghi được', e && e.code === 'invalid_argument' ? 'Tài khoản claude.ai của máy này chưa có quyền ghi. Nhờ quản lý chia sẻ trang với quyền Contributor.' : 'Lỗi kết nối: ' + ((e && e.message) || 'không rõ') + '. Thử quét lại.');
-  }
+    S.all.p[id] = rec;
+    const io = ioOf(u, now), r = workDays(S.all.p)[u + '|' + dayOf(u, now)];
+    const msg = io === 'Vào' ? (r && r.muonX ? 'Đi muộn ' + r.muon + ' phút.' : 'Chúc một ngày làm việc tốt.') : 'Đã làm ' + n1((now - r.vao) / 36e5) + ' giờ.' + (r.somX ? ' Về sớm ' + r.som + ' phút.' : '');
+    S.last = { kind: 'ok', name: a.ten, io, at: now, msg, t: now }; beep(true);
+  } catch (e) { S.last = { kind: 'bad', title: 'Chưa ghi được', msg: 'Lỗi kết nối: ' + ((e && e.message) || 'không rõ') + '. Quét lại.', t: now }; beep(false); }
+  S.busy = false; render();
 }
-function showDone(kind, big, msg) {
-  const host = $('#done'); host.hidden = false; host.dataset.kind = kind;
-  const mark = kind === 'ok' ? '✓' : kind === 'crit' ? '!' : kind === 'wait' ? '…' : 'i';
-  host.innerHTML = '<div class="done-card" role="dialog" aria-modal="true" aria-live="assertive"><div class="done-mark ' + (kind === 'ok' ? 'ok' : kind === 'crit' ? 'crit' : '') + '">' + mark + '</div>' +
-    (/^\d\d:\d\d$/.test(big) ? '<div class="done-time">' + esc(big) + '</div>' : '<h2>' + esc(big) + '</h2>') + '<p class="muted">' + esc(msg) + '</p><button class="btn pri" data-act="closeDone">Xong</button></div>';
-}
-function watchLast() {
-  const L = S.last; if (!L) return;
-  const v = S.mine.v[L.id], host = $('#done'); if (!v || host.hidden || host.dataset.kind !== 'wait') return;
-  if (v.st === 'ok') showDone('ok', hm(v.t || L.at), 'Đã xác nhận. ' + (todayLabel(L.id)));
-  else showDone('crit', v.st === 'het' ? 'Mã đã hết hạn' : 'Mã không hợp lệ', (v.why || '') + '. Quét lại mã đang hiện trên máy QR.');
-  S.last = null;
-}
-function todayLabel(id) { const u = me(); if (!u) return ''; const wd = workDays(S.mine.p, S.mine.v, u.id), r = Object.values(wd).find(x => x.ts.includes((S.mine.v[id] || {}).t || (S.mine.p[id] || {}).at)); return r ? (r.ts.length === 1 ? 'Giờ vào ' + hm(r.vao) + '.' : 'Giờ ra ' + hm(r.ts[r.ts.length - 1]) + ' · đã làm ' + fmtH((r.ts[r.ts.length - 1] - r.vao) / 36e5) + '.') : ''; }
-async function handlePending() {
-  if (!S.pending || !S.db || !S.ready) return;
-  const u = me(); if (!u) return; // chờ đăng nhập nick
-  const p = S.pending; S.pending = null;
-  try { history.replaceState(null, '', '#cham'); } catch (e) { try { location.hash = 'cham'; } catch (x) { /* bỏ qua */ } }
-  S.view = 'cham'; subMine(isoOf(new Date()).slice(0, 7));
-  await new Promise(r => setTimeout(r, 400)); // đợi danh sách lượt quét để chống quét trùng
-  punch(p.ts, p.tc, p.src || 'qr');
-}
+function ioOf(u, t) { const D = dayOf(u, t), ts = Object.values(S.all.p).filter(p => p.u === u && !p.huy && dayOf(u, p.at) === D).map(p => p.at).sort((a, b) => a - b); return ts[0] === t ? 'Vào' : 'Ra'; }
 async function readPhoto(file) {
   if (!file) return;
   if (!window.jsQR) { toast('Chưa tải xong bộ đọc mã QR. Đợi vài giây rồi thử lại.'); return; }
-  showDone('', 'Đang đọc mã…', '');
   try {
     const bmp = await createImageBitmap(file), k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
     const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
     const g = c.getContext('2d'); g.drawImage(bmp, 0, 0, c.width, c.height);
-    const img = g.getImageData(0, 0, c.width, c.height), r = window.jsQR(img.data, c.width, c.height, { inversionAttempts: 'attemptBoth' });
-    const t = r && parseHash((r.data.match(/#cc-[0-9a-z]+-[0-9a-z]{6}/i) || [''])[0]);
-    if (!t) { showDone('crit', 'Không đọc được mã', 'Chụp gần hơn, đủ sáng, để mã QR nằm trọn trong ảnh.'); return; }
-    punch(t.ts, t.tc, 'anh');
-  } catch (e) { showDone('crit', 'Không đọc được ảnh', (e && e.message) || ''); }
-}
-
-/* ---- Máy QR ---- */
-function vQr() {
-  if (!S.admin) return '<div class="banner warn"><span>Máy QR chỉ mở được bằng tài khoản quản lý (quyền chỉnh sửa trang).</span></div>';
-  const c = cfg(), today = isoOf(new Date());
-  subAll(today.slice(0, 7));
-  const feed = Object.entries(S.all.p).filter(([, p]) => p.d === today).sort((a, b) => b[1].at - a[1].at).slice(0, 14);
-  const n = new Set(Object.entries(S.all.p).filter(([id, p]) => p.d === today && S.all.v[id] && S.all.v[id].st === 'ok').map(([, p]) => p.u)).size;
-  return (c.link ? '' : '<div class="banner warn"><span>Chưa có link trang. Vào Cài đặt, dán link của trang này (nút Chia sẻ › Sao chép link) để mã QR mở đúng trang.</span><button class="btn" data-act="go" data-arg="cai-dat">Mở cài đặt</button></div>') +
-    (!S.secret ? '<div class="banner"><span>Đang tạo khóa mã QR…</span></div>' : '') +
-    '<div class="kiosk"><div class="qr-box"><h1>Quét mã để chấm công</h1><p class="muted">Mở camera điện thoại, hướng vào mã, bấm link hiện ra.</p>' +
-    '<div class="qr-paper" id="qrPaper" role="img" aria-label="Mã QR chấm công"></div><div class="qr-code" id="qrCode">······</div><div class="bar"><i id="qrBar" style="width:100%"></i></div>' +
-    '<p class="small muted">Mã đổi mỗi ' + c.p + ' giây. Không chụp lại gửi người khác: mã cũ sẽ hết hạn.</p>' +
-    '<div class="row" style="justify-content:center"><button class="btn sm" data-act="full">' + (S.f.full ? 'Thoát toàn màn hình' : 'Toàn màn hình') + '</button></div></div>' +
-    '<div class="card"><div class="row"><div class="grow"><div class="clock" id="clock">' + hm(Date.now()) + '</div><div class="muted small">' + DOW[new Date().getDay()] + ' ' + dmy(today) + '</div></div>' + kpi('Đã chấm hôm nay', n, 'người') + '</div>' +
-    '<h2>Vừa quét</h2><div class="feed">' + (feed.length ? feed.map(([id, p]) => '<div><span class="t">' + hm(p.at) + '</span><span class="n">' + esc(nameOf(p.u) || p.nm) + '</span>' + stPill(S.all.v[id]) + '</div>').join('') : '<p class="muted">Chưa có ai quét hôm nay.</p>') + '</div>' +
-    '<p class="small muted">Giữ trang này mở: máy QR xác nhận từng lượt quét ngay khi nhân viên quét.</p></div></div>';
-}
-let qrSlot = -1;
-async function drawQr() {
-  const box = $('#qrPaper'); if (!box || !S.secret) return;
-  const c = cfg(), P = c.p * 1000, now = Date.now(), slot = Math.floor(now / P);
-  const bar = $('#qrBar'); if (bar) bar.style.width = Math.max(0, 100 - ((now % P) / P) * 100) + '%';
-  if (slot === qrSlot && box.firstChild) return;
-  qrSlot = slot;
-  const code = await hmacCode(slot), url = (c.link || 'https://claude.ai/').split('#')[0] + '#cc-' + slot.toString(36) + '-' + code.toLowerCase();
-  if (!window.qrcode) { box.innerHTML = '<p class="muted">Đang tải bộ tạo mã QR…</p>'; qrSlot = -1; return; }
-  const q = window.qrcode(0, 'M'); q.addData(url); q.make();
-  const n = q.getModuleCount(); let d = '';
-  for (let r = 0; r < n; r++) for (let x = 0; x < n; x++) if (q.isDark(r, x)) d += 'M' + x + ' ' + r + 'h1v1h-1z';
-  box.innerHTML = '<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 ' + (n + 4) + ' ' + (n + 4) + '" shape-rendering="crispEdges" aria-hidden="true"><rect x="-2" y="-2" width="' + (n + 4) + '" height="' + (n + 4) + '" fill="#ffffff"/><path d="' + d + '" fill="#0f1a16"/></svg>';
-  const ce = $('#qrCode'); if (ce) ce.textContent = code;
+    const r = window.jsQR(g.getImageData(0, 0, c.width, c.height).data, c.width, c.height, { inversionAttempts: 'attemptBoth' });
+    if (!r || !/\d{6,}/.test(r.data)) { S.last = { kind: 'bad', title: 'Không đọc được thẻ', msg: 'Chụp gần hơn, đủ sáng, để mã QR nằm trọn trong ảnh.', t: Date.now() }; beep(false); render(); return; }
+    scanCode(r.data, 'anh');
+  } catch (e) { toast('Không đọc được ảnh: ' + ((e && e.message) || '')); }
 }
 let wake = null;
 async function keepAwake(on) {
@@ -660,174 +364,208 @@ async function keepAwake(on) {
 
 /* ---- Bảng công ---- */
 function vBang() {
-  if (!S.admin) return '<div class="banner warn"><span>Chỉ quản lý xem được bảng công.</span></div>';
   const f = S.f; f.tab = f.tab || 'ngay'; f.d = f.d || isoOf(new Date()); f.m = f.m || f.d.slice(0, 7);
-  const m = f.tab === 'thang' ? f.m : f.d.slice(0, 7);
-  subAll(m);
-  const tabs = [['ngay', 'Theo ngày'], ['thang', 'Bảng công tháng'], ['luot', 'Lượt quét']];
-  return '<div class="head"><div><h1>Bảng công</h1><div class="sub">Tính từ các lượt quét đã xác nhận. Lần quét đầu là giờ vào, lần cuối là giờ ra.</div></div><div class="row"><button class="btn" data-act="exportX">Tải Excel</button></div></div>' +
+  subAll(f.tab === 'thang' ? f.m : f.d.slice(0, 7));
+  const tabs = [['ngay', 'Theo ngày'], ['thang', 'Bảng công tháng'], ['luot', 'Lượt chấm']];
+  return '<div class="head"><div><h1>Bảng công</h1><div class="sub">Lần quét đầu trong ca là giờ vào, lần cuối là giờ ra. Cho phép trễ ' + cfg().tre + ' phút.</div></div><div class="row"><button class="btn" data-act="exportX">Tải Excel</button></div></div>' +
     '<div class="row"><div class="seg">' + tabs.map(([k, l]) => '<button data-act="tab" data-arg="' + k + '" aria-pressed="' + (f.tab === k) + '">' + l + '</button>').join('') + '</div>' +
     (f.tab === 'thang' ? '<input type="month" id="bMonth" value="' + f.m + '" aria-label="Tháng">' : '<input type="date" id="bDate" value="' + f.d + '" aria-label="Ngày">') + '</div>' +
     (f.tab === 'ngay' ? bDay(f.d) : f.tab === 'thang' ? bMonth(f.m) : bScans(f.d));
 }
 function bDay(D) {
-  const wd = workDays(S.all.p, S.all.v), list = staff(), now = Date.now();
-  const rows = list.map(s => { const r = wd[s.id + '|' + D], ca = caOf(s.id), w = shiftWin(D, ca); return { s, r, ca, w }; });
+  const wd = workDays(S.all.p), list = staff(), now = Date.now();
+  const rows = list.map(s => ({ s, r: wd[s.id + '|' + D], ca: caOf(s.id), w: shiftWin(D, caOf(s.id)) }));
   const st = x => x.r ? (x.r.ra ? '<span class="pill ok">Đã về</span>' : '<span class="pill info">Đang làm</span>') : now > x.w.a + cfg().tre * 6e4 && now < x.w.b ? '<span class="pill crit">Chưa chấm</span>' : '<span class="pill">Chưa chấm</span>';
   const n = rows.filter(x => x.r).length, late = rows.filter(x => x.r && x.r.muonX).length;
   return '<div class="kpis">' + kpi('Đã chấm công', n + '/' + list.length, 'người') + kpi('Đi muộn', late, 'quá ' + cfg().tre + ' phút') + kpi('Chưa chấm', list.length - n, '') + '</div>' +
-    (list.length ? '<div class="tbl"><table><thead><tr><th>Nhân viên</th><th>Ca</th><th>Vào</th><th>Ra</th><th class="n">Giờ làm</th><th>Trạng thái</th><th>Ghi chú</th></tr></thead><tbody>' +
-      rows.map(x => '<tr><td><b>' + esc(x.s.name) + '</b> <span class="muted small">' + esc(x.s.user) + '</span></td><td>' + esc(x.ca.ten) + ' <span class="muted small">' + esc(x.ca.vao) + '–' + esc(x.ca.ra) + '</span></td><td class="mono">' + (x.r ? hm(x.r.vao) : '') + '</td><td class="mono">' + (x.r && x.r.ra ? hm(x.r.ra) : '') + '</td><td class="n">' + (x.r && x.r.gio ? (Math.round(x.r.gio * 10) / 10).toLocaleString('vi-VN') : '') + '</td><td>' + st(x) + '</td><td>' + (x.r && x.r.muonX ? '<span class="pill warn">Muộn ' + x.r.muon + '′</span> ' : '') + (x.r && x.r.somX ? '<span class="pill warn">Về sớm ' + x.r.som + '′</span>' : '') + '</td></tr>').join('') + '</tbody></table></div>'
-      : '<div class="card"><div class="empty"><h2>Chưa có nhân viên</h2><p>Tạo nick cho từng nhân viên ở nút tài khoản góc trên bên phải. Mỗi nick là một người trong bảng công.</p></div></div>');
+    (list.length ? '<div class="tbl"><table><thead><tr><th>Nhân viên</th><th>Bộ phận</th><th>Ca</th><th>Vào</th><th>Ra</th><th class="n">Giờ làm</th><th>Trạng thái</th><th>Ghi chú</th></tr></thead><tbody>' +
+      rows.map(x => '<tr><td><b>' + esc(x.s.ten) + '</b></td><td>' + esc(x.s.bp || '') + '</td><td>' + esc(x.ca.ten) + ' <span class="muted small">' + esc(x.ca.vao) + '–' + esc(x.ca.ra) + '</span></td><td class="mono">' + (x.r ? hm(x.r.vao) : '') + '</td><td class="mono">' + (x.r && x.r.ra ? hm(x.r.ra) : '') + '</td><td class="n">' + (x.r && x.r.gio ? n1(x.r.gio) : '') + '</td><td>' + st(x) + '</td><td>' + (x.r && x.r.muonX ? '<span class="pill warn">Muộn ' + x.r.muon + '′</span> ' : '') + (x.r && x.r.somX ? '<span class="pill warn">Về sớm ' + x.r.som + '′</span>' : '') + '</td></tr>').join('') + '</tbody></table></div>'
+      : '<div class="card"><div class="empty"><h2>Chưa có nhân viên</h2><p>Thêm nhân viên và in thẻ ở mục Nhân viên &amp; thẻ.</p><button class="btn pri" data-act="go" data-arg="nhan-vien">Thêm nhân viên</button></div></div>');
 }
 function monthData(m) {
-  const wd = workDays(S.all.p, S.all.v), list = staff(), n = daysIn(m);
-  return list.map(s => {
+  const wd = workDays(S.all.p), n = daysIn(m);
+  return staff().map(s => {
     const days = []; let cong = 0, gio = 0, muon = 0, phut = 0, thieu = 0;
-    for (let i = 1; i <= n; i++) { const D = m + '-' + pad(i), r = wd[s.id + '|' + D]; days.push(r || null); if (r) { cong += r.ra ? 1 : 0.5; gio += r.gio; if (r.muonX) { muon++; phut += r.muon; } if (!r.ra) thieu++; } }
+    for (let i = 1; i <= n; i++) { const r = wd[s.id + '|' + m + '-' + pad(i)]; days.push(r || null); if (r) { cong += r.ra ? 1 : 0.5; gio += r.gio; if (r.muonX) { muon++; phut += r.muon; } if (!r.ra) thieu++; } }
     return { s, days, cong, gio, muon, phut, thieu };
   });
 }
 function bMonth(m) {
-  const data = monthData(m), n = daysIn(m), we = i => [0, 6].includes(new Date(+m.slice(0, 4), +m.slice(5, 7) - 1, i).getDay());
-  const cell = (r, i) => { const c = we(i) ? ' we' : ''; if (!r) return '<td class="d off' + c + '">·</td>'; const t = r.ra ? (Math.round(r.gio * 10) / 10).toLocaleString('vi-VN') : 'V'; return '<td class="d' + (r.muonX ? ' late' : !r.ra ? ' half' : '') + c + '" title="' + dm(r.D) + ': vào ' + hm(r.vao) + (r.ra ? ', ra ' + hm(r.ra) : ', chưa có giờ ra') + (r.muonX ? ', muộn ' + r.muon + ' phút' : '') + '">' + t + '</td>'; };
+  const data = monthData(m), n = daysIn(m), dw = i => new Date(+m.slice(0, 4), +m.slice(5, 7) - 1, i).getDay(), we = i => dw(i) === 0;
+  const cell = (r, i) => { const c = we(i) ? ' we' : ''; if (!r) return '<td class="d off' + c + '">·</td>'; return '<td class="d' + (r.muonX ? ' late' : !r.ra ? ' half' : '') + c + '" title="' + dm(r.D) + ': vào ' + hm(r.vao) + (r.ra ? ', ra ' + hm(r.ra) : ', chưa có giờ ra') + (r.muonX ? ', muộn ' + r.muon + ' phút' : '') + '">' + (r.ra ? n1(r.gio) : 'V') + '</td>'; };
   return '<p class="small muted">Ô ghi số giờ làm. <span class="pill warn">vàng</span> đi muộn, <span class="pill info">V</span> chỉ có giờ vào (tính nửa công). Rê chuột vào ô để xem giờ vào, ra.</p>' +
-    (data.length ? '<div class="tbl tall"><table class="month"><thead><tr><th>Nhân viên</th>' + Array.from({ length: n }, (_, k) => '<th class="c' + (we(k + 1) ? ' we' : '') + '">' + (k + 1) + '<br><span style="font-weight:400">' + DOW[new Date(+m.slice(0, 4), +m.slice(5, 7) - 1, k + 1).getDay()] + '</span></th>').join('') + '<th class="n">Công</th><th class="n">Giờ</th><th class="n">Muộn</th></tr></thead><tbody>' +
-      data.map(x => '<tr><td class="name">' + esc(x.s.name) + '</td>' + x.days.map((r, k) => cell(r, k + 1)).join('') + '<td class="n"><b>' + String(x.cong).replace('.', ',') + '</b></td><td class="n">' + (Math.round(x.gio * 10) / 10).toLocaleString('vi-VN') + '</td><td class="n">' + (x.muon ? x.muon + ' (' + x.phut + '′)' : '') + '</td></tr>').join('') + '</tbody></table></div>' : '<div class="empty">Chưa có nhân viên.</div>');
+    (data.length ? '<div class="tbl tall"><table class="month"><thead><tr><th>Nhân viên</th>' + Array.from({ length: n }, (_, k) => '<th class="c' + (we(k + 1) ? ' we' : '') + '">' + (k + 1) + '<br><span style="font-weight:400">' + DOW[dw(k + 1)] + '</span></th>').join('') + '<th class="n">Công</th><th class="n">Giờ</th><th class="n">Muộn</th></tr></thead><tbody>' +
+      data.map(x => '<tr><td class="name">' + esc(x.s.ten) + '</td>' + x.days.map((r, k) => cell(r, k + 1)).join('') + '<td class="n"><b>' + String(x.cong).replace('.', ',') + '</b></td><td class="n">' + n1(x.gio) + '</td><td class="n">' + (x.muon ? x.muon + ' (' + x.phut + '′)' : '') + '</td></tr>').join('') + '</tbody></table></div>' : '<div class="empty">Chưa có nhân viên.</div>');
 }
 function bScans(D) {
   const list = Object.entries(S.all.p).filter(([, p]) => p.d === D).sort((a, b) => b[1].at - a[1].at), f = S.f, sl = staff();
-  return '<div class="card"><h2>Chấm công tay</h2><p class="small muted">Dùng khi nhân viên quên quét hoặc điện thoại hỏng. Lượt chấm tay ghi rõ người nhập.</p>' +
-    '<div class="row"><label class="f">Nhân viên<select id="mU">' + sl.map(s => '<option value="' + esc(s.id) + '"' + (f.mU === s.id ? ' selected' : '') + '>' + esc(s.name) + '</option>').join('') + '</select></label><label class="f">Ngày<input type="date" id="mD" value="' + (f.mD || D) + '"></label><label class="f">Giờ<input type="time" id="mT" value="' + (f.mT || '') + '"></label><label class="f grow">Lý do<input id="mN" value="' + esc(f.mN || '') + '" placeholder="Ví dụ: quên quét lúc về"></label><button class="btn pri" data-act="manual" style="align-self:flex-end">Thêm</button></div></div>' +
-    (list.length ? '<div class="tbl tall"><table><thead><tr><th>Giờ</th><th>Nhân viên</th><th>Cách</th><th>Trạng thái</th><th>Ghi chú</th><th></th></tr></thead><tbody>' +
-      list.map(([id, p]) => { const v = S.all.v[id]; return '<tr><td class="mono">' + hms(v && v.t || p.at) + '</td><td>' + esc(nameOf(p.u) || p.nm) + '</td><td>' + esc(SRC[p.src] || p.src) + '</td><td>' + stPill(v) + '</td><td class="small">' + esc([v && v.why, p.note, p.by ? 'nhập bởi ' + p.by : ''].filter(Boolean).join(' · ')) + '</td><td>' + (v && v.st !== 'huy' ? '<button class="btn sm danger" data-act="void" data-arg="' + esc(id) + '">' + (f.sure === id ? 'Bấm lần nữa để hủy' : 'Hủy lượt') + '</button>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="empty">Không có lượt quét nào ngày ' + dmy(D) + '.</div>');
+  return '<div class="card"><h2>Chấm công tay</h2><p class="small muted">Dùng khi nhân viên quên thẻ hoặc quên quét. Lượt chấm tay ghi rõ lý do.</p>' +
+    '<div class="row"><label class="f">Nhân viên<select id="mU">' + sl.map(s => '<option value="' + esc(s.id) + '"' + (f.mU === s.id ? ' selected' : '') + '>' + esc(s.ten) + '</option>').join('') + '</select></label><label class="f">Ngày<input type="date" id="mD" value="' + (f.mD || D) + '"></label><label class="f">Giờ<input type="time" id="mT" value="' + (f.mT || '') + '"></label><label class="f grow">Lý do<input id="mN" value="' + esc(f.mN || '') + '" placeholder="Ví dụ: quên thẻ"></label><button class="btn pri" data-act="manual" style="align-self:flex-end">Thêm</button></div></div>' +
+    (list.length ? '<div class="tbl tall"><table><thead><tr><th>Giờ</th><th>Nhân viên</th><th>Cách</th><th>Ghi chú</th><th></th></tr></thead><tbody>' +
+      list.map(([id, p]) => '<tr' + (p.huy ? ' class="muted"' : '') + '><td class="mono">' + hms(p.at) + '</td><td>' + esc(nameOf(p.u)) + '</td><td>' + esc(SRC[p.src] || p.src) + (p.huy ? ' <span class="pill">Đã hủy</span>' : '') + '</td><td class="small">' + esc([p.note, p.huy].filter(x => typeof x === 'string' && x).join(' · ')) + '</td><td>' + (p.huy ? '' : '<button class="btn sm danger" data-act="void" data-arg="' + esc(id) + '">' + (f.sure === id ? 'Bấm lần nữa để hủy' : 'Hủy lượt') + '</button>') + '</td></tr>').join('') + '</tbody></table></div>' : '<div class="empty">Không có lượt chấm nào ngày ' + dmy(D) + '.</div>');
+}
+
+/* ---- Nhân viên & thẻ ---- */
+function cardSvg(ma, size) {
+  if (!window.qrcode) return '';
+  const q = window.qrcode(0, 'M'); q.addData(String(ma)); q.make();
+  const n = q.getModuleCount(); let d = '';
+  for (let r = 0; r < n; r++) for (let x = 0; x < n; x++) if (q.isDark(r, x)) d += 'M' + x + ' ' + r + 'h1v1h-1z';
+  return '<svg xmlns="http://www.w3.org/2000/svg" viewBox="-2 -2 ' + (n + 4) + ' ' + (n + 4) + '"' + (size ? ' width="' + size + '" height="' + size + '"' : '') + ' shape-rendering="crispEdges"><rect x="-2" y="-2" width="' + (n + 4) + '" height="' + (n + 4) + '" fill="#ffffff"/><path d="' + d + '" fill="#000000"/></svg>';
+}
+function vNv() {
+  const f = S.f, all = staff(true), c = cfg(), e = f.edit;
+  const form = e ? '<form class="card" id="nvForm" novalidate><h2>' + (e.id ? 'Sửa nhân viên' : 'Thêm nhân viên') + '</h2><div class="row">' +
+    '<label class="f grow">Họ tên<input id="eTen" value="' + esc(e.ten || '') + '" maxlength="60"></label><label class="f">Bộ phận<input id="eBp" value="' + esc(e.bp || '') + '" maxlength="40" list="bpList"></label>' +
+    '<label class="f">Ca<select id="eCa">' + c.ca.map(x => '<option value="' + esc(x.id) + '"' + ((e.ca || c.ca[0].id) === x.id ? ' selected' : '') + '>' + esc(x.ten) + ' ' + esc(x.vao) + '–' + esc(x.ra) + '</option>').join('') + '</select></label></div>' +
+    '<datalist id="bpList">' + [...new Set(all.map(s => s.bp).filter(Boolean))].map(b => '<option value="' + esc(b) + '">').join('') + '</datalist>' +
+    (e.id ? '<label class="row small"><input type="checkbox" id="eOn"' + (e.on !== false ? ' checked' : '') + '> Đang làm việc (bỏ tích khi nghỉ việc: thẻ hết dùng được, bảng công cũ giữ nguyên)</label>' : '') +
+    '<div class="row"><button class="btn pri" type="submit">Lưu</button><button class="btn" type="button" data-act="nvCancel">Hủy</button>' + (e.id ? '<button class="btn danger" type="button" data-act="newCard" data-arg="' + esc(e.id) + '">' + (f.sureCard ? 'Bấm lần nữa: thẻ cũ sẽ hết dùng được' : 'Cấp thẻ mới (mất thẻ)') + '</button>' : '') + '</div></form>' : '';
+  return '<div class="head"><div><h1>Nhân viên &amp; thẻ</h1><div class="sub">Mỗi nhân viên một thẻ QR. In thẻ, ép plastic, phát cho nhân viên.</div></div><div class="row"><button class="btn" data-act="cards">Tải file in thẻ</button><button class="btn pri" data-act="nvAdd">+ Thêm nhân viên</button></div></div>' + form +
+    (all.length ? '<div class="tbl"><table><thead><tr><th>Thẻ</th><th>Họ tên</th><th>Bộ phận</th><th>Ca</th><th>Mã thẻ</th><th>Trạng thái</th><th></th></tr></thead><tbody>' +
+      all.map(s => '<tr' + (s.on === false ? ' class="muted"' : '') + '><td><div class="mini-qr">' + cardSvg(s.ma, 44) + '</div></td><td><b>' + esc(s.ten) + '</b></td><td>' + esc(s.bp || '') + '</td><td>' + esc(caOf(s.id).ten) + '</td><td class="mono">' + fmtMa(s.ma) + '</td><td>' + (s.on === false ? '<span class="pill">Đã nghỉ</span>' : '<span class="pill ok">Đang làm</span>') + '</td><td><button class="btn sm" data-act="nvEdit" data-arg="' + esc(s.id) + '">Sửa</button></td></tr>').join('') + '</tbody></table></div>'
+      : '<div class="card"><div class="empty"><h2>Chưa có nhân viên</h2><p>Thêm từng người, hoặc dán cả danh sách vào ô dưới.</p></div></div>') +
+    '<details class="card"' + (all.length ? '' : ' open') + '><summary><b>Thêm nhiều người cùng lúc</b></summary><p class="small muted">Mỗi dòng một người: <span class="mono">Họ tên | Bộ phận | Ca</span>. Bộ phận và ca có thể bỏ trống; ca ghi đúng tên ca ở mục Cài đặt (ví dụ Ca đêm).</p><textarea id="bulk" rows="6" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--surface)" placeholder="Nguyễn Thị Lan | Đóng gói | Ca ngày">' + esc(f.bulk || '') + '</textarea><div class="row"><button class="btn pri" data-act="bulkAdd">Thêm danh sách</button></div></details>' +
+    '<div class="card"><h2>Cách in thẻ</h2><ol class="steps"><li>Bấm <b>Tải file in thẻ</b>, mở file vừa tải bằng trình duyệt trên máy tính.</li><li>Bấm Ctrl+P để in ra giấy A4 (10 thẻ một trang, cỡ thẻ ATM).</li><li>Cắt, ép plastic, phát cho từng người. Mất thẻ thì bấm Sửa › Cấp thẻ mới.</li></ol></div>';
+}
+function newMa() { let m; do { const b = crypto.getRandomValues(new Uint32Array(2)); m = String(b[0] % 1e5).padStart(5, '0') + String(b[1] % 1e5).padStart(5, '0'); } while (byMa(m) || m[0] === '0'); return m; }
+async function saveNv(id, rec) {
+  const ref = S.db.doc('nv/list'), s = await ref.get(), cur = (s.exists && s.data().a) || {};
+  if (id) cur[id] = rec;
+  await ref.set({ a: cur, at: Date.now() });
+}
+function cardsFile() {
+  const list = staff(), c = cfg();
+  const card = s => '<div class="card"><div class="top"><b>AN TÂM</b><span>THẺ CHẤM CÔNG</span></div><div class="body"><div class="qr">' + cardSvg(s.ma) + '</div><div class="info"><div class="name">' + esc(s.ten) + '</div><div>' + esc(s.bp || '') + '</div><div>' + esc(caOf(s.id).ten) + '</div><div class="ma">' + fmtMa(s.ma) + '</div></div></div></div>';
+  return '<!doctype html><html lang="vi"><head><meta charset="utf-8"><title>Thẻ chấm công An Tâm</title><style>@page{size:A4;margin:10mm}body{margin:0;font-family:Arial,sans-serif;color:#000}' +
+    '.sheet{display:grid;grid-template-columns:repeat(2,85.6mm);grid-auto-rows:54mm;gap:4mm 6mm;justify-content:center}' +
+    '.card{border:0.3mm dashed #888;border-radius:3mm;padding:3mm;box-sizing:border-box;display:grid;grid-template-rows:auto 1fr;gap:2mm;break-inside:avoid;overflow:hidden}' +
+    '.top{display:flex;justify-content:space-between;font-size:3.2mm;border-bottom:0.4mm solid #1c6b5a;padding-bottom:1mm;color:#1c6b5a}.body{display:grid;grid-template-columns:38mm 1fr;gap:3mm;align-items:center}' +
+    '.qr svg{width:38mm;height:38mm;display:block}.info{font-size:3.2mm;display:grid;gap:1mm}.name{font-size:4.2mm;font-weight:bold;line-height:1.2}.ma{font-family:monospace;font-size:3.4mm;letter-spacing:0.3mm;margin-top:2mm}' +
+    'p.note{font-size:3.5mm;color:#555;text-align:center}@media print{p.note{display:none}}</style></head><body><p class="note">Bấm Ctrl+P (hoặc ⌘+P) để in. Chọn khổ A4, tỉ lệ 100%.</p><div class="sheet">' + list.map(card).join('') + '</div></body></html>';
 }
 
 /* ---- Cài đặt ---- */
 function vSet() {
-  if (!S.admin) return '<div class="banner warn"><span>Chỉ quản lý sửa được cài đặt.</span></div>';
   const c = cfg(), e = S.f.ca || c.ca.map(x => Object.assign({}, x)); S.f.ca = e;
-  return '<div class="head"><div><h1>Cài đặt</h1><div class="sub">Link trang, ca làm việc và ca của từng nhân viên</div></div></div>' +
-    '<div class="grid2"><div class="card"><h2>Link trang</h2><p class="small muted">Mã QR mở link này. Lấy ở nút Chia sẻ › Sao chép link của trang. Trang cần chia sẻ cho nhân viên với quyền Contributor để ghi được giờ chấm công.</p>' +
-    '<label class="f">Link<input id="sLink" value="' + esc(c.link) + '" placeholder="https://claude.ai/artifact/…"></label>' +
-    '<div class="row"><label class="f">Cho phép trễ (phút)<input type="number" id="sTre" min="0" max="120" value="' + c.tre + '"></label><label class="f">Mã QR đổi sau (giây)<input type="number" id="sP" min="15" max="300" value="' + c.p + '"></label></div>' +
-    '<div class="row"><button class="btn pri" data-act="saveGen">Lưu</button></div></div>' +
-    '<div class="card"><h2>Ca làm việc</h2><div class="tbl"><table><thead><tr><th>Tên ca</th><th>Vào</th><th>Ra</th><th></th></tr></thead><tbody>' +
+  return '<div class="head"><div><h1>Cài đặt</h1><div class="sub">Ca làm việc và số phút cho phép trễ</div></div></div>' +
+    '<div class="grid2"><div class="card"><h2>Ca làm việc</h2><div class="tbl"><table><thead><tr><th>Tên ca</th><th>Vào</th><th>Ra</th><th></th></tr></thead><tbody>' +
     e.map((x, i) => '<tr><td><input id="caT' + i + '" value="' + esc(x.ten) + '" style="width:9em"></td><td><input type="time" id="caV' + i + '" value="' + esc(x.vao) + '"></td><td><input type="time" id="caR' + i + '" value="' + esc(x.ra) + '"></td><td>' + (e.length > 1 ? '<button class="btn sm danger" data-act="caDel" data-arg="' + i + '">Xóa</button>' : '') + '</td></tr>').join('') + '</tbody></table></div>' +
-    '<p class="small muted">Giờ ra nhỏ hơn giờ vào là ca qua đêm: giờ ra sáng hôm sau tính cho ngày bắt đầu ca.</p><div class="row"><button class="btn" data-act="caAdd">+ Thêm ca</button><button class="btn pri" data-act="caSave">Lưu ca</button></div></div></div>' +
-    '<div class="card"><div class="row"><h2 class="grow">Nhân viên và ca</h2><button class="btn" data-act="accounts">Thêm / sửa nick nhân viên</button></div>' +
-    (staff().length ? '<div class="tbl"><table><thead><tr><th>Nhân viên</th><th>Nick</th><th>Ca</th></tr></thead><tbody>' + staff().map(s => '<tr><td><b>' + esc(s.name) + '</b></td><td class="mono">' + esc(s.user) + '</td><td><select data-gan="' + esc(s.id) + '" aria-label="Ca của ' + esc(s.name) + '">' + c.ca.map(x => '<option value="' + esc(x.id) + '"' + (caOf(s.id).id === x.id ? ' selected' : '') + '>' + esc(x.ten) + ' ' + esc(x.vao) + '–' + esc(x.ra) + '</option>').join('') + '</select></td></tr>').join('') + '</tbody></table></div>'
-      : '<div class="empty">Chưa có nick nào. Bấm “Thêm / sửa nick nhân viên”, mỗi nhân viên một nick và mật khẩu.</div>') + '</div>' +
-    '<div class="card"><h2>Khóa mã QR</h2><p class="small muted">Đổi khóa khi nghi có người làm giả mã. Các mã cũ hết hiệu lực ngay; lượt quét đã xác nhận giữ nguyên.</p><div class="row"><button class="btn danger" data-act="newKey">' + (S.f.sureKey ? 'Bấm lần nữa để đổi khóa' : 'Đổi khóa mã QR') + '</button></div></div>';
+    '<p class="small muted">Giờ ra nhỏ hơn giờ vào là ca qua đêm: giờ ra sáng hôm sau tính cho ngày vào ca.</p><div class="row"><button class="btn" data-act="caAdd">+ Thêm ca</button><button class="btn pri" data-act="caSave">Lưu ca</button></div></div>' +
+    '<div class="card"><h2>Đi muộn, về sớm</h2><label class="f">Cho phép trễ (phút)<input type="number" id="sTre" min="0" max="120" value="' + c.tre + '" style="width:8em"></label><p class="small muted">Vào sau giờ vào ca quá số phút này là đi muộn; ra trước giờ ra ca quá số phút này là về sớm.</p><div class="row"><button class="btn pri" data-act="saveTre">Lưu</button></div>' +
+    '<h2>Máy đọc mã</h2><p class="small muted">Dùng máy đọc mã QR cắm USB (kiểu bàn phím, đọc được mã 2D). Mở trang ở mục Máy chấm công, bấm Bắt đầu. Máy đọc tự gõ số trên thẻ và Enter, không cần chạm vào màn hình.</p></div></div>';
 }
 function readCa() { const e = S.f.ca || []; return e.map((x, i) => ({ id: x.id, ten: ($('#caT' + i) || {}).value || x.ten, vao: ($('#caV' + i) || {}).value || x.vao, ra: ($('#caR' + i) || {}).value || x.ra })); }
 async function saveSet(patch, msg) {
   try { const ref = S.db.doc('set/app'), s = await ref.get(); if (s.exists) await ref.update(patch); else await ref.set(Object.assign({}, DEF, patch)); toast(msg); }
   catch (e) { toast('Chưa lưu được: ' + ((e && e.message) || 'lỗi kết nối')); }
 }
-async function ensureSecret() {
-  if (!S.admin || S.secret) return;
-  try {
-    const ref = S.db.doc('cfg/secret'), s = await ref.get();
-    if (s.exists && s.data().k) { S.secret = s.data().k; }
-    else { const b = crypto.getRandomValues(new Uint8Array(32)); S.secret = Array.from(b).map(x => x.toString(16).padStart(2, '0')).join(''); await ref.set({ k: S.secret, at: Date.now() }); }
-    bump(); verifyAll();
-  } catch (e) { console.warn(e); }
-}
 
-/* ---- Xuất Excel ---- */
-async function exportX() {
-  if (!window.XLSX) { toast('Chưa tải xong bộ tạo Excel.'); return; }
+/* ---- Tải file ---- */
+async function save(filename, data) {
   const dl = await window.claude?.use?.('downloads'); if (!dl) { toast('Trang này chưa được phép tải file xuống.'); return; }
-  const f = S.f, m = f.tab === 'thang' ? f.m : (f.d || isoOf(new Date())).slice(0, 7), wb = XLSX.utils.book_new();
-  const add = (t, rows) => { const ws = XLSX.utils.aoa_to_sheet(rows); XLSX.utils.book_append_sheet(wb, ws, t); };
-  const data = monthData(m), n = daysIn(m);
-  add('Bảng công ' + m.slice(5) + '-' + m.slice(0, 4), [['Nhân viên', 'Nick', ...Array.from({ length: n }, (_, k) => k + 1), 'Ngày công', 'Tổng giờ', 'Số lần muộn', 'Phút muộn', 'Thiếu giờ ra']].concat(
-    data.map(x => [x.s.name, x.s.user, ...x.days.map(r => r ? (r.ra ? Math.round(r.gio * 10) / 10 : 'V') : ''), x.cong, Math.round(x.gio * 10) / 10, x.muon, x.phut, x.thieu])));
-  const det = []; data.forEach(x => x.days.forEach(r => { if (r) det.push([x.s.name, dmy(r.D), r.ca.ten, hm(r.vao), r.ra ? hm(r.ra) : '', Math.round(r.gio * 100) / 100, r.muonX ? r.muon : 0, r.somX ? r.som : 0]); }));
-  add('Chi tiết', [['Nhân viên', 'Ngày', 'Ca', 'Giờ vào', 'Giờ ra', 'Giờ làm', 'Muộn (phút)', 'Về sớm (phút)']].concat(det));
-  add('Lượt quét', [['Ngày', 'Giờ', 'Nhân viên', 'Cách', 'Trạng thái', 'Ghi chú']].concat(Object.entries(S.all.p).filter(([, p]) => p.d.slice(0, 7) === m).sort((a, b) => a[1].at - b[1].at).map(([id, p]) => { const v = S.all.v[id] || {}; return [dmy(p.d), hms(v.t || p.at), nameOf(p.u) || p.nm, SRC[p.src] || p.src, ({ ok: 'Hợp lệ', tay: 'Chấm tay', huy: 'Đã hủy', het: 'Hết hạn', sai: 'Mã sai' })[v.st] || 'Chưa xác nhận', [v.why, p.note].filter(Boolean).join(' · ')]; })));
-  try { const out = XLSX.write(wb, { bookType: 'xlsx', type: 'array' }); await dl.save({ filename: 'Bang_cong_' + m + '.xlsx', data: new Blob([out]) }); }
-  catch (e) { if (e && e.code !== 'declined') toast('Không tải được file: ' + (e.message || e.code)); }
+  try { await dl.save({ filename, data }); } catch (e) { if (e && e.code !== 'declined') toast('Không tải được file: ' + (e.message || e.code)); }
 }
-
+function exportX() {
+  if (!window.XLSX) { toast('Chưa tải xong bộ tạo Excel.'); return; }
+  const f = S.f, m = f.tab === 'thang' ? f.m : (f.d || isoOf(new Date())).slice(0, 7), wb = XLSX.utils.book_new();
+  const add = (t, rows) => XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), t);
+  const data = monthData(m), n = daysIn(m);
+  add('Bảng công ' + m.slice(5) + '-' + m.slice(0, 4), [['Nhân viên', 'Bộ phận', ...Array.from({ length: n }, (_, k) => k + 1), 'Ngày công', 'Tổng giờ', 'Số lần muộn', 'Phút muộn', 'Thiếu giờ ra']].concat(
+    data.map(x => [x.s.ten, x.s.bp || '', ...x.days.map(r => r ? (r.ra ? Math.round(r.gio * 10) / 10 : 'V') : ''), x.cong, Math.round(x.gio * 10) / 10, x.muon, x.phut, x.thieu])));
+  const det = []; data.forEach(x => x.days.forEach(r => { if (r) det.push([x.s.ten, x.s.bp || '', dmy(r.D), r.ca.ten, hm(r.vao), r.ra ? hm(r.ra) : '', Math.round(r.gio * 100) / 100, r.muonX ? r.muon : 0, r.somX ? r.som : 0]); }));
+  add('Chi tiết', [['Nhân viên', 'Bộ phận', 'Ngày', 'Ca', 'Giờ vào', 'Giờ ra', 'Giờ làm', 'Muộn (phút)', 'Về sớm (phút)']].concat(det));
+  add('Lượt chấm', [['Ngày', 'Giờ', 'Nhân viên', 'Cách', 'Ghi chú']].concat(Object.values(S.all.p).filter(p => p.d.slice(0, 7) === m).sort((a, b) => a.at - b.at).map(p => [dmy(p.d), hms(p.at), nameOf(p.u), (SRC[p.src] || p.src) + (p.huy ? ' (đã hủy)' : ''), [p.note, typeof p.huy === 'string' ? p.huy : ''].filter(Boolean).join(' · ')])));
+  save('Bang_cong_' + m + '.xlsx', new Blob([XLSX.write(wb, { bookType: 'xlsx', type: 'array' })]));
+}
 function toast(t) { const el = document.createElement('div'); el.className = 'toast'; el.textContent = t; $('#toasts').appendChild(el); setTimeout(() => el.remove(), 4500); }
 
 /* ============ Sự kiện ============ */
 document.addEventListener('click', async e => {
-  const el = e.target.closest('[data-act]'); if (!el) return;
+  const el = e.target.closest('[data-act]'); if (!el) { if (S.view === 'may') setTimeout(focusScan, 0); return; }
   const a = el.dataset.act, arg = el.dataset.arg;
   if (a === 'go') go(arg);
-  else if (a === 'closeDone') { $('#done').hidden = true; $('#done').innerHTML = ''; }
-  else if (a === 'snap') $('#snap').click();
-  else if (a === 'typed') { const v = ($('#codeIn').value || '').toUpperCase().replace(/[^A-Z0-9]/g, ''); if (v.length !== 6) { toast('Nhập đủ 6 ký tự đang hiện dưới mã QR.'); return; } S.f.code = ''; punch(null, v, 'ma'); }
+  else if (a === 'arm') { S.f.armed = true; beep(true); keepAwake(true); render(); }
   else if (a === 'full') { S.f.full = !S.f.full; try { if (S.f.full) await document.documentElement.requestFullscreen(); else if (document.fullscreenElement) await document.exitFullscreen(); } catch (x) { /* máy không hỗ trợ */ } render(); }
+  else if (a === 'snap') $('#snap').click();
   else if (a === 'tab') { S.f.tab = arg; render(); }
   else if (a === 'exportX') exportX();
+  else if (a === 'cards') { if (!staff().length) { toast('Chưa có nhân viên để in thẻ.'); return; } save('The_cham_cong_An_Tam.html', new Blob([cardsFile()], { type: 'text/html' })); }
+  else if (a === 'nvAdd') { S.f.edit = { ten: '', bp: '', ca: cfg().ca[0].id }; S.f.sureCard = false; render(); const i = $('#eTen'); if (i) i.focus(); }
+  else if (a === 'nvEdit') { S.f.edit = Object.assign({ id: arg }, S.nv[arg]); S.f.sureCard = false; render(); window.scrollTo(0, 0); }
+  else if (a === 'nvCancel') { S.f.edit = null; render(); }
+  else if (a === 'newCard') {
+    if (!S.f.sureCard) { S.f.sureCard = true; render(); return; }
+    S.f.sureCard = false; const rec = Object.assign({}, S.nv[arg], { ma: newMa(), at: Date.now() });
+    try { await saveNv(arg, rec); S.f.edit = Object.assign({ id: arg }, rec); toast('Đã cấp thẻ mới cho ' + rec.ten + '. Tải file in thẻ để in lại.'); } catch (x) { toast('Chưa lưu được: ' + ((x && x.message) || 'lỗi kết nối')); }
+  }
+  else if (a === 'bulkAdd') {
+    const lines = ($('#bulk').value || '').split('\n').map(s => s.trim()).filter(Boolean); if (!lines.length) { toast('Dán danh sách, mỗi dòng một người.'); return; }
+    const c = cfg(), ref = S.db.doc('nv/list');
+    try {
+      const s = await ref.get(), cur = (s.exists && s.data().a) || {}; let n = 0;
+      for (const l of lines) { const [ten, bp, caT] = l.split('|').map(x => (x || '').trim()); if (!ten) continue; const ca = c.ca.find(x => x.ten.toLowerCase() === (caT || '').toLowerCase()) || c.ca[0]; const id = 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); cur[id] = { ten, bp: bp || '', ca: ca.id, ma: newMa(), on: true, at: Date.now() }; S.nv[id] = cur[id]; n++; }
+      await ref.set({ a: cur, at: Date.now() }); S.f.bulk = ''; toast('Đã thêm ' + n + ' nhân viên.'); render();
+    } catch (x) { toast('Chưa lưu được: ' + ((x && x.message) || 'lỗi kết nối')); }
+  }
   else if (a === 'manual') {
     const u = $('#mU').value, d = $('#mD').value, t = $('#mT').value, note = $('#mN').value.trim();
     S.f.mU = u; S.f.mD = d; S.f.mT = t; S.f.mN = note;
     if (!u || !d || !t) { toast('Chọn nhân viên, ngày và giờ.'); return; }
     if (!note) { toast('Ghi lý do chấm tay.'); return; }
-    const ms = at(d, t), id = d.replace(/-/g, '') + '-' + u + '-tay' + Date.now().toString(36), by = (me() && me().name) || 'Quản lý';
-    try {
-      await S.db.doc('cc/' + d.slice(0, 7) + '/p/' + id).set({ d, u, nm: nameOf(u), at: ms, ts: null, tc: '', src: 'tay', note, by });
-      await S.db.doc('ccv/' + d.slice(0, 7) + '/v/' + id).set({ st: 'tay', t: ms, u, d, vAt: Date.now(), why: '' });
-      S.f.mT = ''; S.f.mN = ''; toast('Đã thêm lượt chấm tay ' + hm(ms) + ' cho ' + nameOf(u) + '.'); render();
-    } catch (x) { toast('Chưa lưu được: ' + ((x && x.message) || 'lỗi kết nối')); }
+    const ms = at(d, t), id = d.replace(/-/g, '') + '-' + u + '-tay' + Date.now().toString(36);
+    try { await S.db.doc('cc/' + d.slice(0, 7) + '/p/' + id).set({ d, u, at: ms, src: 'tay', note }); S.f.mT = ''; S.f.mN = ''; toast('Đã thêm lượt chấm tay ' + hm(ms) + ' cho ' + nameOf(u) + '.'); render(); }
+    catch (x) { toast('Chưa lưu được: ' + ((x && x.message) || 'lỗi kết nối')); }
   }
   else if (a === 'void') {
     if (S.f.sure !== arg) { S.f.sure = arg; render(); return; }
     S.f.sure = ''; const p = S.all.p[arg]; if (!p) return;
-    try { await S.db.doc('ccv/' + p.d.slice(0, 7) + '/v/' + arg).set(Object.assign({}, S.all.v[arg] || { u: p.u, d: p.d }, { st: 'huy', why: 'Hủy bởi ' + ((me() && me().name) || 'quản lý'), vAt: Date.now() })); toast('Đã hủy lượt quét.'); }
+    try { await S.db.doc('cc/' + p.d.slice(0, 7) + '/p/' + arg).update({ huy: 'Hủy lúc ' + hm(Date.now()) + ' ' + dm(isoOf(new Date())) }); toast('Đã hủy lượt chấm.'); }
     catch (x) { toast('Chưa lưu được: ' + ((x && x.message) || 'lỗi kết nối')); }
   }
-  else if (a === 'saveGen') { const link = $('#sLink').value.trim(); if (link && !/^https:\/\/claude\.ai\//.test(link)) { toast('Link phải bắt đầu bằng https://claude.ai/'); return; } saveSet({ link: link.split('#')[0], tre: Math.max(0, +$('#sTre').value || 0), p: Math.min(300, Math.max(15, +$('#sP').value || 30)) }, 'Đã lưu cài đặt.'); }
+  else if (a === 'saveTre') saveSet({ tre: Math.max(0, Math.min(120, +$('#sTre').value || 0)) }, 'Đã lưu.');
   else if (a === 'caAdd') { const e2 = readCa(); e2.push({ id: 'ca' + Date.now().toString(36), ten: 'Ca mới', vao: '08:00', ra: '17:00' }); S.f.ca = e2; render(); }
-  else if (a === 'caDel') { const e2 = readCa(); const x = e2[+arg]; if (Object.values(cfg().gan).includes(x.id)) { toast('Còn nhân viên thuộc ' + x.ten + '. Chuyển họ sang ca khác trước.'); return; } e2.splice(+arg, 1); S.f.ca = e2; render(); }
+  else if (a === 'caDel') { const e2 = readCa(), x = e2[+arg]; if (staff(true).some(s => s.ca === x.id)) { toast('Còn nhân viên thuộc ' + x.ten + '. Chuyển họ sang ca khác trước.'); return; } e2.splice(+arg, 1); S.f.ca = e2; render(); }
   else if (a === 'caSave') { const e2 = readCa(); if (e2.some(x => !x.ten.trim() || !x.vao || !x.ra)) { toast('Mỗi ca cần tên, giờ vào và giờ ra.'); return; } await saveSet({ ca: e2 }, 'Đã lưu ca làm việc.'); S.f.ca = null; render(); }
-  else if (a === 'accounts') { const b = document.querySelector('.ng-me'); if (b) b.click(); else toast('Mở bằng nút tài khoản góc trên bên phải.'); }
-  else if (a === 'newKey') {
-    if (!S.f.sureKey) { S.f.sureKey = true; render(); return; }
-    S.f.sureKey = false; const b = crypto.getRandomValues(new Uint8Array(32)), k = Array.from(b).map(x => x.toString(16).padStart(2, '0')).join('');
-    try { await S.db.doc('cfg/secret').set({ k, at: Date.now() }); S.secret = k; S.codes.clear(); qrSlot = -1; toast('Đã đổi khóa mã QR.'); render(); } catch (x) { toast('Chưa lưu được: ' + ((x && x.message) || 'lỗi kết nối')); }
-  }
 });
-document.addEventListener('change', async e => {
+document.addEventListener('submit', async e => {
+  if (e.target.id !== 'nvForm') return; e.preventDefault();
+  const ed = S.f.edit, ten = $('#eTen').value.trim(); if (!ten) { toast('Nhập họ tên.'); return; }
+  const id = ed.id || 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5);
+  const rec = { ten, bp: $('#eBp').value.trim(), ca: $('#eCa').value, ma: ed.ma || newMa(), on: ed.id ? $('#eOn').checked : true, at: Date.now() };
+  try { await saveNv(id, rec); S.f.edit = null; toast(ed.id ? 'Đã lưu ' + ten + '.' : 'Đã thêm ' + ten + '. Mã thẻ ' + fmtMa(rec.ma) + '.'); render(); }
+  catch (x) { toast('Chưa lưu được: ' + ((x && x.message) || 'lỗi kết nối')); }
+});
+document.addEventListener('change', e => {
   const el = e.target;
   if (el.id === 'snap') { readPhoto(el.files[0]); el.value = ''; }
-  else if (el.id === 'myMonth') { S.f.mm = el.value || isoOf(new Date()).slice(0, 7); render(); }
   else if (el.id === 'bDate') { S.f.d = el.value || isoOf(new Date()); render(); }
   else if (el.id === 'bMonth') { S.f.m = el.value || isoOf(new Date()).slice(0, 7); render(); }
-  else if (el.dataset.gan) { const gan = Object.assign({}, cfg().gan, { [el.dataset.gan]: el.value }); saveSet({ gan }, 'Đã đổi ca cho ' + nameOf(el.dataset.gan) + '.'); }
 });
-document.addEventListener('input', e => { if (e.target.id === 'codeIn') S.f.code = e.target.value; });
-document.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'codeIn') { const b = document.querySelector('[data-act="typed"]'); if (b) b.click(); } if (e.key === 'Escape' && !$('#done').hidden) { $('#done').hidden = true; } });
+document.addEventListener('input', e => { if (e.target.id === 'bulk') S.f.bulk = e.target.value; });
+// Máy đọc mã gõ số rồi Enter vào ô #scan (ô luôn được giữ tiêu điểm ở mục Máy chấm công)
+document.addEventListener('keydown', e => {
+  if (e.target.id === 'scan' && e.key === 'Enter') { e.preventDefault(); const v = e.target.value; e.target.value = ''; if (!S.f.armed) { S.f.armed = true; keepAwake(true); } scanCode(v, 'the'); }
+});
 document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && S.f.full) { S.f.full = false; render(); } });
-window.addEventListener('hashchange', () => { const t = parseHash(location.hash); if (t) { S.pending = t; handlePending(); return; } route(); render(); });
-window.addEventListener('antam-nick', () => { S.mine.m = ''; render(); handlePending(); });
+window.addEventListener('hashchange', () => { route(); render(); });
 setInterval(() => {
   const c = $('#clock'); if (c) c.textContent = hm(Date.now());
-  if (S.view === 'qr') { drawQr(); keepAwake(true); } else keepAwake(false);
-  watchLast();
+  if (S.view === 'may') { if (S.f.armed) keepAwake(true); if (S.last && S.last.t && Date.now() - S.last.t > 12000 && Date.now() - S.last.t < 13100) render(); focusScan(); } else keepAwake(false);
 }, 1000);
-document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.view === 'qr') { wake = null; keepAwake(true); } });
+document.addEventListener('visibilitychange', () => { if (document.visibilityState === 'visible' && S.view === 'may' && S.f.armed) { wake = null; keepAwake(true); } });
 
 /* ============ Khởi động ============ */
 (async function init() {
-  { const t = parseHash(location.hash); if (t) S.pending = t; else route(); }
-  render();
+  route(); render();
   const c = window.claude;
   const [db, user] = c && c.use ? await Promise.all([c.use('db').catch(() => null), c.use('user').catch(() => null)]) : [null, null];
   S.db = db; S.user = user;
   if (user) { try { S.admin = !!(await user.canEdit()); } catch (e) { S.admin = false; } }
-  if (db) {
+  if (db && S.admin) {
     db.doc('set/app').onSnapshot(s => { S.set = s.exists ? s.data() : null; bump(); }, dbErr);
-    db.doc('auth/accounts').onSnapshot(s => { S.acc = (s.exists && s.data().a) || {}; bump(); }, dbErr);
-    ensureSecret();
+    db.doc('nv/list').onSnapshot(s => { S.nv = (s.exists && s.data().a) || {}; S.nvLoaded = true; bump(); }, dbErr);
   }
-  S.ready = true; route();
-  if (S.pending) S.view = 'cham';
-  render(); handlePending();
+  S.ready = true; render();
 })();
 </script>
