@@ -1465,7 +1465,7 @@ async function repSave() {
     const dates = Object.keys(byDate).sort();
     for (const d of dates) {
       step('đơn ngày ' + dm(d));
-      const snap = await S.db.doc('dh/' + d).get(), cur = (snap.exists && snap.data().o) || {};
+      const snap = await S.db.doc('dh/' + d).get(), cur = JSON.parse(JSON.stringify((snap.exists && snap.data().o) || {}));
       for (const o of byDate[d]) {
         const prev = cur[o.no];
         cur[o.no] = { c: o.c, n: o.n, gt: o.gt, hd: o.hd, tt: o.tt, cpt: o.cpt, tthd: o.tthd, shd: o.shd, nhd: o.nhd, ts: o.ts, gh: o.gh, gds: o.gds, ca: (prev && prev.ca) || (tag && d === rd ? tag : ''), at };
@@ -1475,7 +1475,7 @@ async function repSave() {
     // 2. Sổ công nợ (Công nợ cũ + KH chưa thanh toán + thực thu MISA)
     const months = new Set(); [p.orders, p.cn, p.khctt].forEach(l => l.forEach(o => { if (o.d) months.add(o.d.slice(0, 7)); }));
     const book = {};
-    for (const m of [...months].sort()) { step('sổ công nợ ' + m.slice(5) + '/' + m.slice(0, 4)); const s = await S.db.doc('cnbook/' + m).get(), v = s.exists ? s.data() : {}; book[m] = { o: v.o || {}, nm: v.nm || {} }; }
+    for (const m of [...months].sort()) { step('sổ công nợ ' + m.slice(5) + '/' + m.slice(0, 4)); const s = await S.db.doc('cnbook/' + m).get(), v = s.exists ? JSON.parse(JSON.stringify(s.data())) : {}; book[m] = { o: v.o || {}, nm: v.nm || {} }; }
     const addTag = old => { const s = new Set(String(old || '').split(',').filter(Boolean)); if (tag) s.add(tag); return [...s].sort().join(','); };
     const B = d => book[d.slice(0, 7)];
     p.cn.filter(o => o.d).forEach(o => { const b = B(o.d), cur = b.o[o.no]; if (o.n) b.nm[o.c] = o.n; b.o[o.no] = [o.d, o.c, o.gt, cur ? Math.max(cur[3], o.l) : o.l, cur ? Math.max(+cur[4] || 0, o.m) : o.m, addTag(cur && cur[5])]; });

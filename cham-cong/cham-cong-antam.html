@@ -287,6 +287,8 @@ const staff = (all) => Object.entries(S.nv).filter(([, a]) => a && (all || a.on 
 const nameOf = id => (S.nv[id] && S.nv[id].ten) || 'Nhân viên đã xóa';
 const caOf = id => { const c = cfg(), a = S.nv[id]; return c.ca.find(x => x.id === (a && a.ca)) || c.ca[0]; };
 const byMa = ma => Object.entries(S.nv).find(([, a]) => a && a.ma === ma);
+// Dữ liệu đọc từ kho bị khóa (không sửa trực tiếp được): chép ra bản riêng trước khi sửa
+const clone = o => o == null ? o : JSON.parse(JSON.stringify(o));
 
 /* ============ Đọc dữ liệu ============ */
 function subAll(m) {
@@ -568,9 +570,9 @@ async function enrollAdd(files) {
   }
   render();
 }
-function newMa() { let m; do { const b = crypto.getRandomValues(new Uint32Array(2)); m = String(b[0] % 1e5).padStart(5, '0') + String(b[1] % 1e5).padStart(5, '0'); } while (byMa(m) || m[0] === '0'); return m; }
+function newMa(more) { let m; do { const b = crypto.getRandomValues(new Uint32Array(2)); m = String(b[0] % 1e5).padStart(5, '0') + String(b[1] % 1e5).padStart(5, '0'); } while (byMa(m) || m[0] === '0' || (more && Object.values(more).some(x => x && x.ma === m))); return m; }
 async function saveNv(id, rec) {
-  const ref = S.db.doc('nv/list'), s = await ref.get(), cur = (s.exists && s.data().a) || {};
+  const ref = S.db.doc('nv/list'), s = await ref.get(), cur = clone((s.exists && s.data().a) || {});
   if (id) cur[id] = rec;
   await ref.set({ a: cur, at: Date.now() });
 }
@@ -708,8 +710,8 @@ document.addEventListener('click', async e => {
     const lines = ($('#bulk').value || '').split('\n').map(s => s.trim()).filter(Boolean); if (!lines.length) { toast('Dán danh sách, mỗi dòng một người.'); return; }
     const c = cfg(), ref = S.db.doc('nv/list');
     try {
-      const s = await ref.get(), cur = (s.exists && s.data().a) || {}; let n = 0;
-      for (const l of lines) { const [ten, bp, caT] = l.split('|').map(x => (x || '').trim()); if (!ten) continue; const ca = c.ca.find(x => x.ten.toLowerCase() === (caT || '').toLowerCase()) || c.ca[0]; const id = 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); cur[id] = { ten, bp: bp || '', ca: ca.id, ma: newMa(), on: true, at: Date.now() }; S.nv[id] = cur[id]; n++; }
+      const s = await ref.get(), cur = clone((s.exists && s.data().a) || {}); let n = 0;
+      for (const l of lines) { const [ten, bp, caT] = l.split('|').map(x => (x || '').trim()); if (!ten) continue; const ca = c.ca.find(x => x.ten.toLowerCase() === (caT || '').toLowerCase()) || c.ca[0]; const id = 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); cur[id] = { ten, bp: bp || '', ca: ca.id, ma: newMa(cur), on: true, at: Date.now() }; n++; }
       await ref.set({ a: cur, at: Date.now() }); S.f.bulk = ''; toast('Đã thêm ' + n + ' nhân viên.'); render();
     } catch (x) { toast('Chưa lưu được: ' + ((x && x.message) || 'lỗi kết nối')); }
   }
