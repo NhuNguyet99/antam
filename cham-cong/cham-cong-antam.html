@@ -143,8 +143,13 @@ body.kiosk-full .main { max-width: none; }
 .hit-n { font-size: 34px; font-weight: 700; line-height: 1.2; text-wrap: balance; }
 .hit-t { font-size: 30px; font-weight: 600; display: flex; gap: 10px; align-items: center; }
 .hit-t .pill { font-size: 20px; padding: 2px 14px; }
+button.hit { width: 100%; font: inherit; color: inherit; cursor: pointer; }
+.hit.tap.idle { background: var(--accent-soft); border: 2px dashed var(--accent); }
+.hit.tap.idle .hit-l { color: var(--accent); }
+.hit.tap:focus-visible { outline: 3px solid var(--accent); outline-offset: 3px; }
 .btn.big { font-size: 20px; padding: 12px 28px; }
 .scan-in input { flex: 1 1 14em; font-family: var(--f-mono); }
+.scan-in input::placeholder { font-family: var(--f-body); }
 .mini-qr svg { display: block; width: 44px; height: 44px; border-radius: 4px; }
 details summary { cursor: pointer; }
 /* Khung in thẻ: xem trước trang A4 trên màn hình; khi bấm Ctrl+P chỉ in các trang thẻ */
@@ -265,6 +270,9 @@ const fmtMa = m => String(m || '').replace(/(\d{3})(\d{3})(\d{4})/, '$1 $2 $3');
 const DEF = { tre: 10, ca: [{ id: 'hc', ten: 'Hành chính', vao: '08:00', ra: '17:00' }, { id: 'ngay', ten: 'Ca ngày', vao: '07:00', ra: '19:00' }, { id: 'dem', ten: 'Ca đêm', vao: '19:00', ra: '07:00' }] };
 const VIEWS = [['may', 'Máy chấm công'], ['bang-cong', 'Bảng công'], ['nhan-vien', 'Nhân viên & thẻ'], ['cai-dat', 'Cài đặt']];
 
+const ls = { get(k, d) { try { const v = localStorage.getItem('cc.' + k); return v == null ? d : JSON.parse(v); } catch (e) { return d; } }, set(k, v) { try { localStorage.setItem('cc.' + k, JSON.stringify(v)); } catch (e) { /* trình duyệt chặn lưu */ } } };
+// Cách quét của máy này: 'cam' = camera thiết bị (chụp thẻ), 'scan' = máy đọc mã USB; cam: 'user' camera trước, 'environment' camera sau
+const DEV = { mode: ls.get('mode', 'cam'), cam: ls.get('cam', 'user') };
 const S = { db: null, user: null, admin: false, ready: false, set: null, nv: {}, nvLoaded: false, view: 'may', f: {}, all: { m: '', p: {}, subs: [] }, last: null, busy: false };
 const cfg = () => { const s = S.set || {}; return { tre: s.tre == null ? DEF.tre : +s.tre, ca: (s.ca && s.ca.length ? s.ca : DEF.ca) }; };
 const staff = (all) => Object.entries(S.nv).filter(([, a]) => a && (all || a.on !== false)).map(([id, a]) => Object.assign({ id }, a)).sort((a, b) => (a.bp || '').localeCompare(b.bp || '', 'vi') || a.ten.localeCompare(b.ten, 'vi'));
@@ -333,18 +341,22 @@ function vMay() {
   const P = S.all.p, feed = Object.entries(P).filter(([, p]) => p.d === today || Date.now() - p.at < 14 * 36e5).sort((a, b) => b[1].at - a[1].at).slice(0, 12);
   const wd = workDays(P), list = staff(), nIn = list.filter(s => wd[s.id + '|' + dayOf(s.id, Date.now())]).length;
   const L = S.last, fresh = L && Date.now() - L.t < 12000;
-  const res = !fresh ? '<div class="hit idle"><div class="hit-l">Đưa thẻ QR vào máy đọc</div><div class="muted">Mặt có mã QR hướng vào máy, giữ yên 1 giây</div></div>'
-    : L.kind === 'bad' ? '<div class="hit bad"><div class="hit-l">' + esc(L.title) + '</div><div>' + esc(L.msg) + '</div></div>'
-    : '<div class="hit ' + (L.kind === 'dup' ? 'dup' : 'ok') + '"><div class="hit-n">' + esc(L.name) + '</div><div class="hit-t"><span class="pill ' + (L.io === 'Vào' ? 'ok' : 'info') + '">' + L.io + '</span> <span class="mono">' + hm(L.at) + '</span></div><div>' + esc(L.msg) + '</div></div>';
+  const cam = DEV.mode === 'cam', idle = cam ? '<button class="hit idle tap" data-act="snap"><span class="hit-l">Bấm vào đây để quét thẻ</span><span class="muted">Camera mở ra: đưa mặt có mã QR vào giữa khung, giữ yên rồi chụp</span></button>' : '<div class="hit idle"><div class="hit-l">Đưa thẻ QR vào máy đọc</div><div class="muted">Mặt có mã QR hướng vào máy, giữ yên 1 giây</div></div>';
+  const res = !fresh ? idle
+    : L.kind === 'wait' ? '<div class="hit idle"><div class="hit-l">Đang đọc thẻ…</div></div>'
+    : L.kind === 'bad' ? '<' + (cam ? 'button data-act="snap"' : 'div') + ' class="hit bad' + (cam ? ' tap' : '') + '"><span class="hit-l">' + esc(L.title) + '</span><span>' + esc(L.msg) + '</span>' + (cam ? '<span class="btn pri">Quét lại</span>' : '') + '</' + (cam ? 'button' : 'div') + '>'
+    : '<' + (cam ? 'button data-act="snap"' : 'div') + ' class="hit ' + (L.kind === 'dup' ? 'dup' : 'ok') + (cam ? ' tap' : '') + '"><span class="hit-n">' + esc(L.name) + '</span><span class="hit-t"><span class="pill ' + (L.io === 'Vào' ? 'ok' : 'info') + '">' + L.io + '</span> <span class="mono">' + hm(L.at) + '</span></span><span>' + esc(L.msg) + '</span>' + (cam ? '<span class="muted small">Người tiếp theo: bấm vào đây để quét</span>' : '') + '</' + (cam ? 'button' : 'div') + '>';
   return '<div class="kiosk"><div class="card scan-box"><div class="row"><div class="grow"><div class="clock" id="clock">' + hm(Date.now()) + '</div><div class="muted small">' + DOW[new Date().getDay()] + ' ' + dmy(today) + '</div></div>' +
     (S.f.armed ? '<button class="btn sm" data-act="full">' + (S.f.full ? 'Thoát toàn màn hình' : 'Toàn màn hình') + '</button>' : '') + '</div>' +
     (S.f.armed ? res : '<div class="hit idle"><div class="hit-l">Bấm “Bắt đầu” để máy chấm công hoạt động</div><div class="muted">Bật âm báo, giữ màn hình sáng và sẵn sàng nhận thẻ.</div><button class="btn pri big" data-act="arm">Bắt đầu</button></div>') +
-    '<div class="row scan-in"><input id="scan" inputmode="none" autocomplete="off" spellcheck="false" aria-label="Mã thẻ (máy đọc tự gõ)" placeholder="Mã thẻ – máy đọc tự gõ vào đây"><button class="btn" data-act="snap">Chụp thẻ bằng camera</button></div>' +
-    '<p class="small muted">Chưa có máy đọc: bấm “Chụp thẻ bằng camera” rồi chụp thẻ, hoặc gõ số trên thẻ và Enter.</p></div>' +
+    '<div class="row"><span class="small muted">Cách quét trên máy này:</span><div class="seg"><button data-act="mode" data-arg="cam" aria-pressed="' + cam + '">Camera máy này</button><button data-act="mode" data-arg="scan" aria-pressed="' + !cam + '">Máy đọc mã USB</button></div>' +
+    (cam ? '<div class="seg"><button data-act="camSide" data-arg="user" aria-pressed="' + (DEV.cam === 'user') + '">Camera trước</button><button data-act="camSide" data-arg="environment" aria-pressed="' + (DEV.cam !== 'user') + '">Camera sau</button></div>' : '') + '</div>' +
+    '<div class="row scan-in"><input id="scan" inputmode="' + (cam ? 'numeric' : 'none') + '" autocomplete="off" spellcheck="false" aria-label="Mã thẻ" placeholder="' + (cam ? 'Hoặc gõ số trên thẻ rồi Enter' : 'Mã thẻ – máy đọc tự gõ vào đây') + '">' + (cam ? '' : '<button class="btn" data-act="snap">Chụp thẻ bằng camera</button>') + '</div>' +
+    '<p class="small muted">' + (cam ? 'Đặt máy tính bảng ở cửa, camera hướng về phía nhân viên. Mỗi người bấm nút lớn, đưa thẻ vào camera và chụp; web tự đọc mã và ghi giờ.' : 'Máy đọc gõ số trên thẻ rồi Enter, không cần chạm vào màn hình.') + '</p></div>' +
     '<div class="card"><div class="row"><h2 class="grow">Hôm nay</h2>' + kpi('Đã chấm', nIn + '/' + list.length, 'người') + '</div><div class="feed">' +
     (feed.length ? feed.map(([, p]) => '<div><span class="t">' + hm(p.at) + '</span><span class="n">' + esc(nameOf(p.u)) + '</span>' + (p.huy ? '<span class="pill">Đã hủy</span>' : p.src === 'tay' ? '<span class="pill info">Chấm tay</span>' : '') + '</div>').join('') : '<p class="muted">Chưa có ai chấm công.</p>') + '</div></div></div>';
 }
-function focusScan() { const i = $('#scan'); if (i && document.activeElement !== i && !(document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName) && document.activeElement.id !== 'scan')) i.focus({ preventScroll: true }); }
+function focusScan() { if (DEV.mode === 'cam') return; const i = $('#scan'); if (i && document.activeElement !== i && !(document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName) && document.activeElement.id !== 'scan')) i.focus({ preventScroll: true }); }
 let audio = null;
 function beep(ok) {
   try { audio = audio || new (window.AudioContext || window.webkitAudioContext)(); const o = audio.createOscillator(), g = audio.createGain(); o.frequency.value = ok ? 1046 : 220; o.type = ok ? 'sine' : 'square'; g.gain.setValueAtTime(0.0001, audio.currentTime); g.gain.exponentialRampToValueAtTime(0.3, audio.currentTime + 0.02); g.gain.exponentialRampToValueAtTime(0.0001, audio.currentTime + (ok ? 0.25 : 0.6)); o.connect(g).connect(audio.destination); o.start(); o.stop(audio.currentTime + (ok ? 0.3 : 0.65)); } catch (e) { /* không có âm thanh */ }
@@ -374,10 +386,15 @@ async function readPhoto(file) {
   if (!file) return;
   if (!window.jsQR) { toast('Chưa tải xong bộ đọc mã QR. Đợi vài giây rồi thử lại.'); return; }
   try {
-    const bmp = await createImageBitmap(file), k = Math.min(1, 1600 / Math.max(bmp.width, bmp.height));
-    const c = document.createElement('canvas'); c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k);
-    const g = c.getContext('2d'); g.drawImage(bmp, 0, 0, c.width, c.height);
-    const r = window.jsQR(g.getImageData(0, 0, c.width, c.height).data, c.width, c.height, { inversionAttempts: 'attemptBoth' });
+    S.last = { kind: 'wait', t: Date.now() }; render();
+    const bmp = await createImageBitmap(file), c = document.createElement('canvas'), g = c.getContext('2d', { willReadFrequently: true });
+    const tryAt = (max, crop) => {
+      const sw = bmp.width * crop, sh = bmp.height * crop, sx = (bmp.width - sw) / 2, sy = (bmp.height - sh) / 2, k = Math.min(1, max / Math.max(sw, sh));
+      c.width = Math.round(sw * k); c.height = Math.round(sh * k); g.drawImage(bmp, sx, sy, sw, sh, 0, 0, c.width, c.height);
+      return window.jsQR(g.getImageData(0, 0, c.width, c.height).data, c.width, c.height, { inversionAttempts: 'attemptBoth' });
+    };
+    let r = null;
+    for (const [max, crop] of [[1200, 1], [1600, 0.6], [800, 1], [2000, 1], [1000, 0.45]]) { r = tryAt(max, crop); if (r && /\d{6,}/.test(r.data)) break; }
     if (!r || !/\d{6,}/.test(r.data)) { S.last = { kind: 'bad', title: 'Không đọc được thẻ', msg: 'Chụp gần hơn, đủ sáng, để mã QR nằm trọn trong ảnh.', t: Date.now() }; beep(false); render(); return; }
     scanCode(r.data, 'anh');
   } catch (e) { toast('Không đọc được ảnh: ' + ((e && e.message) || '')); }
@@ -519,7 +536,7 @@ function vSet() {
     e.map((x, i) => '<tr><td><input id="caT' + i + '" value="' + esc(x.ten) + '" style="width:9em"></td><td><input type="time" id="caV' + i + '" value="' + esc(x.vao) + '"></td><td><input type="time" id="caR' + i + '" value="' + esc(x.ra) + '"></td><td>' + (e.length > 1 ? '<button class="btn sm danger" data-act="caDel" data-arg="' + i + '">Xóa</button>' : '') + '</td></tr>').join('') + '</tbody></table></div>' +
     '<p class="small muted">Giờ ra nhỏ hơn giờ vào là ca qua đêm: giờ ra sáng hôm sau tính cho ngày vào ca.</p><div class="row"><button class="btn" data-act="caAdd">+ Thêm ca</button><button class="btn pri" data-act="caSave">Lưu ca</button></div></div>' +
     '<div class="card"><h2>Đi muộn, về sớm</h2><label class="f">Cho phép trễ (phút)<input type="number" id="sTre" min="0" max="120" value="' + c.tre + '" style="width:8em"></label><p class="small muted">Vào sau giờ vào ca quá số phút này là đi muộn; ra trước giờ ra ca quá số phút này là về sớm.</p><div class="row"><button class="btn pri" data-act="saveTre">Lưu</button></div>' +
-    '<h2>Máy đọc mã</h2><p class="small muted">Dùng máy đọc mã QR cắm USB (kiểu bàn phím, đọc được mã 2D). Mở trang ở mục Máy chấm công, bấm Bắt đầu. Máy đọc tự gõ số trên thẻ và Enter, không cần chạm vào màn hình.</p></div></div>';
+    '<h2>Thiết bị quét</h2><p class="small muted">Chọn ở mục Máy chấm công, mỗi máy nhớ lựa chọn riêng. <b>Camera máy này</b>: máy tính bảng hoặc điện thoại đặt ở cửa, nhân viên bấm nút rồi chụp thẻ. <b>Máy đọc mã USB</b> (loại đọc mã 2D, kiểu bàn phím): chỉ cần đưa thẻ, nhanh hơn.</p></div></div>';
 }
 function readCa() { const e = S.f.ca || []; return e.map((x, i) => ({ id: x.id, ten: ($('#caT' + i) || {}).value || x.ten, vao: ($('#caV' + i) || {}).value || x.vao, ra: ($('#caR' + i) || {}).value || x.ra })); }
 async function saveSet(patch, msg) {
@@ -553,7 +570,9 @@ document.addEventListener('click', async e => {
   if (a === 'go') go(arg);
   else if (a === 'arm') { S.f.armed = true; beep(true); keepAwake(true); render(); }
   else if (a === 'full') { S.f.full = !S.f.full; try { if (S.f.full) await document.documentElement.requestFullscreen(); else if (document.fullscreenElement) await document.exitFullscreen(); } catch (x) { /* máy không hỗ trợ */ } render(); }
-  else if (a === 'snap') $('#snap').click();
+  else if (a === 'snap') { const i = $('#snap'); i.setAttribute('capture', DEV.cam); if (!S.f.armed) { S.f.armed = true; keepAwake(true); } i.click(); }
+  else if (a === 'mode') { DEV.mode = arg; ls.set('mode', arg); render(); }
+  else if (a === 'camSide') { DEV.cam = arg; ls.set('cam', arg); render(); }
   else if (a === 'tab') { S.f.tab = arg; render(); }
   else if (a === 'exportX') exportX();
   else if (a === 'printCards') { if (!staff().length) { toast('Chưa có nhân viên để in thẻ.'); return; } openPrint(); }
