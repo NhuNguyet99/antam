@@ -15,6 +15,9 @@ Nhân viên không cần điện thoại hay tài khoản: đến và về bấm
 - **Bảng công**: theo ngày (ai đã chấm, đi muộn, về sớm), bảng công tháng (giờ làm từng ngày, ngày công, số lần muộn), lượt chấm (chấm tay khi quên thẻ, hủy lượt sai), tải Excel.
 - **Cài đặt**: ca làm việc (ca qua đêm khi giờ ra nhỏ hơn giờ vào; giờ ra sáng hôm sau tính cho ngày vào ca), số phút cho phép trễ.
 
+## Camera
+claude.ai không cho trang mở webcam trực tiếp (quyền `camera` không có trong runtime; khai báo bị từ chối "unknown capability: camera"). Trang chỉ mở camera qua `<input type=file capture>`: trên máy tính bảng / điện thoại thì mở camera để chụp, trên laptop chỉ mở hộp chọn tệp. Vì vậy máy chấm công khuôn mặt phải là máy tính bảng hoặc điện thoại. Trên laptop trang hiện cảnh báo và gợi ý dùng máy đọc mã USB.
+
 ## Bộ nhận diện
 `@vladmandic/face-api@1.7.15` (nạp từ jsDelivr khi cần) chạy ngay trên máy, WebGL nếu có. Tệp mô hình (khoảng 12 MB) đăng kèm trang ở `model/`, lấy bằng `bash cham-cong/lay-mo-hinh.sh <thư mục>`; tệp trọng số đổi đuôi `.bin` thành `.wasm` vì trang không phục vụ `.bin`. Đăng lại trang không cần gửi lại các tệp này: tệp không gửi được giữ nguyên.
 
