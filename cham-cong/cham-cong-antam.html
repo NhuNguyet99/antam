@@ -147,6 +147,29 @@ body.kiosk-full .main { max-width: none; }
 .scan-in input { flex: 1 1 14em; font-family: var(--f-mono); }
 .mini-qr svg { display: block; width: 44px; height: 44px; border-radius: 4px; }
 details summary { cursor: pointer; }
+/* Khung in thẻ: xem trước trang A4 trên màn hình; khi bấm Ctrl+P chỉ in các trang thẻ */
+#printDlg { position: fixed; inset: 0; z-index: 70; background: var(--bg); overflow: auto; display: grid; grid-template-rows: auto 1fr; }
+.pd-bar { position: sticky; top: 0; z-index: 2; background: var(--surface); border-bottom: 1px solid var(--line); display: flex; flex-wrap: wrap; gap: 8px 14px; align-items: center; padding-block: 10px; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+.pd-bar kbd { font-family: var(--f-mono); border: 1px solid var(--line); border-bottom-width: 2px; border-radius: 5px; padding: 0 6px; background: var(--raise); }
+.pd-pages { display: grid; gap: 16px; justify-content: center; padding: 20px 16px 40px; overflow-x: auto; }
+.pc-page { width: 210mm; height: 297mm; background: #fff; color: #000; box-shadow: 0 2px 12px rgba(0, 0, 0, .18); display: grid; grid-template-columns: repeat(2, 85.6mm); grid-auto-rows: 54mm; gap: 3mm 6mm; justify-content: center; align-content: center; font-family: Arial, "Be Vietnam Pro", sans-serif; }
+.pc-card { border: 0.3mm dashed #999; border-radius: 3mm; padding: 3mm 3.5mm; box-sizing: border-box; display: grid; grid-template-rows: auto 1fr; gap: 2mm; overflow: hidden; background: #fff; }
+.pc-top { display: flex; justify-content: space-between; font-size: 3.1mm; border-bottom: 0.45mm solid #1c6b5a; padding-bottom: 1mm; color: #1c6b5a; font-weight: 700; }
+.pc-body { display: grid; grid-template-columns: 38mm 1fr; gap: 3mm; align-items: center; }
+.pc-qr svg { width: 38mm; height: 38mm; display: block; }
+.pc-info { font-size: 3.2mm; display: grid; gap: 1mm; color: #333; }
+.pc-name { font-size: 4.4mm; font-weight: 700; line-height: 1.2; color: #000; }
+.pc-ma { font-family: "Roboto Mono", Consolas, monospace; font-size: 3.5mm; letter-spacing: .3mm; margin-top: 2mm; color: #000; }
+@media print {
+  @page { size: A4; margin: 0; }
+  html, body { background: #fff !important; height: auto; }
+  body > *:not(#printDlg) { display: none !important; }
+  #printDlg { position: static; overflow: visible; background: #fff; display: block; }
+  .pd-bar { display: none !important; }
+  .pd-pages { display: block; padding: 0; }
+  .pc-page { box-shadow: none; break-after: page; page-break-after: always; }
+  .pc-page:last-child { break-after: auto; page-break-after: auto; }
+}
 </style>
 
 <div class="top"><div class="top-in">
@@ -155,6 +178,7 @@ details summary { cursor: pointer; }
 </div></div>
 <main class="main" id="view"><div class="empty">Đang tải…</div></main>
 <div class="toasts" id="toasts" aria-live="polite"></div>
+<div id="printDlg" hidden></div>
 <input type="file" id="snap" accept="image/*" capture="environment" hidden>
 
 <!-- err-log:start -->
@@ -422,12 +446,12 @@ function vNv() {
     '<datalist id="bpList">' + [...new Set(all.map(s => s.bp).filter(Boolean))].map(b => '<option value="' + esc(b) + '">').join('') + '</datalist>' +
     (e.id ? '<label class="row small"><input type="checkbox" id="eOn"' + (e.on !== false ? ' checked' : '') + '> Đang làm việc (bỏ tích khi nghỉ việc: thẻ hết dùng được, bảng công cũ giữ nguyên)</label>' : '') +
     '<div class="row"><button class="btn pri" type="submit">Lưu</button><button class="btn" type="button" data-act="nvCancel">Hủy</button>' + (e.id ? '<button class="btn danger" type="button" data-act="newCard" data-arg="' + esc(e.id) + '">' + (f.sureCard ? 'Bấm lần nữa: thẻ cũ sẽ hết dùng được' : 'Cấp thẻ mới (mất thẻ)') + '</button>' : '') + '</div></form>' : '';
-  return '<div class="head"><div><h1>Nhân viên &amp; thẻ</h1><div class="sub">Mỗi nhân viên một thẻ QR. In thẻ, ép plastic, phát cho nhân viên.</div></div><div class="row"><button class="btn" data-act="cards">Tải PDF in thẻ</button><button class="btn pri" data-act="nvAdd">+ Thêm nhân viên</button></div></div>' + form +
+  return '<div class="head"><div><h1>Nhân viên &amp; thẻ</h1><div class="sub">Mỗi nhân viên một thẻ QR. In thẻ, ép plastic, phát cho nhân viên.</div></div><div class="row"><button class="btn" data-act="printCards">In thẻ</button><button class="btn pri" data-act="nvAdd">+ Thêm nhân viên</button></div></div>' + form +
     (all.length ? '<div class="tbl"><table><thead><tr><th>Thẻ</th><th>Họ tên</th><th>Bộ phận</th><th>Ca</th><th>Mã thẻ</th><th>Trạng thái</th><th></th></tr></thead><tbody>' +
       all.map(s => '<tr' + (s.on === false ? ' class="muted"' : '') + '><td><div class="mini-qr">' + cardSvg(s.ma, 44) + '</div></td><td><b>' + esc(s.ten) + '</b></td><td>' + esc(s.bp || '') + '</td><td>' + esc(caOf(s.id).ten) + '</td><td class="mono">' + fmtMa(s.ma) + '</td><td>' + (s.on === false ? '<span class="pill">Đã nghỉ</span>' : '<span class="pill ok">Đang làm</span>') + '</td><td><button class="btn sm" data-act="nvEdit" data-arg="' + esc(s.id) + '">Sửa</button></td></tr>').join('') + '</tbody></table></div>'
       : '<div class="card"><div class="empty"><h2>Chưa có nhân viên</h2><p>Thêm từng người, hoặc dán cả danh sách vào ô dưới.</p></div></div>') +
     '<details class="card"' + (all.length ? '' : ' open') + '><summary><b>Thêm nhiều người cùng lúc</b></summary><p class="small muted">Mỗi dòng một người: <span class="mono">Họ tên | Bộ phận | Ca</span>. Bộ phận và ca có thể bỏ trống; ca ghi đúng tên ca ở mục Cài đặt (ví dụ Ca đêm).</p><textarea id="bulk" rows="6" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--surface)" placeholder="Nguyễn Thị Lan | Đóng gói | Ca ngày">' + esc(f.bulk || '') + '</textarea><div class="row"><button class="btn pri" data-act="bulkAdd">Thêm danh sách</button></div></details>' +
-    '<div class="card"><h2>Cách in thẻ</h2><ol class="steps"><li>Bấm <b>Tải PDF in thẻ</b>, mở file PDF vừa tải.</li><li>In ra giấy A4, chọn tỉ lệ <b>100% / Kích thước thực</b> (10 thẻ một trang, cỡ thẻ ATM).</li><li>Cắt, ép plastic, phát cho từng người. Mất thẻ thì bấm Sửa › Cấp thẻ mới.</li></ol></div>';
+    '<div class="card"><h2>Cách in thẻ</h2><ol class="steps"><li>Bấm <b>In thẻ</b>: khung xem trước các trang A4 mở ra (10 thẻ một trang, cỡ thẻ ATM).</li><li>Bấm <b>Ctrl+P</b> để in. Chọn tỉ lệ <b>100%</b>, lề <b>Không có</b>. Nếu bản in ra cả trang claude.ai thay vì trang thẻ, bấm <b>Không in được? Tải PDF</b> rồi in file PDF.</li><li>Cắt, ép plastic, phát cho từng người. Mất thẻ thì bấm Sửa › Cấp thẻ mới.</li></ol></div>';
 }
 function newMa() { let m; do { const b = crypto.getRandomValues(new Uint32Array(2)); m = String(b[0] % 1e5).padStart(5, '0') + String(b[1] % 1e5).padStart(5, '0'); } while (byMa(m) || m[0] === '0'); return m; }
 async function saveNv(id, rec) {
@@ -468,6 +492,13 @@ async function cardsPdf() {
     pdf.addImage(draw(s), 'PNG', left + (k % 2) * (cw + gx), top + Math.floor(k / 2) * (ch + gy), cw, ch, undefined, 'FAST');
   });
   return pdf.output('blob');
+}
+function openPrint() {
+  const list = staff(), host = $('#printDlg');
+  const card = s => '<div class="pc-card"><div class="pc-top"><span>AN TÂM</span><span>THẺ CHẤM CÔNG</span></div><div class="pc-body"><div class="pc-qr">' + cardSvg(s.ma) + '</div><div class="pc-info"><div class="pc-name">' + esc(s.ten) + '</div><div>' + esc(s.bp || '') + '</div><div>' + esc(caOf(s.id).ten) + '</div><div class="pc-ma">' + fmtMa(s.ma) + '</div></div></div></div>';
+  const pages = []; for (let i = 0; i < list.length; i += 10) pages.push('<div class="pc-page">' + list.slice(i, i + 10).map(card).join('') + '</div>');
+  host.innerHTML = '<div class="pd-bar"><b class="grow">In thẻ chấm công · ' + list.length + ' thẻ · ' + pages.length + ' trang A4</b><span class="small">Bấm <kbd>Ctrl</kbd>+<kbd>P</kbd> (máy Mac: <kbd>⌘</kbd>+<kbd>P</kbd>) để in. Tỉ lệ 100%, lề Không có.</span><button class="btn" data-act="cards">Không in được? Tải PDF</button><button class="btn pri" data-act="closePrint" id="pdClose">Đóng</button></div><div class="pd-pages">' + pages.join('') + '</div>';
+  host.hidden = false; const b = $('#pdClose'); if (b) b.focus();
 }
 function cardsFile() {
   const list = staff(), c = cfg();
@@ -525,12 +556,14 @@ document.addEventListener('click', async e => {
   else if (a === 'snap') $('#snap').click();
   else if (a === 'tab') { S.f.tab = arg; render(); }
   else if (a === 'exportX') exportX();
+  else if (a === 'printCards') { if (!staff().length) { toast('Chưa có nhân viên để in thẻ.'); return; } openPrint(); }
+  else if (a === 'closePrint') { $('#printDlg').hidden = true; $('#printDlg').innerHTML = ''; }
   else if (a === 'cards') {
     if (!staff().length) { toast('Chưa có nhân viên để in thẻ.'); return; }
     if (!window.jspdf || !window.qrcode) { save('The_cham_cong_An_Tam.html', new Blob([cardsFile()], { type: 'text/html' })); return; }
     el.disabled = true; el.textContent = 'Đang tạo PDF…';
     try { save('The_cham_cong_An_Tam.pdf', await cardsPdf()); } catch (x) { toast('Không tạo được PDF: ' + ((x && x.message) || '')); }
-    el.disabled = false; el.textContent = 'Tải PDF in thẻ';
+    el.disabled = false; el.textContent = 'Không in được? Tải PDF';
   }
   else if (a === 'nvAdd') { S.f.edit = { ten: '', bp: '', ca: cfg().ca[0].id }; S.f.sureCard = false; render(); const i = $('#eTen'); if (i) i.focus(); }
   else if (a === 'nvEdit') { S.f.edit = Object.assign({ id: arg }, S.nv[arg]); S.f.sureCard = false; render(); window.scrollTo(0, 0); }
@@ -538,7 +571,7 @@ document.addEventListener('click', async e => {
   else if (a === 'newCard') {
     if (!S.f.sureCard) { S.f.sureCard = true; render(); return; }
     S.f.sureCard = false; const rec = Object.assign({}, S.nv[arg], { ma: newMa(), at: Date.now() });
-    try { await saveNv(arg, rec); S.f.edit = Object.assign({ id: arg }, rec); toast('Đã cấp thẻ mới cho ' + rec.ten + '. Tải PDF in thẻ để in lại.'); } catch (x) { toast('Chưa lưu được: ' + ((x && x.message) || 'lỗi kết nối')); }
+    try { await saveNv(arg, rec); S.f.edit = Object.assign({ id: arg }, rec); toast('Đã cấp thẻ mới cho ' + rec.ten + '. bấm In thẻ để in lại.'); } catch (x) { toast('Chưa lưu được: ' + ((x && x.message) || 'lỗi kết nối')); }
   }
   else if (a === 'bulkAdd') {
     const lines = ($('#bulk').value || '').split('\n').map(s => s.trim()).filter(Boolean); if (!lines.length) { toast('Dán danh sách, mỗi dòng một người.'); return; }
@@ -588,6 +621,7 @@ document.addEventListener('input', e => { if (e.target.id === 'bulk') S.f.bulk =
 document.addEventListener('keydown', e => {
   if (e.target.id === 'scan' && e.key === 'Enter') { e.preventDefault(); const v = e.target.value; e.target.value = ''; if (!S.f.armed) { S.f.armed = true; keepAwake(true); } scanCode(v, 'the'); }
 });
+document.addEventListener('keydown', e => { if (e.key === 'Escape' && !$('#printDlg').hidden) { $('#printDlg').hidden = true; $('#printDlg').innerHTML = ''; } });
 document.addEventListener('fullscreenchange', () => { if (!document.fullscreenElement && S.f.full) { S.f.full = false; render(); } });
 window.addEventListener('hashchange', () => { route(); render(); });
 setInterval(() => {
