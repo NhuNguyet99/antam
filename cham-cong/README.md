@@ -6,7 +6,7 @@ Nhân viên không cần điện thoại hay tài khoản. Mỗi người một 
 
 ## Cách dùng
 - **Máy chấm công**: máy tính hoặc máy tính bảng ở cửa, cắm máy đọc mã QR loại USB (kiểu bàn phím, đọc được mã 2D). Mở mục Máy chấm công, bấm Bắt đầu (bật âm báo, giữ màn hình sáng). Máy đọc gõ số trên thẻ rồi Enter vào ô luôn được giữ con trỏ; màn hình hiện tên, Vào/Ra, giờ và báo đi muộn hoặc về sớm. Quét lại trong 1 phút không ghi thêm. Chưa có máy đọc thì dùng nút "Chụp thẻ bằng camera" hoặc gõ số trên thẻ.
-- **Nhân viên & thẻ**: thêm từng người hoặc dán cả danh sách (`Họ tên | Bộ phận | Ca`). Mã thẻ là 10 chữ số ngẫu nhiên, chỉ dùng chữ số để bộ gõ tiếng Việt không làm sai mã. "Tải file in thẻ" cho file HTML khổ A4, 10 thẻ cỡ ATM mỗi trang, mở bằng trình duyệt rồi Ctrl+P. Mất thẻ thì Sửa › Cấp thẻ mới (thẻ cũ hết dùng được). Nhân viên nghỉ thì bỏ tích Đang làm việc.
+- **Nhân viên & thẻ**: thêm từng người hoặc dán cả danh sách (`Họ tên | Bộ phận | Ca`). Mã thẻ là 10 chữ số ngẫu nhiên, chỉ dùng chữ số để bộ gõ tiếng Việt không làm sai mã. "Tải PDF in thẻ" cho file PDF khổ A4, 10 thẻ cỡ ATM mỗi trang; in tỉ lệ 100%. Mất thẻ thì Sửa › Cấp thẻ mới (thẻ cũ hết dùng được). Nhân viên nghỉ thì bỏ tích Đang làm việc.
 - **Bảng công**: theo ngày (ai đã chấm, đi muộn, về sớm), bảng công tháng (giờ làm từng ngày, ngày công, số lần muộn), lượt chấm (chấm tay khi quên thẻ, hủy lượt sai), tải Excel.
 - **Cài đặt**: ca làm việc (ca qua đêm khi giờ ra nhỏ hơn giờ vào; giờ ra sáng hôm sau tính cho ngày vào ca), số phút cho phép trễ.
 

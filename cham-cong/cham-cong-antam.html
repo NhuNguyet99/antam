@@ -215,6 +215,7 @@ details summary { cursor: pointer; }
 <script src="https://cdn.jsdelivr.net/npm/qrcode-generator@1.4.4/qrcode.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsqr@1.4.0/dist/jsQR.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
 <script>
 'use strict';
 /* ============ Dữ liệu (kho dữ liệu chung của trang, chỉ quản lý đọc/ghi) ============
@@ -421,18 +422,52 @@ function vNv() {
     '<datalist id="bpList">' + [...new Set(all.map(s => s.bp).filter(Boolean))].map(b => '<option value="' + esc(b) + '">').join('') + '</datalist>' +
     (e.id ? '<label class="row small"><input type="checkbox" id="eOn"' + (e.on !== false ? ' checked' : '') + '> Đang làm việc (bỏ tích khi nghỉ việc: thẻ hết dùng được, bảng công cũ giữ nguyên)</label>' : '') +
     '<div class="row"><button class="btn pri" type="submit">Lưu</button><button class="btn" type="button" data-act="nvCancel">Hủy</button>' + (e.id ? '<button class="btn danger" type="button" data-act="newCard" data-arg="' + esc(e.id) + '">' + (f.sureCard ? 'Bấm lần nữa: thẻ cũ sẽ hết dùng được' : 'Cấp thẻ mới (mất thẻ)') + '</button>' : '') + '</div></form>' : '';
-  return '<div class="head"><div><h1>Nhân viên &amp; thẻ</h1><div class="sub">Mỗi nhân viên một thẻ QR. In thẻ, ép plastic, phát cho nhân viên.</div></div><div class="row"><button class="btn" data-act="cards">Tải file in thẻ</button><button class="btn pri" data-act="nvAdd">+ Thêm nhân viên</button></div></div>' + form +
+  return '<div class="head"><div><h1>Nhân viên &amp; thẻ</h1><div class="sub">Mỗi nhân viên một thẻ QR. In thẻ, ép plastic, phát cho nhân viên.</div></div><div class="row"><button class="btn" data-act="cards">Tải PDF in thẻ</button><button class="btn pri" data-act="nvAdd">+ Thêm nhân viên</button></div></div>' + form +
     (all.length ? '<div class="tbl"><table><thead><tr><th>Thẻ</th><th>Họ tên</th><th>Bộ phận</th><th>Ca</th><th>Mã thẻ</th><th>Trạng thái</th><th></th></tr></thead><tbody>' +
       all.map(s => '<tr' + (s.on === false ? ' class="muted"' : '') + '><td><div class="mini-qr">' + cardSvg(s.ma, 44) + '</div></td><td><b>' + esc(s.ten) + '</b></td><td>' + esc(s.bp || '') + '</td><td>' + esc(caOf(s.id).ten) + '</td><td class="mono">' + fmtMa(s.ma) + '</td><td>' + (s.on === false ? '<span class="pill">Đã nghỉ</span>' : '<span class="pill ok">Đang làm</span>') + '</td><td><button class="btn sm" data-act="nvEdit" data-arg="' + esc(s.id) + '">Sửa</button></td></tr>').join('') + '</tbody></table></div>'
       : '<div class="card"><div class="empty"><h2>Chưa có nhân viên</h2><p>Thêm từng người, hoặc dán cả danh sách vào ô dưới.</p></div></div>') +
     '<details class="card"' + (all.length ? '' : ' open') + '><summary><b>Thêm nhiều người cùng lúc</b></summary><p class="small muted">Mỗi dòng một người: <span class="mono">Họ tên | Bộ phận | Ca</span>. Bộ phận và ca có thể bỏ trống; ca ghi đúng tên ca ở mục Cài đặt (ví dụ Ca đêm).</p><textarea id="bulk" rows="6" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--surface)" placeholder="Nguyễn Thị Lan | Đóng gói | Ca ngày">' + esc(f.bulk || '') + '</textarea><div class="row"><button class="btn pri" data-act="bulkAdd">Thêm danh sách</button></div></details>' +
-    '<div class="card"><h2>Cách in thẻ</h2><ol class="steps"><li>Bấm <b>Tải file in thẻ</b>, mở file vừa tải bằng trình duyệt trên máy tính.</li><li>Bấm Ctrl+P để in ra giấy A4 (10 thẻ một trang, cỡ thẻ ATM).</li><li>Cắt, ép plastic, phát cho từng người. Mất thẻ thì bấm Sửa › Cấp thẻ mới.</li></ol></div>';
+    '<div class="card"><h2>Cách in thẻ</h2><ol class="steps"><li>Bấm <b>Tải PDF in thẻ</b>, mở file PDF vừa tải.</li><li>In ra giấy A4, chọn tỉ lệ <b>100% / Kích thước thực</b> (10 thẻ một trang, cỡ thẻ ATM).</li><li>Cắt, ép plastic, phát cho từng người. Mất thẻ thì bấm Sửa › Cấp thẻ mới.</li></ol></div>';
 }
 function newMa() { let m; do { const b = crypto.getRandomValues(new Uint32Array(2)); m = String(b[0] % 1e5).padStart(5, '0') + String(b[1] % 1e5).padStart(5, '0'); } while (byMa(m) || m[0] === '0'); return m; }
 async function saveNv(id, rec) {
   const ref = S.db.doc('nv/list'), s = await ref.get(), cur = (s.exists && s.data().a) || {};
   if (id) cur[id] = rec;
   await ref.set({ a: cur, at: Date.now() });
+}
+// Thẻ cỡ ATM (85,6 × 54 mm) vẽ lên canvas 300 dpi rồi ghép vào PDF khổ A4, 2 cột × 5 hàng
+async function cardsPdf() {
+  const list = staff(), PX = 300 / 25.4, W = Math.round(85.6 * PX), H = Math.round(54 * PX), mm = v => Math.round(v * PX);
+  try { await Promise.all([document.fonts.load('700 40px "Be Vietnam Pro"'), document.fonts.load('400 40px "Be Vietnam Pro"'), document.fonts.load('500 40px "Roboto Mono"')]); } catch (e) { /* dùng font máy */ }
+  const F = '"Be Vietnam Pro", "Segoe UI", Arial, sans-serif', FM = '"Roboto Mono", Consolas, monospace';
+  const draw = s => {
+    const c = document.createElement('canvas'); c.width = W; c.height = H; const g = c.getContext('2d');
+    g.fillStyle = '#ffffff'; g.fillRect(0, 0, W, H);
+    g.setLineDash([mm(1.2), mm(1)]); g.strokeStyle = '#9aa39f'; g.lineWidth = mm(0.25); g.strokeRect(mm(0.2), mm(0.2), W - mm(0.4), H - mm(0.4)); g.setLineDash([]);
+    g.fillStyle = '#1c6b5a'; g.font = '700 ' + mm(3.2) + 'px ' + F; g.textBaseline = 'alphabetic'; g.fillText('AN TÂM', mm(3.5), mm(6.5));
+    g.font = '600 ' + mm(2.8) + 'px ' + F; g.textAlign = 'right'; g.fillText('THẺ CHẤM CÔNG', W - mm(3.5), mm(6.5)); g.textAlign = 'left';
+    g.fillRect(mm(3.5), mm(8), W - mm(7), mm(0.45));
+    const q = window.qrcode(0, 'M'); q.addData(String(s.ma)); q.make();
+    const n = q.getModuleCount(), size = mm(38), cell = size / (n + 2), x0 = mm(3), y0 = mm(11.5);
+    g.fillStyle = '#000000';
+    for (let r = 0; r < n; r++) for (let x = 0; x < n; x++) if (q.isDark(r, x)) g.fillRect(Math.floor(x0 + (x + 1) * cell), Math.floor(y0 + (r + 1) * cell), Math.ceil(cell), Math.ceil(cell));
+    const tx = mm(44), maxW = W - tx - mm(3);
+    g.fillStyle = '#000000'; let fs = mm(4.6); g.font = '700 ' + fs + 'px ' + F;
+    const words = String(s.ten).split(/\s+/), lines = []; let ln = '';
+    for (const w of words) { const t = ln ? ln + ' ' + w : w; if (g.measureText(t).width > maxW && ln) { lines.push(ln); ln = w; } else ln = t; }
+    if (ln) lines.push(ln);
+    let y = mm(19); lines.slice(0, 3).forEach(l => { g.fillText(l, tx, y); y += fs * 1.2; });
+    g.font = '400 ' + mm(3.2) + 'px ' + F; g.fillStyle = '#333333';
+    [s.bp, caOf(s.id).ten].filter(Boolean).forEach(t => { y += mm(0.6); g.fillText(t, tx, y, maxW); y += mm(4.2); });
+    g.font = '500 ' + mm(3.6) + 'px ' + FM; g.fillStyle = '#000000'; g.fillText(fmtMa(s.ma), tx, H - mm(6), maxW);
+    return c.toDataURL('image/png');
+  };
+  const pdf = new window.jspdf.jsPDF({ unit: 'mm', format: 'a4' }), cw = 85.6, ch = 54, gx = 6, gy = 3, left = (210 - 2 * cw - gx) / 2, top = (297 - 5 * ch - 4 * gy) / 2;
+  list.forEach((s, i) => {
+    const k = i % 10; if (i && !k) pdf.addPage();
+    pdf.addImage(draw(s), 'PNG', left + (k % 2) * (cw + gx), top + Math.floor(k / 2) * (ch + gy), cw, ch, undefined, 'FAST');
+  });
+  return pdf.output('blob');
 }
 function cardsFile() {
   const list = staff(), c = cfg();
@@ -490,14 +525,20 @@ document.addEventListener('click', async e => {
   else if (a === 'snap') $('#snap').click();
   else if (a === 'tab') { S.f.tab = arg; render(); }
   else if (a === 'exportX') exportX();
-  else if (a === 'cards') { if (!staff().length) { toast('Chưa có nhân viên để in thẻ.'); return; } save('The_cham_cong_An_Tam.html', new Blob([cardsFile()], { type: 'text/html' })); }
+  else if (a === 'cards') {
+    if (!staff().length) { toast('Chưa có nhân viên để in thẻ.'); return; }
+    if (!window.jspdf || !window.qrcode) { save('The_cham_cong_An_Tam.html', new Blob([cardsFile()], { type: 'text/html' })); return; }
+    el.disabled = true; el.textContent = 'Đang tạo PDF…';
+    try { save('The_cham_cong_An_Tam.pdf', await cardsPdf()); } catch (x) { toast('Không tạo được PDF: ' + ((x && x.message) || '')); }
+    el.disabled = false; el.textContent = 'Tải PDF in thẻ';
+  }
   else if (a === 'nvAdd') { S.f.edit = { ten: '', bp: '', ca: cfg().ca[0].id }; S.f.sureCard = false; render(); const i = $('#eTen'); if (i) i.focus(); }
   else if (a === 'nvEdit') { S.f.edit = Object.assign({ id: arg }, S.nv[arg]); S.f.sureCard = false; render(); window.scrollTo(0, 0); }
   else if (a === 'nvCancel') { S.f.edit = null; render(); }
   else if (a === 'newCard') {
     if (!S.f.sureCard) { S.f.sureCard = true; render(); return; }
     S.f.sureCard = false; const rec = Object.assign({}, S.nv[arg], { ma: newMa(), at: Date.now() });
-    try { await saveNv(arg, rec); S.f.edit = Object.assign({ id: arg }, rec); toast('Đã cấp thẻ mới cho ' + rec.ten + '. Tải file in thẻ để in lại.'); } catch (x) { toast('Chưa lưu được: ' + ((x && x.message) || 'lỗi kết nối')); }
+    try { await saveNv(arg, rec); S.f.edit = Object.assign({ id: arg }, rec); toast('Đã cấp thẻ mới cho ' + rec.ten + '. Tải PDF in thẻ để in lại.'); } catch (x) { toast('Chưa lưu được: ' + ((x && x.message) || 'lỗi kết nối')); }
   }
   else if (a === 'bulkAdd') {
     const lines = ($('#bulk').value || '').split('\n').map(s => s.trim()).filter(Boolean); if (!lines.length) { toast('Dán danh sách, mỗi dòng một người.'); return; }
