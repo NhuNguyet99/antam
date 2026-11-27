@@ -364,7 +364,7 @@ function vMay() {
   const modes = [['face', 'Khuôn mặt'], ['cam', 'Thẻ QR – camera'], ['scan', 'Thẻ QR – máy đọc USB']];
   return '<div class="kiosk"><div class="card scan-box"><div class="row"><div class="grow"><div class="clock" id="clock">' + hm(Date.now()) + '</div><div class="muted small">' + DOW[new Date().getDay()] + ' ' + dmy(today) + '</div></div>' +
     (S.f.armed ? '<button class="btn sm" data-act="full">' + (S.f.full ? 'Thoát toàn màn hình' : 'Toàn màn hình') + '</button>' : '') + '</div>' +
-    (tap && !touchDev() ? '<div class="banner warn"><span>Máy này là laptop / máy tính: claude.ai không cho trang mở webcam, nên nút chụp chỉ mở hộp chọn ảnh. Để chấm công bằng khuôn mặt, đặt <b>máy tính bảng hoặc điện thoại</b> ở cửa và mở trang trên đó. Trên laptop, dùng <b>Thẻ QR – máy đọc USB</b>.</span>' + (M !== 'scan' ? '<button class="btn sm" data-act="mode" data-arg="scan">Dùng máy đọc USB</button>' : '') + '</div>' : '') +
+    (tap && !touchDev() ? '<div class="banner warn"><span>Máy này chạy Windows / macOS (laptop, Surface): claude.ai không cho trang mở webcam và trình duyệt trên máy này không mở camera khi chụp, nút chụp chỉ mở hộp chọn ảnh. Muốn chấm bằng khuôn mặt: đặt <b>máy tính bảng Android, iPad hoặc điện thoại</b> ở cửa. Trên máy này: dùng <b>Thẻ QR – máy đọc USB</b>, hoặc chụp bằng ứng dụng Camera của Windows rồi chọn ảnh vừa chụp.</span>' + (M !== 'scan' ? '<button class="btn sm" data-act="mode" data-arg="scan">Dùng máy đọc USB</button>' : '') + '</div>' : '') +
     (M === 'face' && !nFace ? '<div class="banner warn"><span>Chưa có nhân viên nào đăng ký khuôn mặt.</span><button class="btn sm" data-act="go" data-arg="nhan-vien">Đăng ký khuôn mặt</button></div>' : '') +
     (S.f.armed ? res : '<div class="hit idle"><div class="hit-l">Bấm “Bắt đầu” để máy chấm công hoạt động</div><div class="muted">Bật âm báo, giữ màn hình sáng' + (M === 'face' ? ', tải bộ nhận diện khuôn mặt' : '') + '.</div><button class="btn pri big" data-act="arm">Bắt đầu</button></div>') +
     '<div class="row"><span class="small muted">Cách chấm trên máy này:</span><div class="seg">' + modes.map(([k, l]) => '<button data-act="mode" data-arg="' + k + '" aria-pressed="' + (M === k) + '">' + l + '</button>').join('') + '</div>' +
@@ -375,8 +375,8 @@ function vMay() {
     '<div class="card"><div class="row"><h2 class="grow">Hôm nay</h2>' + kpi('Đã chấm', nIn + '/' + list.length, 'người') + '</div><div class="feed">' +
     (feed.length ? feed.map(([, p]) => '<div>' + thumb(p.th) + '<span class="t">' + hm(p.at) + '</span><span class="n">' + esc(nameOf(p.u)) + '</span>' + (p.huy ? '<span class="pill">Đã hủy</span>' : p.src === 'tay' ? '<span class="pill info">Chấm tay</span>' : '') + '</div>').join('') : '<p class="muted">Chưa có ai chấm công.</p>') + '</div></div></div>';
 }
-// Máy có màn hình cảm ứng (máy tính bảng, điện thoại): nút chụp mở camera. Laptop: chỉ mở hộp chọn tệp.
-const touchDev = () => { try { return matchMedia('(pointer: coarse)').matches || navigator.maxTouchPoints > 1; } catch (e) { return false; } };
+// Nút chụp (input capture) chỉ mở camera trên Android, iPhone, iPad. Windows (kể cả Surface), macOS, Linux: chỉ mở hộp chọn tệp.
+const touchDev = () => { try { const ua = navigator.userAgent || ''; return /Android|iPhone|iPad|iPod/i.test(ua) || (/Macintosh/.test(ua) && navigator.maxTouchPoints > 1); } catch (e) { return false; } };
 const thumb = th => th && /^data:image\/jpeg;base64,[A-Za-z0-9+/=]+$/.test(th) ? '<img class="face-th" alt="" src="' + th + '">' : '';
 function focusScan() { if (DEV.mode !== 'scan' && DEV.mode !== 'cam') return; if (DEV.mode === 'cam') return; const i = $('#scan'); if (i && document.activeElement !== i && !(document.activeElement && /INPUT|SELECT|TEXTAREA/.test(document.activeElement.tagName) && document.activeElement.id !== 'scan')) i.focus({ preventScroll: true }); }
 
