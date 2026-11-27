@@ -129,6 +129,7 @@ body.kiosk-full .main { max-width: none; }
 .month td.d.late { background: var(--warn-soft); color: var(--warn); font-weight: 600; }
 .month td.d.half { background: var(--info-soft); color: var(--info); }
 .month td.d.off { color: var(--muted); }
+.month td.d.io { font-family: var(--f-mono); font-size: 12.5px; line-height: 1.25; min-width: 3.6em; }
 .month th.we, .month td.we { background: var(--raise); }
 .month td.name { position: sticky; left: 0; background: var(--surface); z-index: 1; font-weight: 600; }
 .toasts { position: fixed; right: max(16px, env(safe-area-inset-right, 0px)); bottom: max(16px, env(safe-area-inset-bottom, 0px)); z-index: 60; display: grid; gap: 8px; width: min(380px, calc(100% - 32px)); }
@@ -511,8 +512,9 @@ function monthData(m) {
 }
 function bMonth(m) {
   const data = monthData(m), n = daysIn(m), dw = i => new Date(+m.slice(0, 4), +m.slice(5, 7) - 1, i).getDay(), we = i => dw(i) === 0;
-  const cell = (r, i) => { const c = we(i) ? ' we' : ''; if (!r) return '<td class="d off' + c + '">·</td>'; return '<td class="d' + (r.muonX ? ' late' : !r.ra ? ' half' : '') + c + '" title="' + dm(r.D) + ': vào ' + hm(r.vao) + (r.ra ? ', ra ' + hm(r.ra) : ', chưa có giờ ra') + (r.muonX ? ', muộn ' + r.muon + ' phút' : '') + '">' + (r.ra ? n1(r.gio) : 'V') + '</td>'; };
-  return '<p class="small muted">Ô ghi số giờ làm. <span class="pill warn">vàng</span> đi muộn, <span class="pill info">V</span> chỉ có giờ vào (tính nửa công). Rê chuột vào ô để xem giờ vào, ra.</p>' +
+  const io = S.f.mv === 'io';
+  const cell = (r, i) => { const c = we(i) ? ' we' : ''; if (!r) return '<td class="d off' + c + '">·</td>'; return '<td class="d' + (r.muonX ? ' late' : !r.ra ? ' half' : '') + c + (io ? ' io' : '') + '" title="' + dm(r.D) + ': vào ' + hm(r.vao) + (r.ra ? ', ra ' + hm(r.ra) : ', chưa có giờ ra') + (r.muonX ? ', muộn ' + r.muon + ' phút' : '') + (r.somX ? ', về sớm ' + r.som + ' phút' : '') + ' · ' + n1(r.gio) + ' giờ">' + (io ? hm(r.vao) + '<br>' + (r.ra ? hm(r.ra) : '–') : r.ra ? n1(r.gio) : 'V') + '</td>'; };
+  return '<div class="row"><div class="seg"><button data-act="mv" data-arg="h" aria-pressed="' + !io + '">Số giờ làm</button><button data-act="mv" data-arg="io" aria-pressed="' + io + '">Giờ vào – ra</button></div><span class="small muted">' + (io ? 'Ô ghi giờ vào (trên) và giờ ra (dưới).' : 'Ô ghi số giờ làm. V = chỉ có giờ vào (tính nửa công).') + ' <span class="pill warn">vàng</span> đi muộn. Bấm Tải Excel để lấy bảng giờ vào – ra cả tháng.</span></div>' +
     (data.length ? '<div class="tbl tall"><table class="month"><thead><tr><th>Nhân viên</th>' + Array.from({ length: n }, (_, k) => '<th class="c' + (we(k + 1) ? ' we' : '') + '">' + (k + 1) + '<br><span style="font-weight:400">' + DOW[dw(k + 1)] + '</span></th>').join('') + '<th class="n">Công</th><th class="n">Giờ</th><th class="n">Muộn</th></tr></thead><tbody>' +
       data.map(x => '<tr><td class="name">' + esc(x.s.ten) + '</td>' + x.days.map((r, k) => cell(r, k + 1)).join('') + '<td class="n"><b>' + String(x.cong).replace('.', ',') + '</b></td><td class="n">' + n1(x.gio) + '</td><td class="n">' + (x.muon ? x.muon + ' (' + x.phut + '′)' : '') + '</td></tr>').join('') + '</tbody></table></div>' : '<div class="empty">Chưa có nhân viên.</div>');
 }
@@ -658,7 +660,26 @@ function exportX() {
   if (!window.XLSX) { toast('Chưa tải xong bộ tạo Excel.'); return; }
   const f = S.f, m = f.tab === 'thang' ? f.m : (f.d || isoOf(new Date())).slice(0, 7), wb = XLSX.utils.book_new();
   const add = (t, rows) => XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet(rows), t);
-  const data = monthData(m), n = daysIn(m);
+  const data = monthData(m), n = daysIn(m), c = cfg(), dw = i => new Date(+m.slice(0, 4), +m.slice(5, 7) - 1, i).getDay();
+  // Sheet 1: giờ vào – ra từng ngày, mỗi nhân viên 2 dòng (Vào / Ra); * = đi muộn hoặc về sớm quá số phút cho phép
+  {
+    const days = Array.from({ length: n }, (_, k) => k + 1), H = 4, rows = [
+      ['BẢNG CHẤM CÔNG THÁNG ' + m.slice(5) + '/' + m.slice(0, 4) + ' – GIỜ VÀO, GIỜ RA'],
+      ['Lần quét đầu trong ca là giờ vào, lần cuối là giờ ra. * = đi muộn / về sớm quá ' + c.tre + ' phút. Ô trống = không chấm công. Ra trống mà có Vào = thiếu giờ ra (tính nửa công).'],
+      ['STT', 'Nhân viên', 'Bộ phận', 'Ca', '', ...days, 'Ngày công', 'Tổng giờ', 'Đi muộn (lần)', 'Phút muộn', 'Về sớm (lần)', 'Thiếu giờ ra'],
+      ['', '', '', '', '', ...days.map(i => DOW[dw(i)]), '', '', '', '', '', '']];
+    const merges = [{ s: { r: 0, c: 0 }, e: { r: 0, c: 10 } }, { s: { r: 1, c: 0 }, e: { r: 1, c: 20 } }];
+    data.forEach((x, i) => {
+      const ca = caOf(x.s.id), som = x.days.filter(r => r && r.somX).length, r0 = H + i * 2;
+      rows.push([i + 1, x.s.ten, x.s.bp || '', ca.ten + ' ' + ca.vao + '–' + ca.ra, 'Vào', ...x.days.map(r => r ? hm(r.vao) + (r.muonX ? '*' : '') : ''), x.cong, Math.round(x.gio * 10) / 10, x.muon, x.phut, som, x.thieu]);
+      rows.push(['', '', '', '', 'Ra', ...x.days.map(r => r && r.ra ? hm(r.ra) + (r.somX ? '*' : '') : ''), '', '', '', '', '', '']);
+      [0, 1, 2, 3].concat(Array.from({ length: 6 }, (_, k) => 5 + n + k)).forEach(col => merges.push({ s: { r: r0, c: col }, e: { r: r0 + 1, c: col } }));
+    });
+    const ws = XLSX.utils.aoa_to_sheet(rows);
+    ws['!merges'] = merges;
+    ws['!cols'] = [{ wch: 5 }, { wch: 24 }, { wch: 14 }, { wch: 20 }, { wch: 5 }, ...days.map(() => ({ wch: 6.5 })), { wch: 10 }, { wch: 9 }, { wch: 12 }, { wch: 10 }, { wch: 12 }, { wch: 12 }];
+    XLSX.utils.book_append_sheet(wb, ws, 'Giờ vào-ra ' + m.slice(5) + '-' + m.slice(0, 4));
+  }
   add('Bảng công ' + m.slice(5) + '-' + m.slice(0, 4), [['Nhân viên', 'Bộ phận', ...Array.from({ length: n }, (_, k) => k + 1), 'Ngày công', 'Tổng giờ', 'Số lần muộn', 'Phút muộn', 'Thiếu giờ ra']].concat(
     data.map(x => [x.s.ten, x.s.bp || '', ...x.days.map(r => r ? (r.ra ? Math.round(r.gio * 10) / 10 : 'V') : ''), x.cong, Math.round(x.gio * 10) / 10, x.muon, x.phut, x.thieu])));
   const det = []; data.forEach(x => x.days.forEach(r => { if (r) det.push([x.s.ten, x.s.bp || '', dmy(r.D), r.ca.ten, hm(r.vao), r.ra ? hm(r.ra) : '', Math.round(r.gio * 100) / 100, r.muonX ? r.muon : 0, r.somX ? r.som : 0]); }));
@@ -679,6 +700,7 @@ document.addEventListener('click', async e => {
   else if (a === 'mode') { DEV.mode = arg; ls.set('mode2', arg); if (arg === 'face' && S.f.armed) faceReady().catch(() => {}); render(); }
   else if (a === 'camSide') { DEV.cam = arg; ls.set('cam', arg); render(); }
   else if (a === 'tab') { S.f.tab = arg; render(); }
+  else if (a === 'mv') { S.f.mv = arg; render(); }
   else if (a === 'exportX') exportX();
   else if (a === 'enroll') { S.f.enrollId = arg; S.f.samples = []; S.f.enMsg = ''; S.f.sureDel = false; S.f.edit = null; faceReady().catch(() => {}); render(); window.scrollTo(0, 0); }
   else if (a === 'enrollClose') { S.f.enrollId = null; S.f.samples = []; render(); }

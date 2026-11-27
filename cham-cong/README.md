@@ -14,7 +14,7 @@ Nhân viên không cần điện thoại hay tài khoản: đến và về bấm
   Màn hình hiện tên, Vào/Ra, giờ, đi muộn/về sớm. Quét lại trong 1 phút không ghi thêm. Có thể gõ số trên thẻ rồi Enter.
 - **Đăng ký khuôn mặt** (Nhân viên & thẻ › Khuôn mặt): chụp 3 ảnh (thẳng, quay trái, quay phải) hoặc chọn ảnh có sẵn. Chặn ảnh giống người khác đã đăng ký (< 0,4) và ảnh không giống các ảnh trước (> 0,6). Lưu `fc/<mã nv>` = đặc trưng 128 số mỗi ảnh và 1 ảnh nhỏ; không lưu ảnh gốc. Cần nhân viên đồng ý (dữ liệu sinh trắc học).
 - **Nhân viên & thẻ**: thêm từng người hoặc dán cả danh sách (`Họ tên | Bộ phận | Ca`). Mã thẻ là 10 chữ số ngẫu nhiên, chỉ dùng chữ số để bộ gõ tiếng Việt không làm sai mã. "In thẻ" mở khung xem trước các trang A4 (10 thẻ cỡ ATM mỗi trang), bấm Ctrl+P để in; chỉ các trang thẻ được in. Trình duyệt nào in ra cả trang claude.ai thì dùng nút "Không in được? Tải PDF". Mất thẻ thì Sửa › Cấp thẻ mới (thẻ cũ hết dùng được). Nhân viên nghỉ thì bỏ tích Đang làm việc.
-- **Bảng công**: theo ngày (ai đã chấm, đi muộn, về sớm), bảng công tháng (giờ làm từng ngày, ngày công, số lần muộn), lượt chấm (chấm tay khi quên thẻ, hủy lượt sai), tải Excel.
+- **Bảng công**: theo ngày (ai đã chấm, đi muộn, về sớm), bảng công tháng (xem số giờ làm hoặc giờ vào – ra từng ngày; ngày công, số lần muộn), lượt chấm (chấm tay khi quên thẻ, hủy lượt sai). Tải Excel: sheet "Giờ vào-ra" (mỗi nhân viên 2 dòng Vào/Ra × các ngày trong tháng, * = muộn/về sớm, cột tổng), "Bảng công" (số giờ), "Chi tiết", "Lượt chấm".
 - **Cài đặt**: ca làm việc (ca qua đêm khi giờ ra nhỏ hơn giờ vào; giờ ra sáng hôm sau tính cho ngày vào ca), số phút cho phép trễ.
 
 ## Camera
