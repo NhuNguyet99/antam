@@ -151,7 +151,8 @@ button.hit { width: 100%; font: inherit; color: inherit; cursor: pointer; }
 .scan-in input { flex: 1 1 14em; font-family: var(--f-mono); }
 .scan-in input::placeholder { font-family: var(--f-body); }
 .mini-qr svg { display: block; width: 44px; height: 44px; border-radius: 4px; }
-.face-th { width: 40px; height: 40px; border-radius: 8px; object-fit: cover; display: inline-block; vertical-align: middle; background: var(--raise); }
+.cellx { display: inline-flex; gap: 8px; align-items: center; white-space: nowrap; }
+.face-th { max-width: none; flex: none; width: 40px; height: 40px; border-radius: 8px; object-fit: cover; display: inline-block; vertical-align: middle; background: var(--raise); }
 .hit-img { width: 104px; height: 104px; border-radius: 14px; object-fit: cover; border: 3px solid var(--surface); box-shadow: 0 2px 8px rgba(0,0,0,.15); }
 .samples { display: flex; flex-wrap: wrap; gap: 10px; }
 .sample { position: relative; }
@@ -347,7 +348,7 @@ function vMay() {
   const today = isoOf(new Date()); subAll(today.slice(0, 7));
   const P = S.all.p, feed = Object.entries(P).filter(([, p]) => p.d === today || Date.now() - p.at < 14 * 36e5).sort((a, b) => b[1].at - a[1].at).slice(0, 12);
   const wd = workDays(P), list = staff(), nIn = list.filter(s => wd[s.id + '|' + dayOf(s.id, Date.now())]).length;
-  const L = S.last, fresh = L && Date.now() - L.t < 12000, M = DEV.mode, tap = M !== 'scan';
+  const L = S.last, fresh = L && (L.kind === 'wait' || Date.now() - L.t < 12000), M = DEV.mode, tap = M !== 'scan';
   const nFace = list.filter(s => S.fc[s.id] && S.fc[s.id].d && S.fc[s.id].d.length).length;
   const idle = M === 'face' ? '<button class="hit idle tap" data-act="snap"><span class="hit-l">Bấm vào đây để chấm công</span><span class="muted">Camera mở ra: nhìn thẳng vào camera, không đeo khẩu trang, rồi chụp</span>' + (FACE.msg ? '<span class="small">' + esc(FACE.msg) + '</span>' : '') + '</button>'
     : M === 'cam' ? '<button class="hit idle tap" data-act="snap"><span class="hit-l">Bấm vào đây để quét thẻ</span><span class="muted">Camera mở ra: đưa mặt có mã QR vào giữa khung, giữ yên rồi chụp</span></button>'
@@ -443,12 +444,14 @@ async function punchFor(u, src, extra) {
     await S.db.doc('cc/' + d.slice(0, 7) + '/p/' + id).set(rec);
     S.all.p[id] = rec;
     const io = ioOf(u, now), r = workDays(S.all.p)[u + '|' + dayOf(u, now)];
-    const msg = io === 'Vào' ? (r && r.muonX ? 'Đi muộn ' + r.muon + ' phút.' : 'Chúc một ngày làm việc tốt.') : 'Đã làm ' + n1((now - r.vao) / 36e5) + ' giờ.' + (r.somX ? ' Về sớm ' + r.som + ' phút.' : '');
-    S.last = { kind: 'ok', name: a.ten, io, at: now, msg, th: extra.th, t: now }; beep(true);
+    const first = r && r.vao !== now;
+    const msg = io === 'Vào' ? (first ? 'Đã có giờ vào lúc ' + hm(r.vao) + '. Quét lại khi về (sau ít nhất 30 phút).' : r && r.muonX ? 'Đi muộn ' + r.muon + ' phút.' : 'Chúc một ngày làm việc tốt.') : 'Đã làm ' + n1((now - r.vao) / 36e5) + ' giờ.' + (r.somX ? ' Về sớm ' + r.som + ' phút.' : '');
+    const shown = io === 'Vào' && first ? r.vao : now;
+    S.last = { kind: first && io === 'Vào' ? 'dup' : 'ok', name: a.ten, io, at: shown, msg, th: extra.th, t: now }; beep(true);
   } catch (e) { S.last = { kind: 'bad', title: 'Chưa ghi được', msg: 'Lỗi kết nối: ' + ((e && e.message) || 'không rõ') + '. Quét lại.', t: now }; beep(false); }
   S.busy = false; render();
 }
-function ioOf(u, t) { const D = dayOf(u, t), ts = Object.values(S.all.p).filter(p => p.u === u && !p.huy && dayOf(u, p.at) === D).map(p => p.at).sort((a, b) => a - b); return ts[0] === t ? 'Vào' : 'Ra'; }
+function ioOf(u, t) { const D = dayOf(u, t), ts = Object.values(S.all.p).filter(p => p.u === u && !p.huy && dayOf(u, p.at) === D).map(p => p.at).sort((a, b) => a - b); return ts[0] === t || t - ts[0] < 30 * 6e4 ? 'Vào' : 'Ra'; }
 async function readPhoto(file) {
   if (!file) return;
   if (!window.jsQR) { toast('Chưa tải xong bộ đọc mã QR. Đợi vài giây rồi thử lại.'); return; }
@@ -532,7 +535,7 @@ function vNv() {
     '<div class="row"><button class="btn pri" type="submit">Lưu</button><button class="btn" type="button" data-act="nvCancel">Hủy</button>' + (e.id ? '<button class="btn danger" type="button" data-act="newCard" data-arg="' + esc(e.id) + '">' + (f.sureCard ? 'Bấm lần nữa: thẻ cũ sẽ hết dùng được' : 'Cấp thẻ mới (mất thẻ)') + '</button>' : '') + '</div></form>' : '';
   return enrollBox() + '<div class="head"><div><h1>Nhân viên &amp; thẻ</h1><div class="sub">Đăng ký khuôn mặt để chấm công bằng khuôn mặt. Thẻ QR dùng dự phòng.</div></div><div class="row"><button class="btn" data-act="printCards">In thẻ</button><button class="btn pri" data-act="nvAdd">+ Thêm nhân viên</button></div></div>' + form +
     (all.length ? '<div class="tbl"><table><thead><tr><th>Khuôn mặt</th><th>Họ tên</th><th>Bộ phận</th><th>Ca</th><th>Thẻ QR</th><th>Trạng thái</th><th></th></tr></thead><tbody>' +
-      all.map(s => '<tr' + (s.on === false ? ' class="muted"' : '') + '><td>' + (S.fc[s.id] && S.fc[s.id].d && S.fc[s.id].d.length ? '<span class="row" style="flex-wrap:nowrap">' + thumb(S.fc[s.id].th) + '<span class="pill ok">Đã đăng ký</span></span>' : '<span class="pill">Chưa đăng ký</span>') + '</td><td><b>' + esc(s.ten) + '</b></td><td>' + esc(s.bp || '') + '</td><td>' + esc(caOf(s.id).ten) + '</td><td><span class="row" style="flex-wrap:nowrap"><span class="mini-qr">' + cardSvg(s.ma, 44) + '</span><span class="mono small">' + fmtMa(s.ma) + '</span></span></td><td>' + (s.on === false ? '<span class="pill">Đã nghỉ</span>' : '<span class="pill ok">Đang làm</span>') + '</td><td><span class="row" style="flex-wrap:nowrap"><button class="btn sm" data-act="enroll" data-arg="' + esc(s.id) + '">Khuôn mặt</button><button class="btn sm" data-act="nvEdit" data-arg="' + esc(s.id) + '">Sửa</button></span></td></tr>').join('') + '</tbody></table></div>'
+      all.map(s => '<tr' + (s.on === false ? ' class="muted"' : '') + '><td>' + (S.fc[s.id] && S.fc[s.id].d && S.fc[s.id].d.length ? '<span class="cellx">' + thumb(S.fc[s.id].th) + '<span class="pill ok">Đã đăng ký</span></span>' : '<span class="pill">Chưa đăng ký</span>') + '</td><td><b>' + esc(s.ten) + '</b></td><td>' + esc(s.bp || '') + '</td><td>' + esc(caOf(s.id).ten) + '</td><td><span class="cellx"><span class="mini-qr">' + cardSvg(s.ma, 44) + '</span><span class="mono small">' + fmtMa(s.ma) + '</span></span></td><td>' + (s.on === false ? '<span class="pill">Đã nghỉ</span>' : '<span class="pill ok">Đang làm</span>') + '</td><td><span class="cellx"><button class="btn sm" data-act="enroll" data-arg="' + esc(s.id) + '">Khuôn mặt</button><button class="btn sm" data-act="nvEdit" data-arg="' + esc(s.id) + '">Sửa</button></span></td></tr>').join('') + '</tbody></table></div>'
       : '<div class="card"><div class="empty"><h2>Chưa có nhân viên</h2><p>Thêm từng người, hoặc dán cả danh sách vào ô dưới.</p></div></div>') +
     '<details class="card"' + (all.length ? '' : ' open') + '><summary><b>Thêm nhiều người cùng lúc</b></summary><p class="small muted">Mỗi dòng một người: <span class="mono">Họ tên | Bộ phận | Ca</span>. Bộ phận và ca có thể bỏ trống; ca ghi đúng tên ca ở mục Cài đặt (ví dụ Ca đêm).</p><textarea id="bulk" rows="6" style="width:100%;border:1px solid var(--line);border-radius:8px;padding:8px;background:var(--surface)" placeholder="Nguyễn Thị Lan | Đóng gói | Ca ngày">' + esc(f.bulk || '') + '</textarea><div class="row"><button class="btn pri" data-act="bulkAdd">Thêm danh sách</button></div></details>' +
     '<div class="card"><h2>Cách in thẻ</h2><ol class="steps"><li>Bấm <b>In thẻ</b>: khung xem trước các trang A4 mở ra (10 thẻ một trang, cỡ thẻ ATM).</li><li>Bấm <b>Ctrl+P</b> để in. Chọn tỉ lệ <b>100%</b>, lề <b>Không có</b>. Nếu bản in ra cả trang claude.ai thay vì trang thẻ, bấm <b>Không in được? Tải PDF</b> rồi in file PDF.</li><li>Cắt, ép plastic, phát cho từng người. Mất thẻ thì bấm Sửa › Cấp thẻ mới.</li></ol></div>';
