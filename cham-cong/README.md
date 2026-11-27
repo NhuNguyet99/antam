@@ -1,5 +1,7 @@
 # Chấm công An Tâm
 
+**Từ 27/11/2026 Chấm công là bộ phận thứ 4 trong web An Tâm** (https://claude.ai/artifact/ErmZYgHgUzBeTJrtTR6yAC, màn chọn bộ phận › Chấm công), dùng chung kho dữ liệu với Đóng hàng, Kho, Giao. `kho-noi-bo/online/build.py --hop` nhúng file này vào trang gộp (template `hop-cc`, hàm `hopAppCc`). Trong trang gộp dữ liệu đổi tên: `ccnv/list`, `ccset/app`, `ccfc/<mã nv>`, `cc/<yyyy-mm>/p/<id>`; quy tắc của trang An Tâm cho 4 đường dẫn này: chỉ quản lý (Editor) đọc/ghi, các bộ phận khác giữ quyền cũ. Tệp mô hình khuôn mặt đăng kèm trang An Tâm ở `model/`. Dữ liệu cũ (2 nhân viên, 2 khuôn mặt, 8 lượt) đã chép sang An Tâm; trang riêng bên dưới chỉ còn để xem dữ liệu cũ.
+
 Web chấm công bằng khuôn mặt (thẻ QR dự phòng): https://claude.ai/artifact/6qCeybs8YTqcQojBwQDdaM
 
 Nhân viên không cần điện thoại hay tài khoản: đến và về bấm nút trên máy ở cửa, nhìn vào camera và chụp; web nhận ra khuôn mặt và ghi giờ. Thẻ QR in sẵn dùng khi không nhận ra mặt. Chỉ máy ở cửa và người quản lý mở trang. Cả hai cần quyền chỉnh sửa trang (Editor); dữ liệu chỉ người có quyền này đọc và ghi được.

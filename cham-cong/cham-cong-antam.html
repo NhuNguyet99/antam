@@ -287,6 +287,8 @@ const staff = (all) => Object.entries(S.nv).filter(([, a]) => a && (all || a.on 
 const nameOf = id => (S.nv[id] && S.nv[id].ten) || 'Nhân viên đã xóa';
 const caOf = id => { const c = cfg(), a = S.nv[id]; return c.ca.find(x => x.id === (a && a.ca)) || c.ca[0]; };
 const byMa = ma => Object.entries(S.nv).find(([, a]) => a && a.ma === ma);
+// Tên dữ liệu: trang riêng dùng nv/set/fc; khi gắn trong trang An Tâm (dùng chung kho với Đóng hàng, Kho) thêm tiền tố cc để không trùng
+const DP = window.ANTAM_HOP ? { nv: 'ccnv/list', set: 'ccset/app', fc: 'ccfc' } : { nv: 'nv/list', set: 'set/app', fc: 'fc' };
 // Dữ liệu đọc từ kho bị khóa (không sửa trực tiếp được): chép ra bản riêng trước khi sửa
 const clone = o => o == null ? o : JSON.parse(JSON.stringify(o));
 
@@ -339,7 +341,7 @@ function render() {
   $('#view').innerHTML = !S.ready ? '<div class="empty">Đang tải…</div>'
     : !S.db ? '<div class="card"><div class="empty"><h2>Chưa kết nối được dữ liệu</h2><p>Mở trang trên claude.ai khi đã đăng nhập.</p></div></div>'
     : !S.admin ? '<div class="card"><div class="empty"><h2>Trang dành cho quản lý</h2><p>Nhân viên chấm công bằng thẻ QR tại máy ở cửa, không cần mở trang này. Máy chấm công và người quản lý cần quyền chỉnh sửa trang (Editor).</p></div></div>'
-    : V();
+    : (window.ANTAM_HOP ? '' : '<div class="banner warn"><span>Chấm công đã gắn vào web <b>An Tâm</b> (chọn bộ phận Chấm công), dữ liệu đã chuyển sang đó ngày 27/11/2026. Dùng web An Tâm để chấm công; trang này chỉ còn để xem dữ liệu cũ.</span><a class="btn pri" href="https://claude.ai/artifact/ErmZYgHgUzBeTJrtTR6yAC" target="_blank" rel="noopener">Mở An Tâm</a></div>') + V();
   if (aid) { const el = document.getElementById(aid); if (el && el !== document.activeElement) el.focus(); }
   if (S.view === 'may' && S.admin) focusScan();
 }
@@ -575,7 +577,7 @@ async function enrollAdd(files) {
 }
 function newMa(more) { let m; do { const b = crypto.getRandomValues(new Uint32Array(2)); m = String(b[0] % 1e5).padStart(5, '0') + String(b[1] % 1e5).padStart(5, '0'); } while (byMa(m) || m[0] === '0' || (more && Object.values(more).some(x => x && x.ma === m))); return m; }
 async function saveNv(id, rec) {
-  const ref = S.db.doc('nv/list'), s = await ref.get(), cur = clone((s.exists && s.data().a) || {});
+  const ref = S.db.doc(DP.nv), s = await ref.get(), cur = clone((s.exists && s.data().a) || {});
   if (id) cur[id] = rec;
   await ref.set({ a: cur, at: Date.now() });
 }
@@ -643,7 +645,7 @@ function vSet() {
 }
 function readCa() { const e = S.f.ca || []; return e.map((x, i) => ({ id: x.id, ten: ($('#caT' + i) || {}).value || x.ten, vao: ($('#caV' + i) || {}).value || x.vao, ra: ($('#caR' + i) || {}).value || x.ra })); }
 async function saveSet(patch, msg) {
-  try { const ref = S.db.doc('set/app'), s = await ref.get(); if (s.exists) await ref.update(patch); else await ref.set(Object.assign({}, DEF, patch)); toast(msg); }
+  try { const ref = S.db.doc(DP.set), s = await ref.get(); if (s.exists) await ref.update(patch); else await ref.set(Object.assign({}, DEF, patch)); toast(msg); }
   catch (e) { toast('Chưa lưu được: ' + ((e && e.message) || 'lỗi kết nối')); }
 }
 
@@ -684,13 +686,13 @@ document.addEventListener('click', async e => {
   else if (a === 'enrollRm') { S.f.samples.splice(+arg, 1); render(); }
   else if (a === 'enrollSave') {
     const id = S.f.enrollId, sm = S.f.samples || []; if (!id || !sm.length) return;
-    try { await S.db.doc('fc/' + id).set({ d: sm.map(x => x.d), th: sm[0].th, n: sm.length, at: Date.now() }); toast('Đã lưu khuôn mặt của ' + nameOf(id) + '.'); S.f.enrollId = null; S.f.samples = []; render(); }
+    try { await S.db.doc(DP.fc + '/' + id).set({ d: sm.map(x => x.d), th: sm[0].th, n: sm.length, at: Date.now() }); toast('Đã lưu khuôn mặt của ' + nameOf(id) + '.'); S.f.enrollId = null; S.f.samples = []; render(); }
     catch (x) { toast('Chưa lưu được: ' + ((x && x.message) || 'lỗi kết nối')); }
   }
   else if (a === 'enrollDel') {
     if (!S.f.sureDel) { S.f.sureDel = true; render(); return; }
     S.f.sureDel = false; const id = S.f.enrollId;
-    try { await S.db.doc('fc/' + id).delete(); toast('Đã xóa khuôn mặt của ' + nameOf(id) + '.'); render(); } catch (x) { toast('Chưa xóa được: ' + ((x && x.message) || 'lỗi kết nối')); }
+    try { await S.db.doc(DP.fc + '/' + id).delete(); toast('Đã xóa khuôn mặt của ' + nameOf(id) + '.'); render(); } catch (x) { toast('Chưa xóa được: ' + ((x && x.message) || 'lỗi kết nối')); }
   }
   else if (a === 'printCards') { if (!staff().length) { toast('Chưa có nhân viên để in thẻ.'); return; } openPrint(); }
   else if (a === 'closePrint') { $('#printDlg').hidden = true; $('#printDlg').innerHTML = ''; }
@@ -711,7 +713,7 @@ document.addEventListener('click', async e => {
   }
   else if (a === 'bulkAdd') {
     const lines = ($('#bulk').value || '').split('\n').map(s => s.trim()).filter(Boolean); if (!lines.length) { toast('Dán danh sách, mỗi dòng một người.'); return; }
-    const c = cfg(), ref = S.db.doc('nv/list');
+    const c = cfg(), ref = S.db.doc(DP.nv);
     try {
       const s = await ref.get(), cur = clone((s.exists && s.data().a) || {}); let n = 0;
       for (const l of lines) { const [ten, bp, caT] = l.split('|').map(x => (x || '').trim()); if (!ten) continue; const ca = c.ca.find(x => x.ten.toLowerCase() === (caT || '').toLowerCase()) || c.ca[0]; const id = 'n' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5); cur[id] = { ten, bp: bp || '', ca: ca.id, ma: newMa(cur), on: true, at: Date.now() }; n++; }
@@ -775,9 +777,9 @@ document.addEventListener('visibilitychange', () => { if (document.visibilitySta
   S.db = db; S.user = user;
   if (user) { try { S.admin = !!(await user.canEdit()); } catch (e) { S.admin = false; } }
   if (db && S.admin) {
-    db.doc('set/app').onSnapshot(s => { S.set = s.exists ? s.data() : null; bump(); }, dbErr);
-    db.doc('nv/list').onSnapshot(s => { S.nv = (s.exists && s.data().a) || {}; S.nvLoaded = true; bump(); }, dbErr);
-    db.collection('fc').onSnapshot(q => { const m = {}; q.docs.forEach(d => { m[d.id] = d.data(); }); S.fc = m; bump(); }, dbErr);
+    db.doc(DP.set).onSnapshot(s => { S.set = s.exists ? s.data() : null; bump(); }, dbErr);
+    db.doc(DP.nv).onSnapshot(s => { S.nv = (s.exists && s.data().a) || {}; S.nvLoaded = true; bump(); }, dbErr);
+    db.collection(DP.fc).onSnapshot(q => { const m = {}; q.docs.forEach(d => { m[d.id] = d.data(); }); S.fc = m; bump(); }, dbErr);
   }
   S.ready = true; render();
 })();

@@ -91,7 +91,7 @@ def build_view(snapshot_path):
 
 
 HOP_TITLE = "An Tâm"
-HOP_DESC = "Web làm việc An Tâm: Đóng hàng · Kho · Giao hàng dùng chung một kho dữ liệu, chuyển dữ liệu cho nhau ngay"
+HOP_DESC = "Web làm việc An Tâm: Đóng hàng · Kho · Giao hàng · Chấm công dùng chung một kho dữ liệu, chuyển dữ liệu cho nhau ngay"
 HOP_CSS = """
 :root { --hp-bg: #f2f5f3; --hp-panel: #ffffff; --hp-ink: #17231d; --hp-muted: #5d6b64; --hp-line: #d9e1dc; --hp-brand: #0f6e5a; --hp-brand-soft: #e2f1ec; }
 @media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) { --hp-bg: #111814; --hp-panel: #18211c; --hp-ink: #e5ece8; --hp-muted: #9aa9a1; --hp-line: #2c3a33; --hp-brand: #3fb594; --hp-brand-soft: #19362d; } }
@@ -126,6 +126,7 @@ HOP_PICK = """<div id="hop-pick" hidden><div class="box">
   <button type="button" data-app="dh"><i>📦</i><b>Đóng hàng</b><span>Đơn hàng ngày, tuyến kebab 123, định mức đóng hàng</span></button>
   <button type="button" data-app="kho"><i>🏭</i><b>Kho</b><span>Phiếu nhập – xuất, tồn kho, phân tuyến, tài khoản giao hàng</span></button>
   <button type="button" data-app="giao"><i>🚚</i><b>Giao hàng</b><span>Người giao: xem tuyến của mình, báo đã giao kèm ảnh</span></button>
+  <button type="button" data-app="cc"><i>🕒</i><b>Chấm công</b><span>Máy chấm công ở cửa (khuôn mặt, thẻ QR), bảng công – dành cho quản lý</span></button>
   <h2>Web khác của An Tâm</h2>
   <p class="hp-hint">Mở ở tab mới. Mỗi web có dữ liệu và quyền riêng: chỉ mở được web chủ trang đã mời bạn.</p>
   <nav class="hp-links" aria-label="Web khác của An Tâm">
@@ -133,12 +134,12 @@ HOP_PICK = """<div id="hop-pick" hidden><div class="box">
     <a href="https://claude.ai/artifact/JvUGzUPjrC93AoNzEbnhC9" target="_blank" rel="noopener"><i>🧾</i><b>Kế toán bán hàng</b><span>Doanh thu, hóa đơn bán hàng</span></a>
   </nav>
 </div></div>
-<button type="button" id="hop-switch" hidden title="Chọn lại bộ phận (Đóng hàng / Kho / Giao hàng)">⇄ Bộ phận</button>"""
+<button type="button" id="hop-switch" hidden title="Chọn lại bộ phận (Đóng hàng / Kho / Giao hàng / Chấm công)">⇄ Bộ phận</button>"""
 HOP_JS = r"""
 // Trang gộp: mỗi lần mở chỉ chạy 1 web (Đóng hàng hoặc Kho; Giao hàng = web Kho ở chế độ người giao) – các web dùng chung kho dữ liệu
 (function () {
   var KEY = 'antam.app', pick = document.getElementById('hop-pick'), sw = document.getElementById('hop-switch');
-  var APPS = { dh: ['Đóng hàng An Tâm', 'hop-dh', hopAppDh], kho: ['Kho An Tâm', 'hop-kho', hopAppKho], giao: ['Giao hàng An Tâm', 'hop-kho', hopAppKho] };
+  var APPS = { dh: ['Đóng hàng An Tâm', 'hop-dh', hopAppDh], kho: ['Kho An Tâm', 'hop-kho', hopAppKho], giao: ['Giao hàng An Tâm', 'hop-kho', hopAppKho], cc: ['Chấm công An Tâm', 'hop-cc', hopAppCc] };
   function get() { try { return localStorage.getItem(KEY) || ''; } catch (e) { return ''; } }
   function put(v) { try { if (v) localStorage.setItem(KEY, v); else localStorage.removeItem(KEY); } catch (e) { /* trình duyệt chặn lưu */ } }
   function start(k) {
@@ -170,6 +171,25 @@ HOP_JS = r"""
 """
 
 
+def cham_cong():
+    """Web Chấm công (cham-cong/cham-cong-antam.html) thành bộ phận thứ 4: giao diện vào <template>, mã vào hàm hopAppCc.
+    Bỏ khối ghi lỗi riêng (trang gộp đã có), thư viện ngoài nạp khi mở bộ phận (SheetJS đã có sẵn trong trang gộp).
+    Tệp mô hình nhận diện khuôn mặt đăng kèm trang ở model/ (xem cham-cong/lay-mo-hinh.sh)."""
+    cc = read(ROOT, "..", "cham-cong", "cham-cong-antam.html")
+    cc = re.sub(r"<!-- err-log:start -->.*?<!-- err-log:end -->\s*", "", cc, flags=re.S)
+    srcs = [u for u in re.findall(r'<script src="([^"]+)"></script>', cc) if "xlsx" not in u]
+    cc = re.sub(r'<script src="[^"]+"></script>\s*', "", cc)
+    js = re.findall(r"<script>(.*?)</script>", cc, re.S)
+    if len(js) != 1:
+        raise SystemExit("chấm công: cần đúng 1 khối <script> chính, thấy %d" % len(js))
+    tpl = re.sub(r"<script>.*?</script>", "", cc, flags=re.S)
+    tpl = re.sub(r"<title>.*?</title>\s*|<meta name=\"(?:description|claude:viewport-fit-sides)\"[^>]*>\s*", "", tpl)
+    if "</template" in tpl.lower() or "</script" in js[0].lower():
+        raise SystemExit("chấm công chứa </template hoặc </script – không nhúng được")
+    load = "".join("(function () { var s = document.createElement('script'); s.src = %s; document.head.appendChild(s); })();\n" % json.dumps(u) for u in srcs)
+    return tpl.strip(), load + js[0]
+
+
 def build_hop():
     """Trang gộp An Tâm: web Đóng hàng + web Kho (có chế độ Giao hàng) trong 1 trang claude.ai, chung 1 kho dữ liệu."""
     markup, css, backend, app = parts()
@@ -181,6 +201,7 @@ def build_hop():
         if "</template" in code.lower():
             raise SystemExit("%s chứa </template – không nhúng được" % name)
     dh_js = "\n".join(dh_scripts)
+    cc_tpl, cc_js = cham_cong()
     if "</script" in dh_js.lower():
         raise SystemExit("đóng hàng chứa </script")
     return "\n".join([
@@ -195,7 +216,8 @@ def build_hop():
         '<template id="hop-dh">%s</template>' % dh_rest.strip(),
         '<template id="hop-kho"><style id="app-style">%s</style>\n%s</template>' % (css, markup),
         '<script src="%s"></script>' % SHEETJS,
-        '<script id="antam-hop">window.ANTAM_HOP=true;\nfunction hopAppDh() {\n%s\n}\nfunction hopAppKho() {\n%s\n%s\n}\n%s</script>' % (dh_js, backend, app, HOP_JS),
+        '<template id="hop-cc">%s</template>' % cc_tpl,
+        '<script id="antam-hop">window.ANTAM_HOP=true;\nfunction hopAppDh() {\n%s\n}\nfunction hopAppKho() {\n%s\n%s\n}\nfunction hopAppCc() {\n%s\n}\n%s</script>' % (dh_js, backend, app, cc_js, HOP_JS),
     ])
 
 
